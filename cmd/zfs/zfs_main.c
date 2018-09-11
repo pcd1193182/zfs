@@ -4072,6 +4072,14 @@ zfs_do_send(int argc, char **argv)
 		}
 	}
 
+	if (flags.dedup && !flags.parsable) {
+		(void) fprintf(stderr,
+		    gettext("ZFS dedup send has been deprecated, and at some\n"
+		    "point will be removed. For more information about this\n"
+		    "change, please see the man page entry for the flag.\n"));
+	}
+		
+
 	argc -= optind;
 	argv += optind;
 

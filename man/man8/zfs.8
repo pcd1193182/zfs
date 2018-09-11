@@ -3444,6 +3444,18 @@ dedup-capable checksum
 .Po for example,
 .Sy sha256
 .Pc .
+This feature only deduplicates among data sent in the zfs send command that
+it is passed to. As a result, this feature does not provide the bandwidth
+savings that most users anticipate. In addition, significant memory and CPU
+are used to enable this feature, causing potentially significant load on
+the sending system.  Finally, the implementation of this feature causes
+unfortunate interactions with new features being developed, and increases
+the complexity of the code base and the maintenance burden sustained by
+developers.  As a result of all of these factors, this feature is on track
+to be deprecated. It will be removed from the sending logic in 2020, a
+utility will be provided to de-deduplicate old send streams, and then the
+receiving logic will be removed. To offer feedback on this decision, please
+visit https://github.com/zfsonlinux/zfs/issues/7887
 .It Fl I Ar snapshot
 Generate a stream package that sends all intermediary snapshots from the first
 snapshot to the second snapshot.
