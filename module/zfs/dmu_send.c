@@ -2820,8 +2820,9 @@ receive_freeobjects(struct receive_writer_arg *rwa,
 		return (SET_ERROR(EINVAL));
 
 	for (obj = drrfo->drr_firstobj == 0 ? 1 : drrfo->drr_firstobj;
-	    obj < drrfo->drr_firstobj + drrfo->drr_numobjs && next_err == 0;
-	    next_err = dmu_object_next(rwa->os, &obj, FALSE, 0)) {
+	    obj < drrfo->drr_firstobj + drrfo->drr_numobjs && next_err == 0 &&
+	    obj < DN_MAX_OBJECT; next_err = dmu_object_next(rwa->os, &obj,
+	    FALSE, 0)) {
 		dmu_object_info_t doi;
 		int err;
 
