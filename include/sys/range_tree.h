@@ -53,7 +53,7 @@ typedef enum range_seg_type {
  * must provide external locking if required.
  */
 typedef struct range_tree {
-	btree_t		rt_root;	/* offset-ordered segment b-tree */
+	zfs_btree_t		rt_root;	/* offset-ordered segment b-tree */
 	uint64_t	rt_space;	/* sum of all segments in the map */
 	range_seg_type_t rt_type;	/* type of range_seg_t in use */
 	/*
@@ -65,9 +65,9 @@ typedef struct range_tree {
 	uint64_t	rt_start;
 	range_tree_ops_t *rt_ops;
 
-	/* rt_btree_compare should only be set if rt_arg is a b-tree */
+	/* rt_zfs_btree_compare should only be set if rt_arg is a b-tree */
 	void		*rt_arg;
-	int (*rt_btree_compare)(const void *, const void *);
+	int (*rt_zfs_btree_compare)(const void *, const void *);
 
 	uint64_t	rt_gap;		/* allowable inter-segment gap */
 
@@ -280,7 +280,7 @@ typedef void range_tree_func_t(void *arg, uint64_t start, uint64_t size);
 
 range_tree_t *range_tree_create_impl(range_tree_ops_t *ops,
     range_seg_type_t type, void *arg, uint64_t start, uint64_t shift,
-    int (*btree_compare) (const void *, const void *), uint64_t gap);
+    int (*zfs_btree_compare) (const void *, const void *), uint64_t gap);
 range_tree_t *range_tree_create(range_tree_ops_t *ops, range_seg_type_t type,
     void *arg, uint64_t start, uint64_t shift);
 void range_tree_destroy(range_tree_t *rt);
@@ -315,12 +315,12 @@ void range_tree_remove_xor_add_segment(uint64_t start, uint64_t end,
 void range_tree_remove_xor_add(range_tree_t *rt, range_tree_t *removefrom,
     range_tree_t *addto);
 
-void rt_btree_create(range_tree_t *rt, void *arg);
-void rt_btree_destroy(range_tree_t *rt, void *arg);
-void rt_btree_add(range_tree_t *rt, range_seg_t *rs, void *arg);
-void rt_btree_remove(range_tree_t *rt, range_seg_t *rs, void *arg);
-void rt_btree_vacate(range_tree_t *rt, void *arg);
-extern struct range_tree_ops rt_btree_ops;
+void rt_zfs_btree_create(range_tree_t *rt, void *arg);
+void rt_zfs_btree_destroy(range_tree_t *rt, void *arg);
+void rt_zfs_btree_add(range_tree_t *rt, range_seg_t *rs, void *arg);
+void rt_zfs_btree_remove(range_tree_t *rt, range_seg_t *rs, void *arg);
+void rt_zfs_btree_vacate(range_tree_t *rt, void *arg);
+extern range_tree_ops_t rt_zfs_btree_ops;
 
 #ifdef	__cplusplus
 }
