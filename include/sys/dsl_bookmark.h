@@ -23,6 +23,7 @@
 #include <sys/zfs_refcount.h>
 #include <sys/dsl_dataset.h>
 #include <sys/dsl_pool.h>
+#include <sys/dnode.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -84,7 +85,7 @@ typedef struct dsl_bookmark_node {
 	kmutex_t dbn_lock; /* protects dirty/phys in block_killed */
 	boolean_t dbn_dirty; /* in currently syncing txg */
 	zfs_bookmark_phys_t dbn_phys;
-	uint64_t dbn_redaction_birth_txg;
+	uint64_t dbn_redaction_birth_txg[DN_MAX_NBLKPTR];
 	avl_node_t dbn_node;
 } dsl_bookmark_node_t;
 

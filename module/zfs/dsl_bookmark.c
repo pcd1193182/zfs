@@ -334,7 +334,7 @@ dsl_bookmark_node_alloc(char *shortname)
 	dsl_bookmark_node_t *dbn = kmem_alloc(sizeof (*dbn), KM_SLEEP);
 	dbn->dbn_name = spa_strdup(shortname);
 	dbn->dbn_dirty = B_FALSE;
-	dbn->dbn_redaction_birth_txg = 0;
+	bzero(dbn->dbn_redaction_birth_txg, DN_MAX_NBLKPTR * sizeof (uint64_t));
 	mutex_init(&dbn->dbn_lock, NULL, MUTEX_DEFAULT, NULL);
 	return (dbn);
 }
@@ -1050,25 +1050,37 @@ dsl_bookmark_destroy_sync_impl(dsl_dataset_t *ds, const char *name,
 		    dbn->dbn_phys.zbm_redaction_obj, FTAG, tx, &local_rl));
 		VERIFY0(dnode_hold(ds->ds_dir->dd_pool->dp_meta_objset,
 		    dbn->dbn_phys.zbm_redaction_obj, FTAG, &dn));
-		zio_cksum_t *zc = &dn->dn_phys->dn_blkptr[0].blk_cksum;
-		uint64_t birth = dn->dn_phys->dn_blkptr[0].blk_birth;
+		char *buf = kmem_alloc(128 * dn->dn_nblkptr, KM_SLEEP);
+		char *buf2 = kmem_alloc(128, KM_SLEEP);
+		for (int i = 0; i < dn->dn_nblkptr; i++) {
+			zio_cksum_t *zc = &dn->dn_phys->dn_blkptr[i].blk_cksum;
+			uint64_t birth = dn->dn_phys->dn_blkptr[i].blk_birth;
+			snprintf(buf2, 128, "root_birth=%llu "
+			    "root_cksum=%llx/%llx/%llx/%llx ",
+			    (u_longlong_t)birth, (u_longlong_t)zc->zc_word[0],
+			    (u_longlong_t)zc->zc_word[1],
+			    (u_longlong_t)zc->zc_word[2],
+			    (u_longlong_t)zc->zc_word[3]);
+			strncat(buf, buf2, 128);
+		}
 		spa_history_log_internal_ds(ds, "remove redaction list", tx,
-		    "name=%s redact_obj=%llu num_entries=%llu root_birth=%llu "
-		    "root_cksum=%llx/%llx/%llx/%llx", name,
+		    "name=%s redact_obj=%llu num_entries=%llu %s", name,
 		    (longlong_t)dbn->dbn_phys.zbm_redaction_obj,
-		    (longlong_t)local_rl->rl_phys->rlp_num_entries,
-		    (u_longlong_t)birth, (u_longlong_t)zc->zc_word[0],
-		    (u_longlong_t)zc->zc_word[1], (u_longlong_t)zc->zc_word[2],
-		    (u_longlong_t)zc->zc_word[3]);
-		if (dbn->dbn_redaction_birth_txg != 0 &&
-		    dbn->dbn_redaction_birth_txg != birth) {
-			spa_history_log_internal_ds(ds,
-			    "redaction birth mismatch", tx,
-			    "name=%s redact_obj=%llu root_birth=%llu "
-			    "orig_root_birth=%llu", name,
-			    (longlong_t)dbn->dbn_phys.zbm_redaction_obj,
-			    (u_longlong_t)birth,
-			    (u_longlong_t)dbn->dbn_redaction_birth_txg);
+		    (longlong_t)local_rl->rl_phys->rlp_num_entries, buf);
+		kmem_free(buf, 128 * dn->dn_nblkptr);
+		kmem_free(buf2, 128);
+		for (int i = 0; i < dn->dn_nblkptr; i++) {
+			uint64_t birth = dn->dn_phys->dn_blkptr[i].blk_birth;
+			if (dbn->dbn_redaction_birth_txg[i] != 0 &&
+			    dbn->dbn_redaction_birth_txg[i] != birth) {
+				spa_history_log_internal_ds(ds,
+				    "redaction birth mismatch", tx,
+				    "name=%s redact_obj=%llu root_birth=%llu "
+				    "orig_root_birth=%llu", name,
+				    (longlong_t)dbn->dbn_phys.zbm_redaction_obj,
+				    (u_longlong_t)birth,
+				    (u_longlong_t)dbn->dbn_redaction_birth_txg[i]);
+			}
 		}
 		dnode_rele(dn, FTAG);
 		dsl_redaction_list_rele(local_rl, FTAG);

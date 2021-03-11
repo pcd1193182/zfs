@@ -1188,17 +1188,26 @@ dmu_redact_snap(const char *snapname, nvlist_t *redactnvl,
 		dnode_t *dn;
 		VERIFY0(dnode_hold(spa_meta_objset(spa), new_rl->rl_object,
 		    FTAG, &dn));
-		zio_cksum_t *zc = &dn->dn_phys->dn_blkptr[0].blk_cksum;
-		uint64_t birth_txg = dn->dn_phys->dn_blkptr[0].blk_birth;
+		char *buf = kmem_alloc(128 * dn->dn_nblkptr, KM_SLEEP);
+		char *buf2 = kmem_alloc(128, KM_SLEEP);
+		for (int i = 0; i < dn->dn_nblkptr; i++) {
+			zio_cksum_t *zc = &dn->dn_phys->dn_blkptr[i].blk_cksum;
+			uint64_t birth = dn->dn_phys->dn_blkptr[i].blk_birth;
+			snprintf(buf2, 128, "root_birth=%llu "
+			    "root_cksum=%llx/%llx/%llx/%llx ",
+			    (u_longlong_t)birth, (u_longlong_t)zc->zc_word[0],
+			    (u_longlong_t)zc->zc_word[1],
+			    (u_longlong_t)zc->zc_word[2],
+			    (u_longlong_t)zc->zc_word[3]);
+			strncat(buf, buf2, 128);
+		}
 		spa_history_log_internal(spa, "finish redaction", NULL,
-		    "name=%s redact_obj=%llu num_entries=%llu root_birth=%llu "
-		    "root_cksum=%llx/%llx/%llx/%llx", newredactbook,
+		    "name=%s redact_obj=%llu num_entries=%llu %s", newredactbook,
 		    (longlong_t)new_rl->rl_object,
-		    (longlong_t)new_rl->rl_phys->rlp_num_entries,
-		    (u_longlong_t)birth_txg, (u_longlong_t)zc->zc_word[0],
-		    (u_longlong_t)zc->zc_word[1], (u_longlong_t)zc->zc_word[2],
-		    (u_longlong_t)zc->zc_word[3]);
-		dnode_rele(dn, FTAG);
+		    (longlong_t)new_rl->rl_phys->rlp_num_entries, buf);
+		kmem_free(buf, 128 * dn->dn_nblkptr);
+		kmem_free(buf2, 128);
+
 		VERIFY0(dsl_bookmark_lookup_impl(ds, newredactbook, &bookmark));
 		dsl_bookmark_node_t search = { 0 };
 		search.dbn_phys = bookmark;
@@ -1206,8 +1215,11 @@ dmu_redact_snap(const char *snapname, nvlist_t *redactnvl,
 		dsl_bookmark_node_t *dbn = avl_find(&ds->ds_bookmarks, &search,
 		    NULL);
 		ASSERT3P(dbn, !=, NULL);
-		dbn->dbn_redaction_birth_txg = birth_txg;
+		for (int i = 0; i < dn->dn_nblkptr; i++) {
+			dbn->dbn_redaction_birth_txg[i] = dn->dn_phys->dn_blkptr[i].blk_birth;
+		}
 		spa_strfree(search.dbn_name);
+		dnode_rele(dn, FTAG);
 	}
 	kmem_free(rmta, sizeof (struct redact_merge_thread_arg));
 
