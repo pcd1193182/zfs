@@ -27,6 +27,7 @@
 #include <sys/dmu_objset.h>
 #include <sys/dmu_traverse.h>
 #include <sys/dmu_redact.h>
+#include <sys/dsl_dir.h>
 #include <sys/bqueue.h>
 #include <sys/objlist.h>
 #include <sys/dmu_tx.h>
@@ -1208,16 +1209,23 @@ dmu_redact_snap(const char *snapname, nvlist_t *redactnvl,
 		kmem_free(buf, 128 * dn->dn_nblkptr);
 		kmem_free(buf2, 128);
 
-		VERIFY0(dsl_bookmark_lookup_impl(ds, newredactbook, &bookmark));
+		VERIFY0(dsl_pool_hold(snapname, FTAG, &dp));
+		VERIFY0(dsl_bookmark_lookup(dp, newredactbook, NULL, &bookmark));
 		dsl_bookmark_node_t search = { 0 };
 		search.dbn_phys = bookmark;
 		search.dbn_name = spa_strdup(redactbook);
-		dsl_bookmark_node_t *dbn = avl_find(&ds->ds_bookmarks, &search,
+		*strchr(newredactbook, '#') = '\0';
+		dsl_dataset_t *head;
+		VERIFY0(dsl_dataset_hold(dp, newredactbook, FTAG, &head));
+		dsl_bookmark_node_t *dbn = avl_find(&head->ds_bookmarks, &search,
 		    NULL);
 		ASSERT3P(dbn, !=, NULL);
 		for (int i = 0; i < dn->dn_nblkptr; i++) {
 			dbn->dbn_redaction_birth_txg[i] = dn->dn_phys->dn_blkptr[i].blk_birth;
 		}
+		dsl_dataset_rele(head, FTAG);
+		dsl_pool_rele(dp, FTAG);
+		dp = NULL;
 		spa_strfree(search.dbn_name);
 		dnode_rele(dn, FTAG);
 	}
