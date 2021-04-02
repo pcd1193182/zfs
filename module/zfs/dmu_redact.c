@@ -1203,25 +1203,27 @@ dmu_redact_snap(const char *snapname, nvlist_t *redactnvl,
 			strncat(buf, buf2, 128);
 		}
 		spa_history_log_internal(spa, "finish redaction", NULL,
-		    "name=%s redact_obj=%llu num_entries=%llu %s", newredactbook,
-		    (longlong_t)new_rl->rl_object,
+		    "name=%s redact_obj=%llu num_entries=%llu %s",
+		    newredactbook, (longlong_t)new_rl->rl_object,
 		    (longlong_t)new_rl->rl_phys->rlp_num_entries, buf);
 		kmem_free(buf, 128 * dn->dn_nblkptr);
 		kmem_free(buf2, 128);
 
 		VERIFY0(dsl_pool_hold(snapname, FTAG, &dp));
-		VERIFY0(dsl_bookmark_lookup(dp, newredactbook, NULL, &bookmark));
+		VERIFY0(dsl_bookmark_lookup(dp, newredactbook, NULL,
+		    &bookmark));
 		dsl_bookmark_node_t search = { 0 };
 		search.dbn_phys = bookmark;
 		search.dbn_name = spa_strdup(redactbook);
 		*strchr(newredactbook, '#') = '\0';
 		dsl_dataset_t *head;
 		VERIFY0(dsl_dataset_hold(dp, newredactbook, FTAG, &head));
-		dsl_bookmark_node_t *dbn = avl_find(&head->ds_bookmarks, &search,
-		    NULL);
+		dsl_bookmark_node_t *dbn = avl_find(&head->ds_bookmarks,
+		    &search, NULL);
 		ASSERT3P(dbn, !=, NULL);
 		for (int i = 0; i < dn->dn_nblkptr; i++) {
-			dbn->dbn_redaction_birth_txg[i] = dn->dn_phys->dn_blkptr[i].blk_birth;
+			dbn->dbn_redaction_birth_txg[i] =
+			    dn->dn_phys->dn_blkptr[i].blk_birth;
 		}
 		dsl_dataset_rele(head, FTAG);
 		dsl_pool_rele(dp, FTAG);

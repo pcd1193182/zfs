@@ -1079,7 +1079,8 @@ dsl_bookmark_destroy_sync_impl(dsl_dataset_t *ds, const char *name,
 				    "orig_root_birth=%llu", name,
 				    (longlong_t)dbn->dbn_phys.zbm_redaction_obj,
 				    (u_longlong_t)birth,
-				    (u_longlong_t)dbn->dbn_redaction_birth_txg[i]);
+				    (u_longlong_t)
+				    dbn->dbn_redaction_birth_txg[i]);
 			}
 		}
 		dnode_rele(dn, FTAG);
