@@ -28,6 +28,7 @@ sbin/zhack
 sbin/zdb
 sbin/zfs_file
 sbin/zfs_ids_to_path
+sbin/zfs_object_agent
 sbin/zpool
 sbin/zfs
 usr/bin/zvol_wait
