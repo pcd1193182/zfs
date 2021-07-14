@@ -661,6 +661,7 @@ impl Server {
         debug!("sending response: {:?}", nvl);
         Self::send_response(&self.output, nvl.clone()).await;
         debug!("sent response: {:?}", nvl);
+        sleep(Duration::from_secs(1)).await;
     }
 }
 
