@@ -644,7 +644,10 @@ impl Server {
     }
 
     async fn close_pool(&mut self) {
+        let mut nvl = NvList::new_unique_names();
+        nvl.insert("Type", "pool close done").unwrap();
         if self.readonly {
+            Self::send_response(&self.output, nvl.clone()).await;
             return;
         }
         if let Some(pool) = &self.pool {
@@ -652,6 +655,7 @@ impl Server {
             self.unclaim_pool(&pool_shared_state.object_access, pool_shared_state.guid)
                 .await;
         }
+        Self::send_response(&self.output, nvl.clone()).await;
     }
 }
 
