@@ -7038,6 +7038,34 @@ error:
 	return (ret);
 }
 
+static const zfs_ioc_key_t zfs_keys_pool_recycle[] = {
+	{ZPOOL_RECYCLE_DRYRUN, DATA_TYPE_BOOLEAN_VALUE, 0},
+};
+
+static int
+zfs_ioc_pool_recycle(const char *pool, nvlist_t *innvl, nvlist_t *outnvl)
+{
+	int err;
+	boolean_t rc, dryrun = B_FALSE;
+	spa_t *spa;
+
+	if ((err = spa_open(pool, &spa, FTAG)) != 0)
+		return (err);
+
+	if (innvl) {
+		err = nvlist_lookup_boolean_value(innvl, ZPOOL_RECYCLE_DRYRUN,
+		    &rc);
+		if (err == 0)
+			dryrun = rc;
+	}
+
+	err = spa_recycle(spa, dryrun, outnvl);
+
+	spa_close(spa, FTAG);
+
+	return (0);
+}
+
 static zfs_ioc_vec_t zfs_ioc_vec[ZFS_IOC_LAST - ZFS_IOC_FIRST];
 
 static void
@@ -7327,6 +7355,11 @@ zfs_ioctl_init(void)
 	    zfs_ioc_pool_scrub, zfs_secpolicy_config, POOL_NAME,
 	    POOL_CHECK_NONE, B_TRUE, B_TRUE,
 	    zfs_keys_pool_scrub, ARRAY_SIZE(zfs_keys_pool_scrub));
+
+	zfs_ioctl_register("zpool_recycle", ZFS_IOC_POOL_RECYCLE,
+	    zfs_ioc_pool_recycle, zfs_secpolicy_config, POOL_NAME,
+	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_FALSE, B_FALSE,
+	    zfs_keys_pool_recycle, ARRAY_SIZE(zfs_keys_pool_recycle));
 
 	/* IOCTLS that use the legacy function signature */
 
