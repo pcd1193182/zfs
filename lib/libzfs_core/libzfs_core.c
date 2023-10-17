@@ -1901,3 +1901,9 @@ lzc_get_bootenv(const char *pool, nvlist_t **outnvl)
 {
 	return (lzc_ioctl(ZFS_IOC_GET_BOOTENV, pool, NULL, outnvl));
 }
+
+int
+lzc_rebalance(const char *pool, nvlist_t *nvl, nvlist_t **outnvl)
+{
+	return (lzc_ioctl(ZFS_IOC_REBALANCE, pool, nvl, outnvl));
+}

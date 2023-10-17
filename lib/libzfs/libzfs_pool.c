@@ -5396,3 +5396,33 @@ zpool_set_vdev_prop(zpool_handle_t *zhp, const char *vdevname,
 
 	return (ret);
 }
+
+int
+zpool_rebalance(zpool_handle_t *zhp, const char *vdevname)
+{
+	int ret;
+	nvlist_t *nvl = NULL;
+	nvlist_t *outnvl = NULL;
+	uint64_t vdev_guid;
+
+	if ((ret = zpool_vdev_guid(zhp, vdevname, &vdev_guid)) != 0)
+		return (ret);
+
+	if (nvlist_alloc(&nvl, NV_UNIQUE_NAME, 0) != 0)
+		return (no_memory(zhp->zpool_hdl));
+
+	char errbuf[ERRBUFLEN];
+	(void) snprintf(errbuf, sizeof (errbuf),
+	    dgettext(TEXT_DOMAIN, "cannot rebalance %s on %s"),
+	    vdevname, zhp->zpool_name);
+
+	fnvlist_add_uint64(nvl, ZPOOL_REBALANCE_VDEV, vdev_guid);
+	ret = lzc_rebalance(zhp->zpool_name, nvl, &outnvl);
+	nvlist_free(nvl);
+	nvlist_free(outnvl);
+
+	if (ret)
+		(void) zpool_standard_error(zhp->zpool_hdl, errno, errbuf);
+
+	return (ret);
+}

@@ -87,6 +87,8 @@ extern int spa_vdev_remove_cancel(spa_t *);
 extern void spa_vdev_removal_destroy(spa_vdev_removal_t *);
 extern uint64_t spa_remove_max_segment(spa_t *);
 
+extern int spa_vdev_rebalance(spa_t *, uint64_t);
+
 extern uint_t vdev_removal_max_span;
 
 #ifdef	__cplusplus

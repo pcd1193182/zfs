@@ -2542,6 +2542,18 @@ spa_removal_get_stats(spa_t *spa, pool_removal_stat_t *prs)
 	return (0);
 }
 
+int
+spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
+{
+	vdev_t *vd;
+
+	vd = spa_lookup_by_guid(spa, vdev_guid, B_FALSE);
+	if (vd == NULL)
+		return (SET_ERROR(ENOENT));
+
+	return (0);
+}
+
 ZFS_MODULE_PARAM(zfs_vdev, zfs_, removal_ignore_errors, INT, ZMOD_RW,
 	"Ignore hard IO errors when removing device");
 

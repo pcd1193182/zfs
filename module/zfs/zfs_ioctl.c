@@ -4284,6 +4284,43 @@ zfs_ioc_wait(const char *name, nvlist_t *innvl, nvlist_t *outnvl)
 	return (error);
 }
 
+static const zfs_ioc_key_t zfs_keys_rebalance[] = {
+	{ZPOOL_REBALANCE_VDEV, DATA_TYPE_UINT64,		0}
+};
+static int
+zfs_ioc_rebalance(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
+{
+	spa_t *spa;
+	int error;
+	vdev_t *vd;
+	uint64_t vdev_guid;
+
+	/* Early validation */
+	if (nvlist_lookup_uint64(innvl, ZPOOL_REBALANCE_VDEV,
+	    &vdev_guid) != 0)
+		return (SET_ERROR(EINVAL));
+
+	if (outnvl == NULL)
+		return (SET_ERROR(EINVAL));
+
+	if ((error = spa_open(poolname, &spa, FTAG)) != 0)
+		return (error);
+
+	ASSERT(spa_writeable(spa));
+
+	if ((vd = spa_lookup_by_guid(spa, vdev_guid, B_TRUE)) == NULL) {
+		spa_close(spa, FTAG);
+		return (SET_ERROR(ENOENT));
+	}
+
+	error = spa_vdev_rebalance(spa, vdev_guid);
+
+	spa_close(spa, FTAG);
+
+	return (error);
+
+}
+
 /*
  * This ioctl waits for activity of a particular type to complete. If there is
  * no activity of that type in progress, it returns immediately, and the
@@ -7263,6 +7300,11 @@ zfs_ioctl_init(void)
 	    zfs_ioc_pool_scrub, zfs_secpolicy_config, POOL_NAME,
 	    POOL_CHECK_NONE, B_TRUE, B_TRUE,
 	    zfs_keys_pool_scrub, ARRAY_SIZE(zfs_keys_pool_scrub));
+
+	zfs_ioctl_register("rebalance", ZFS_IOC_REBALANCE,
+	    zfs_ioc_rebalance, zfs_secpolicy_config, POOL_NAME,
+	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_FALSE, B_FALSE,
+	    zfs_keys_rebalance, ARRAY_SIZE(zfs_keys_rebalance));
 
 	/* IOCTLS that use the legacy function signature */
 

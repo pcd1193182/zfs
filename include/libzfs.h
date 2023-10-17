@@ -206,6 +206,7 @@ typedef struct libzfs_handle libzfs_handle_t;
 _LIBZFS_H int zpool_wait(zpool_handle_t *, zpool_wait_activity_t);
 _LIBZFS_H int zpool_wait_status(zpool_handle_t *, zpool_wait_activity_t,
     boolean_t *, boolean_t *);
+_LIBZFS_H int zpool_rebalance(zpool_handle_t *, const char *);
 
 /*
  * Library initialization

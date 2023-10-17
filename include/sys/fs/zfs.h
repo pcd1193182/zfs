@@ -1473,6 +1473,7 @@ typedef enum zfs_ioc {
 	ZFS_IOC_VDEV_GET_PROPS,			/* 0x5a55 */
 	ZFS_IOC_VDEV_SET_PROPS,			/* 0x5a56 */
 	ZFS_IOC_POOL_SCRUB,			/* 0x5a57 */
+	ZFS_IOC_REBALANCE,			/* 0x5a58 */
 
 	/*
 	 * Per-platform (Optional) - 8/128 numbers reserved.
@@ -1671,6 +1672,8 @@ typedef enum {
  */
 #define	ZPOOL_VDEV_PROPS_SET_VDEV	"vdevprops_set_vdev"
 #define	ZPOOL_VDEV_PROPS_SET_PROPS	"vdevprops_set_props"
+
+#define	ZPOOL_REBALANCE_VDEV		"rebalance_vdev"
 
 /*
  * The following are names used when invoking ZFS_IOC_WAIT_FS.

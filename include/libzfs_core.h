@@ -157,6 +157,8 @@ _LIBZFS_CORE_H int lzc_set_vdev_prop(const char *, nvlist_t *, nvlist_t **);
 
 _LIBZFS_CORE_H int lzc_scrub(zfs_ioc_t, const char *, nvlist_t *, nvlist_t **);
 
+_LIBZFS_CORE_H int lzc_rebalance(const char *, nvlist_t *, nvlist_t **);
+
 #ifdef	__cplusplus
 }
 #endif

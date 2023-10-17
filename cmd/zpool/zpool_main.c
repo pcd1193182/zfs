@@ -126,6 +126,8 @@ static int zpool_do_version(int, char **);
 
 static int zpool_do_wait(int, char **);
 
+static int zpool_do_rebalance(int, char **);
+
 static int zpool_do_help(int argc, char **argv);
 
 static zpool_compat_status_t zpool_do_load_compat(
@@ -182,7 +184,8 @@ typedef enum {
 	HELP_REGUID,
 	HELP_REOPEN,
 	HELP_VERSION,
-	HELP_WAIT
+	HELP_WAIT,
+	HELP_REBALANCE
 } zpool_help_t;
 
 
@@ -330,6 +333,7 @@ static zpool_command_t command_table[] = {
 	{ "sync",	zpool_do_sync,		HELP_SYNC		},
 	{ NULL },
 	{ "wait",	zpool_do_wait,		HELP_WAIT		},
+	{ "rebalance",	zpool_do_rebalance,	HELP_REBALANCE		},
 };
 
 #define	NCOMMAND	(ARRAY_SIZE(command_table))
@@ -438,6 +442,8 @@ get_usage(zpool_help_t idx)
 	case HELP_WAIT:
 		return (gettext("\twait [-Hp] [-T d|u] [-t <activity>[,...]] "
 		    "<pool> [interval]\n"));
+	case HELP_REBALANCE:
+		return (gettext("\trebalance <pool> <vdev>"));
 	default:
 		__builtin_unreachable();
 	}
@@ -11030,6 +11036,33 @@ found:;
 	pthread_mutex_destroy(&wd.wd_mutex);
 	pthread_cond_destroy(&wd.wd_cv);
 	return (error);
+}
+
+int
+zpool_do_rebalance(int argc, char **argv)
+{
+	int c;
+	zpool_handle_t *zhp;
+	while ((c = getopt(argc, argv, "")) != -1) {
+		switch (c) {
+		case '?':
+			(void) fprintf(stderr, gettext("invalid option '%c'\n"),
+			    optopt);
+			usage(B_FALSE);
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	if ((zhp = zpool_open(g_zfs, argv[0])) == NULL)
+		return (1);
+	char *vdev = argv[1];
+
+	int err = zpool_rebalance(zhp, vdev);
+
+	zpool_close(zhp);
+	return (err);
 }
 
 static int
