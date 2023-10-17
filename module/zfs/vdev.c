@@ -416,7 +416,7 @@ vdev_prop_get_int(vdev_t *vd, vdev_prop_t prop, uint64_t *value)
 	return (err);
 }
 
-static int
+int
 vdev_rebalance_node_cmp(void *a, void *b)
 {
 	vdev_rebalance_node_t *c1 = a;
@@ -1209,16 +1209,18 @@ typedef struct remap_segment {
 	uint64_t rs_asize;
 	uint64_t rs_split_offset;
 	list_node_t rs_node;
+	uint64_t rs_birth;
 } remap_segment_t;
 
 static remap_segment_t *
-rs_alloc(vdev_t *vd, uint64_t offset, uint64_t asize, uint64_t split_offset)
+rs_alloc(vdev_t *vd, uint64_t offset, uint64_t asize, uint64_t split_offset, uint64_t birth)
 {
 	remap_segment_t *rs = kmem_alloc(sizeof (remap_segment_t), KM_SLEEP);
 	rs->rs_vd = vd;
 	rs->rs_offset = offset;
 	rs->rs_asize = asize;
 	rs->rs_split_offset = split_offset;
+	rs->rs_birth = birth;
 	return (rs);
 }
 
@@ -1459,7 +1461,7 @@ vdev_indirect_remap(vdev_t *vd, uint64_t birth, uint64_t offset, uint64_t asize,
 	list_create(&stack, sizeof (remap_segment_t),
 	    offsetof(remap_segment_t, rs_node));
 
-	for (remap_segment_t *rs = rs_alloc(vd, offset, asize, 0);
+	for (remap_segment_t *rs = rs_alloc(vd, offset, asize, 0, birth);
 	    rs != NULL; rs = list_remove_head(&stack)) {
 		vdev_t *v = rs->rs_vd;
 
@@ -1489,7 +1491,7 @@ vdev_indirect_remap(vdev_t *vd, uint64_t birth, uint64_t offset, uint64_t asize,
 		avl_tree_t *t = vd->vdev_rebalance_tree;
 
 		vdev_rebalance_node_t *idx =
-		    vdev_rebalance_get_first(v, birth,
+		    vdev_rebalance_get_first(v, rs->rs_birth,
 		    rs->rs_offset, rs->rs_asize);
 		vdev_rebalance_node_t *next;
 		if (rs->rs_offset < idx->vrn_offset) {
@@ -1525,7 +1527,7 @@ vdev_indirect_remap(vdev_t *vd, uint64_t birth, uint64_t offset, uint64_t asize,
 			if (dst_v->vdev_rebalance_tree) {
 				list_insert_head(&stack,
 				    rs_alloc(dst_v, dst_offset + inner_offset,
-				    inner_size, rs->rs_split_offset));
+				    inner_size, rs->rs_split_offset, idx->vrn_birth));
 
 			}
 			func(rs->rs_split_offset, dst_v,

@@ -167,7 +167,6 @@ typedef struct vdev_rebalance_node {
 	uint64_t	vrn_offset;
 	uint64_t	vrn_size;
 	dva_t		vrn_dest;
-	uint64_t	vrn_txg;
 } vdev_rebalance_node_t;
 
 
@@ -653,6 +652,9 @@ extern uint_t zfs_vdev_min_auto_ashift;
 extern uint_t zfs_vdev_max_auto_ashift;
 int param_set_min_auto_ashift(ZFS_MODULE_PARAM_ARGS);
 int param_set_max_auto_ashift(ZFS_MODULE_PARAM_ARGS);
+
+
+extern int vdev_rebalance_node_cmp(void *a, void *b);
 
 #ifdef	__cplusplus
 }

@@ -5098,7 +5098,7 @@ next:
 	return (offset);
 }
 
-static uint64_t
+uint64_t
 metaslab_group_alloc(metaslab_group_t *mg, zio_alloc_list_t *zal,
     uint64_t asize, uint64_t txg, boolean_t want_unique, dva_t *dva, int d,
     int allocator, boolean_t try_hard)

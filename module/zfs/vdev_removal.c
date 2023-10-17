@@ -1119,7 +1119,7 @@ spa_vdev_copy_one_child(vdev_copy_arg_t *vca, zio_t *nzio,
  * read from the old location and write to the new location.
  */
 static int
-spa_vdev_copy_segment(vdev_t *vd, range_tree_t *segs,
+spa_vdev_copy_segment(vdev_t *vd, vdev_t *dest, range_tree_t *segs,
     uint64_t maxalloc, uint64_t txg,
     vdev_copy_arg_t *vca, zio_alloc_list_t *zal)
 {
@@ -1161,18 +1161,26 @@ spa_vdev_copy_segment(vdev_t *vd, range_tree_t *segs,
 	}
 	ASSERT3U(size, <=, maxalloc);
 	ASSERT0(P2PHASE(size, 1 << spa->spa_min_ashift));
-
-	/*
-	 * An allocation class might not have any remaining vdevs or space
-	 */
-	metaslab_class_t *mc = mg->mg_class;
-	if (mc->mc_groups == 0)
-		mc = spa_normal_class(spa);
-	int error = metaslab_alloc_dva(spa, mc, size, &dst, 0, NULL, txg,
-	    METASLAB_DONT_THROTTLE, zal, 0);
-	if (error == ENOSPC && mc != spa_normal_class(spa)) {
-		error = metaslab_alloc_dva(spa, spa_normal_class(spa), size,
-		    &dst, 0, NULL, txg, METASLAB_DONT_THROTTLE, zal, 0);
+	int error = 0;
+	if (dest) {
+		uint64_t offset = metaslab_group_alloc(mg, zal, size, txg,
+		    B_FALSE, &dst, 0, 0, B_FALSE);
+		if (offset == -1ULL) {
+			error = ENOSPC;
+		}
+	} else {
+		/*
+		 * An allocation class might not have any remaining vdevs or space
+		 */
+		metaslab_class_t *mc = mg->mg_class;
+		if (mc->mc_groups == 0)
+			mc = spa_normal_class(spa);
+		int error = metaslab_alloc_dva(spa, mc, size, &dst, 0, NULL, txg,
+		    METASLAB_DONT_THROTTLE, zal, 0);
+		if (error == ENOSPC && mc != spa_normal_class(spa)) {
+			error = metaslab_alloc_dva(spa, spa_normal_class(spa), size,
+			    &dst, 0, NULL, txg, METASLAB_DONT_THROTTLE, zal, 0);
+		}
 	}
 	if (error != 0)
 		return (error);
@@ -1231,16 +1239,15 @@ spa_vdev_copy_segment(vdev_t *vd, range_tree_t *segs,
 	spa_config_enter(spa, SCL_STATE, spa, RW_READER);
 	zio_t *nzio = zio_null(spa->spa_txg_zio[txg & TXG_MASK], spa, NULL,
 	    spa_vdev_copy_segment_done, vcsa, 0);
-	vdev_t *dest_vd = vdev_lookup_top(spa, DVA_GET_VDEV(&dst));
-	if (dest_vd->vdev_ops == &vdev_mirror_ops) {
-		for (int i = 0; i < dest_vd->vdev_children; i++) {
-			vdev_t *child = dest_vd->vdev_child[i];
+	if (dest->vdev_ops == &vdev_mirror_ops) {
+		for (int i = 0; i < dest->vdev_children; i++) {
+			vdev_t *child = dest->vdev_child[i];
 			spa_vdev_copy_one_child(vca, nzio, vd, start,
 			    child, DVA_GET_OFFSET(&dst), i, size);
 		}
 	} else {
 		spa_vdev_copy_one_child(vca, nzio, vd, start,
-		    dest_vd, DVA_GET_OFFSET(&dst), -1, size);
+		    dest, DVA_GET_OFFSET(&dst), -1, size);
 	}
 	zio_nowait(nzio);
 
@@ -2555,10 +2562,10 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 
 	int pfull = vd->vdev_stat.vs_alloc * 100 / vd->vdev_stat.vs_space;
 	zfs_dbgmsg("rebalancing vdev: %llu %s %d", (u_longlong_t)vdev_guid, vd->vdev_path, pfull);
-	spa_vdev_rebalance_t svr;
-	svr.svr_target = pfull;
-	svr.svr_vdev_id = vd->vdev_id;
-	list_create(&svr.svr_sources, sizeof (spa_vdev_rebalance_source_info_t),
+	spa_vdev_rebalance_t *svr = kmem_zalloc(sizeof (*svr), KM_SLEEP);
+	svr->svr_target = pfull;
+	svr->svr_vdev_id = vd->vdev_id;
+	list_create(&svr->svr_sources, sizeof (spa_vdev_rebalance_source_info_t),
 	    offsetof(spa_vdev_rebalance_source_info_t, svrsi_node));
 
 	// TODO need to consider in descending order of fullness to do this right
@@ -2575,7 +2582,7 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 		if (cfull > pfull && cfull > tfull) {
 			spa_vdev_rebalance_source_info_t *svrsi = kmem_zalloc(sizeof (*svrsi), KM_SLEEP);
 			svrsi->svrsi_id = id;
-			list_insert_tail(&svr.svr_sources, svrsi);
+			list_insert_tail(&svr->svr_sources, svrsi);
 			zfs_dbgmsg("selected vdev: %s %d > %d", cvd->vdev_path, cfull, pfull);
 			talloc += cvd->vdev_stat.vs_alloc;
 			tspace += cvd->vdev_stat.vs_space;
@@ -2584,13 +2591,13 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 	}
 
 	if (count == 0) {
-		list_destroy(&svr.svr_sources);
+		list_destroy(&svr->svr_sources);
 		return (0);
 	}
 
 	int tfull = 100 * talloc / tspace;
 	uint64_t sum = 0;
-	spa_vdev_rebalance_source_info_t *head = list_head(&svr.svr_sources);
+	spa_vdev_rebalance_source_info_t *head = list_head(&svr->svr_sources);
 
 	ASSERT(head);
 	do {
@@ -2599,8 +2606,8 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 		if (cfull < tfull) {
 			zfs_dbgmsg("Skipping %s, %d", cvd->vdev_path, cfull);
 			spa_vdev_rebalance_source_info_t *cur = head;
-			head = list_next(&svr.svr_sources, head);
-			list_remove(&svr.svr_sources, cur);
+			head = list_next(&svr->svr_sources, head);
+			list_remove(&svr->svr_sources, cur);
 			kmem_free(cur, sizeof (*cur));
 			continue;
 		}
@@ -2608,22 +2615,372 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 		sum += head->svrsi_bytes;
 		zfs_dbgmsg("Moving %llu bytes from %s to %s", (u_longlong_t)head->svrsi_bytes, cvd->vdev_path, vd->vdev_path);
 		zfs_dbgmsg("%s will be %d full", cvd->vdev_path, (int)(100 * (cvd->vdev_stat.vs_alloc - head->svrsi_bytes) / cvd->vdev_stat.vs_space));
-		head = list_next(&svr.svr_sources, head);
+		head = list_next(&svr->svr_sources, head);
 	} while (head);
 
 	zfs_dbgmsg("Moving %llu bytes total to %s", (u_longlong_t)sum, vd->vdev_path);
 	zfs_dbgmsg("%s will be %d full", vd->vdev_path, (int)(100 * (vd->vdev_stat.vs_alloc + sum) / vd->vdev_stat.vs_space));
-
-	/*avl_creeate(&vd->vdev_rebalance_tree, vdev_rebalance_node_cmp,
-	    sizeof (vdev_rebalance_node_t), offsetof(vdev_rebalance_node_t,
-	    vrn_node));*/
-
-	while ((head = list_remove_head(&svr.svr_sources))) {
-		kmem_free(head, sizeof (*head));
-	}
-	list_destroy(&svr.svr_sources);
+	spa->spa_vdev_rebalance = svr;
 
 	return (0);
+}
+
+
+
+/*
+ * Allocate a new location for this segment, and create the zio_t's to
+ * read from the old location and write to the new location.
+ */
+static int
+spa_vdev_copy_segment_rebal(spa_vdev_rebalance_t *svr, vdev_t *vd, vdev_t *dest, range_tree_t *segs,
+    uint64_t maxalloc, uint64_t txg,
+    vdev_copy_arg_t *vca, zio_alloc_list_t *zal)
+{
+	metaslab_group_t *mg = vd->vdev_mg;
+	spa_t *spa = vd->vdev_spa;
+	vdev_indirect_mapping_entry_t *entry;
+	dva_t dst = {{ 0 }};
+	uint64_t start = range_tree_min(segs);
+	ASSERT0(P2PHASE(start, 1 << spa->spa_min_ashift));
+
+	ASSERT3U(maxalloc, <=, SPA_MAXBLOCKSIZE);
+	ASSERT0(P2PHASE(maxalloc, 1 << spa->spa_min_ashift));
+
+	uint64_t size = range_tree_span(segs);
+	if (range_tree_span(segs) > maxalloc) {
+		/*
+		 * We can't allocate all the segments.  Prefer to end
+		 * the allocation at the end of a segment, thus avoiding
+		 * additional split blocks.
+		 */
+		range_seg_max_t search;
+		zfs_btree_index_t where;
+		rs_set_start(&search, segs, start + maxalloc);
+		rs_set_end(&search, segs, start + maxalloc);
+		(void) zfs_btree_find(&segs->rt_root, &search, &where);
+		range_seg_t *rs = zfs_btree_prev(&segs->rt_root, &where,
+		    &where);
+		if (rs != NULL) {
+			size = rs_get_end(rs, segs) - start;
+		} else {
+			/*
+			 * There are no segments that end before maxalloc.
+			 * I.e. the first segment is larger than maxalloc,
+			 * so we must split it.
+			 */
+			size = maxalloc;
+		}
+	}
+	ASSERT3U(size, <=, maxalloc);
+	ASSERT0(P2PHASE(size, 1 << spa->spa_min_ashift));
+	int error = 0;
+	if (dest) {
+		uint64_t offset = metaslab_group_alloc(mg, zal, size, txg,
+		    B_FALSE, &dst, 0, 0, B_FALSE);
+		if (offset == -1ULL) {
+			error = ENOSPC;
+		}
+	} else {
+		/*
+		 * An allocation class might not have any remaining vdevs or space
+		 */
+		metaslab_class_t *mc = mg->mg_class;
+		if (mc->mc_groups == 0)
+			mc = spa_normal_class(spa);
+		int error = metaslab_alloc_dva(spa, mc, size, &dst, 0, NULL, txg,
+		    METASLAB_DONT_THROTTLE, zal, 0);
+		if (error == ENOSPC && mc != spa_normal_class(spa)) {
+			error = metaslab_alloc_dva(spa, spa_normal_class(spa), size,
+			    &dst, 0, NULL, txg, METASLAB_DONT_THROTTLE, zal, 0);
+		}
+	}
+	if (error != 0)
+		return (error);
+
+	/*
+	 * Determine the ranges that are not actually needed.  Offsets are
+	 * relative to the start of the range to be copied (i.e. relative to the
+	 * local variable "start").
+	 */
+	range_tree_t *obsolete_segs = range_tree_create(NULL, RANGE_SEG64, NULL,
+	    0, 0);
+
+	zfs_btree_index_t where;
+	range_seg_t *rs = zfs_btree_first(&segs->rt_root, &where);
+	ASSERT3U(rs_get_start(rs, segs), ==, start);
+	uint64_t prev_seg_end = rs_get_end(rs, segs);
+	while ((rs = zfs_btree_next(&segs->rt_root, &where, &where)) != NULL) {
+		if (rs_get_start(rs, segs) >= start + size) {
+			break;
+		} else {
+			range_tree_add(obsolete_segs,
+			    prev_seg_end - start,
+			    rs_get_start(rs, segs) - prev_seg_end);
+		}
+		prev_seg_end = rs_get_end(rs, segs);
+	}
+	/* We don't end in the middle of an obsolete range */
+	ASSERT3U(start + size, <=, prev_seg_end);
+
+	range_tree_clear(segs, start, size);
+
+	/*
+	 * We can't have any padding of the allocated size, otherwise we will
+	 * misunderstand what's allocated, and the size of the mapping. We
+	 * prevent padding by ensuring that all devices in the pool have the
+	 * same ashift, and the allocation size is a multiple of the ashift.
+	 */
+	VERIFY3U(DVA_GET_ASIZE(&dst), ==, size);
+
+	vdev_copy_segment_arg_t *vcsa = kmem_zalloc(sizeof (*vcsa), KM_SLEEP);
+	vcsa->vcsa_dest_dva = &dst;
+	vcsa->vcsa_spa = spa;
+	vcsa->vcsa_txg = txg;
+
+	/*
+	 * See comment before spa_vdev_copy_one_child().
+	 */
+	zio_t *nzio = zio_null(spa->spa_txg_zio[txg & TXG_MASK], spa, NULL,
+	    spa_vdev_copy_segment_done, vcsa, 0);
+	if (dest->vdev_ops == &vdev_mirror_ops) {
+		for (int i = 0; i < dest->vdev_children; i++) {
+			vdev_t *child = dest->vdev_child[i];
+			spa_vdev_copy_one_child(vca, nzio, vd, start,
+			    child, DVA_GET_OFFSET(&dst), i, size);
+		}
+	} else {
+		spa_vdev_copy_one_child(vca, nzio, vd, start,
+		    dest, DVA_GET_OFFSET(&dst), -1, size);
+	}
+	zio_nowait(nzio);
+
+	vdev_rebalance_node_t *node = kmem_zalloc(sizeof (*node), KM_SLEEP);
+	node->vrn_dest = dst;
+	node->vrn_birth = txg;
+	node->vrn_offset = start;
+	node->vrn_size = size;
+	if (vd->vdev_rebalance_tree == NULL) {
+		vd->vdev_rebalance_tree = kmem_alloc(sizeof (avl_tree_t), KM_SLEEP);
+		avl_creeate(&vd->vdev_rebalance_tree, vdev_rebalance_node_cmp,
+		    sizeof (vdev_rebalance_node_t), offsetof(vdev_rebalance_node_t,
+		    vrn_node));
+	}
+	avl_insert(vd->vdev_rebalance_tree, node);
+
+	ASSERT3U(start + size, <=, vd->vdev_ms_count << vd->vdev_ms_shift);
+	vdev_dirty(vd, 0, NULL, txg);
+
+	return (0);
+}
+
+/*
+ * Evacuates a segment of size at most max_alloc from the vdev
+ * via repeated calls to spa_vdev_copy_segment. If an allocation
+ * fails, the pool is probably too fragmented to handle such a
+ * large size, so decrease max_alloc so that the caller will not try
+ * this size again this txg.
+ */
+static void
+spa_vdev_copy_rebal_impl(vdev_t *vd, spa_vdev_rebalance_t *svr, vdev_copy_arg_t *vca,
+    uint64_t *max_alloc, dmu_tx_t *tx)
+{
+	uint64_t txg = dmu_tx_get_txg(tx);
+	spa_t *spa = dmu_tx_pool(tx)->dp_spa;
+
+	/*
+	 * Determine how big of a chunk to copy.  We can allocate up
+	 * to max_alloc bytes, and we can span up to vdev_removal_max_span
+	 * bytes of unallocated space at a time.  "segs" will track the
+	 * allocated segments that we are copying.  We may also be copying
+	 * free segments (of up to vdev_removal_max_span bytes).
+	 */
+	range_tree_t *segs = range_tree_create(NULL, RANGE_SEG64, NULL, 0, 0);
+	for (;;) {
+		range_tree_t *rt = svr->svr_allocd_segs;
+		range_seg_t *rs = range_tree_first(rt);
+
+		if (rs == NULL)
+			break;
+
+		uint64_t seg_length;
+
+		if (range_tree_is_empty(segs)) {
+			/* need to truncate the first seg based on max_alloc */
+			seg_length = MIN(rs_get_end(rs, rt) - rs_get_start(rs,
+			    rt), *max_alloc);
+		} else {
+			if (rs_get_start(rs, rt) - range_tree_max(segs) >
+			    vdev_removal_max_span) {
+				/*
+				 * Including this segment would cause us to
+				 * copy a larger unneeded chunk than is allowed.
+				 */
+				break;
+			} else if (rs_get_end(rs, rt) - range_tree_min(segs) >
+			    *max_alloc) {
+				/*
+				 * This additional segment would extend past
+				 * max_alloc. Rather than splitting this
+				 * segment, leave it for the next mapping.
+				 */
+				break;
+			} else {
+				seg_length = rs_get_end(rs, rt) -
+				    rs_get_start(rs, rt);
+			}
+		}
+
+		range_tree_add(segs, rs_get_start(rs, rt), seg_length);
+		range_tree_remove(svr->svr_allocd_segs,
+		    rs_get_start(rs, rt), seg_length);
+	}
+
+	if (range_tree_is_empty(segs)) {
+		range_tree_destroy(segs);
+		return;
+	}
+
+	zio_alloc_list_t zal;
+	metaslab_trace_init(&zal);
+	uint64_t thismax = SPA_MAXBLOCKSIZE;
+	vdev_t *dest = vdev_lookup_top(spa, svr->svr_vdev_id);
+	while (!range_tree_is_empty(segs)) {
+		int error = spa_vdev_copy_segment_rebal(svr, vd, dest,
+		    segs, thismax, txg, vca, &zal);
+
+		if (error == ENOSPC) {
+			/*
+			 * Cut our segment in half, and don't try this
+			 * segment size again this txg.  Note that the
+			 * allocation size must be aligned to the highest
+			 * ashift in the pool, so that the allocation will
+			 * not be padded out to a multiple of the ashift,
+			 * which could cause us to think that this mapping
+			 * is larger than we intended.
+			 */
+			ASSERT3U(spa->spa_max_ashift, >=, SPA_MINBLOCKSHIFT);
+			ASSERT3U(spa->spa_max_ashift, ==, spa->spa_min_ashift);
+			uint64_t attempted =
+			    MIN(range_tree_span(segs), thismax);
+			thismax = P2ROUNDUP(attempted / 2,
+			    1 << spa->spa_max_ashift);
+			/*
+			 * The minimum-size allocation can not fail.
+			 */
+			ASSERT3U(attempted, >, 1 << spa->spa_max_ashift);
+			*max_alloc = attempted - (1 << spa->spa_max_ashift);
+		} else {
+			ASSERT0(error);
+
+			/*
+			 * We've performed an allocation, so reset the
+			 * alloc trace list.
+			 */
+			metaslab_trace_fini(&zal);
+			metaslab_trace_init(&zal);
+		}
+	}
+	metaslab_trace_fini(&zal);
+	range_tree_destroy(segs);
+}
+
+void
+spa_rebalance_some(spa_t *spa, dmu_tx_t *tx)
+{
+	spa_vdev_rebalance_t *svr = spa->spa_vdev_rebalance;
+	int txgoff = dmu_tx_get_txg(tx) & TXG_MASK;
+
+	if (svr == NULL)
+		return;
+
+	/*
+	 * Only do stuff in the first pass
+	 * 	 */
+	if (spa->spa_sync_pass == 1)
+		return;
+
+	vdev_copy_arg_t vca = {0};
+	spa_vdev_rebalance_source_info_t *svrsi = list_head(&svr->svr_sources);
+	vdev_t *vd = vdev_lookup_top(spa, svrsi->svrsi_id);
+	uint64_t start_offset = svr->svr_start_offset;
+	uint64_t msi;
+	uint64_t max_alloc = spa_remove_max_segment(spa);
+	for (msi = svr->svr_start_offset;
+	    msi < vd->vdev_ms_count; msi++) {
+		metaslab_t *msp = vd->vdev_ms[msi];
+		ASSERT3U(msi, <=, vd->vdev_ms_count);
+		range_tree_t *segs = range_tree_create(NULL, RANGE_SEG64, NULL, 0, 0);
+
+		mutex_enter(&msp->ms_sync_lock);
+		mutex_enter(&msp->ms_lock);
+		/*
+		 * Assert nothing in flight -- ms_*tree is empty.
+		 */
+		for (int i = 0; i < TXG_SIZE; i++) {
+			ASSERT0(range_tree_space(msp->ms_allocating[i]));
+		}
+
+		/*
+		 * If the metaslab has ever been allocated from (ms_sm!=NULL),
+		 * read the allocated segments from the space map object
+		 * into svr_allocd_segs. Since we do this while holding
+		 * svr_lock and ms_sync_lock, concurrent frees (which
+		 * would have modified the space map) will wait for us
+		 * to finish loading the spacemap, and then take the
+		 * appropriate action (see free_from_removing_vdev()).
+		 */
+		if (msp->ms_sm != NULL) {
+			VERIFY0(space_map_load(msp->ms_sm,
+				segs, SM_ALLOC));
+
+			range_tree_walk(msp->ms_unflushed_allocs,
+			    range_tree_add, segs);
+			range_tree_walk(msp->ms_unflushed_frees,
+			    range_tree_remove, segs);
+			range_tree_walk(msp->ms_freeing,
+			    range_tree_remove, segs);
+
+			/*
+			 * When we are resuming from a paused removal (i.e.
+			 * when importing a pool with a removal in progress),
+			 * discard any state that we have already processed.
+			 */
+			range_tree_clear(segs, 0, start_offset);
+		}
+		mutex_exit(&msp->ms_lock);
+		mutex_exit(&msp->ms_sync_lock);
+
+		vca.vca_msp = msp;
+		zfs_dbgmsg("copying %llu segments for metaslab %llu",
+		    (u_longlong_t)zfs_btree_numnodes(
+		    &segs->rt_root),
+		    (u_longlong_t)msp->ms_id);
+
+		svr->svr_allocd_segs = segs;
+		while (!range_tree_is_empty(segs)) {
+			if (vca.vca_outstanding_bytes >
+			    zfs_remove_max_copy_bytes ||
+			    vca.vca_outstanding_bytes >= svrsi->svrsi_bytes) {
+				break;
+			}
+			spa_vdev_copy_rebal_impl(vd, svr, &vca, &max_alloc, tx);
+		}
+		svrsi->svrsi_bytes -= vca.vca_outstanding_bytes;
+		svr->svr_allocd_segs = NULL;
+		range_tree_destroy(segs);
+		if (vca.vca_outstanding_bytes >
+	    	    zfs_remove_max_copy_bytes ||
+		    svrsi->svrsi_bytes == 0) {
+			break;
+		}
+	}
+	if (msi == vd->vdev_ms_count ||
+	    vca.vca_outstanding_bytes >= svrsi->svrsi_bytes) {
+		list_remove_head(&svr->svr_sources);
+		kmem_free(svrsi, sizeof (*svrsi));
+		msi = 0;
+	}
+	svr->svr_start_offset = msi;
 }
 
 ZFS_MODULE_PARAM(zfs_vdev, zfs_, removal_ignore_errors, INT, ZMOD_RW,

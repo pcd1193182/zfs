@@ -9261,6 +9261,7 @@ spa_sync_iterate_to_convergence(spa_t *spa, dmu_tx_t *tx)
 		dsl_scan_sync(dp, tx);
 		dsl_errorscrub_sync(dp, tx);
 		svr_sync(spa, tx);
+		spa_rebalance_some(spa, tx);
 		spa_sync_upgrades(spa, tx);
 
 		spa_flush_metaslabs(spa, tx);

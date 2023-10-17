@@ -88,6 +88,8 @@ int metaslab_alloc(spa_t *, metaslab_class_t *, uint64_t,
 	int);
 int metaslab_alloc_dva(spa_t *, metaslab_class_t *, uint64_t,
     dva_t *, int, dva_t *, uint64_t, int, zio_alloc_list_t *, int);
+uint64_t metaslab_group_alloc(metaslab_group_t *, zio_alloc_list_t *,
+    uint64_t, uint64_t, boolean_t, dva_t *, int, int, boolean_t);
 void metaslab_free(spa_t *, const blkptr_t *, uint64_t, boolean_t);
 void metaslab_free_concrete(vdev_t *, uint64_t, uint64_t, boolean_t);
 void metaslab_free_dva(spa_t *, const dva_t *, boolean_t);

@@ -11061,8 +11061,12 @@ zpool_do_rebalance(int argc, char **argv)
 
 	int err = zpool_rebalance(zhp, vdev);
 
+	int ret = 0;
+	if (err != 0)
+		ret = 1;
+
 	zpool_close(zhp);
-	return (err);
+	return (ret);
 }
 
 static int
