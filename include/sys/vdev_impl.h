@@ -161,6 +161,15 @@ typedef enum vdev_alloc_bias {
 	VDEV_BIAS_DEDUP		/* dedicated to dedup metadata */
 } vdev_alloc_bias_t;
 
+typedef struct vdev_rebalance_node {
+	avl_node_t	vrn_node;
+	uint64_t	vrn_birth;
+	uint64_t	vrn_offset;
+	uint64_t	vrn_size;
+	dva_t		vrn_dest;
+	uint64_t	vrn_txg;
+} vdev_rebalance_node_t;
+
 
 /*
  * On-disk indirect vdev state.
@@ -456,6 +465,9 @@ struct vdev {
 	uint64_t	vdev_checksum_t;
 	uint64_t	vdev_io_n;
 	uint64_t	vdev_io_t;
+
+	krwlock_t	vdev_rebalance_rwlock;
+	avl_tree_t	*vdev_rebalance_tree;
 };
 
 #define	VDEV_PAD_SIZE		(8 << 10)

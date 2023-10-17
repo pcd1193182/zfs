@@ -2561,6 +2561,7 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 	list_create(&svr.svr_sources, sizeof (spa_vdev_rebalance_source_info_t),
 	    offsetof(spa_vdev_rebalance_source_info_t, svrsi_node));
 
+	// TODO need to consider in descending order of fullness to do this right
 	vdev_t *rvd = spa->spa_root_vdev;
 	uint64_t talloc = vd->vdev_stat.vs_alloc, tspace = vd->vdev_stat.vs_space;
 	int count = 0;
@@ -2612,6 +2613,10 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 
 	zfs_dbgmsg("Moving %llu bytes total to %s", (u_longlong_t)sum, vd->vdev_path);
 	zfs_dbgmsg("%s will be %d full", vd->vdev_path, (int)(100 * (vd->vdev_stat.vs_alloc + sum) / vd->vdev_stat.vs_space));
+
+	/*avl_creeate(&vd->vdev_rebalance_tree, vdev_rebalance_node_cmp,
+	    sizeof (vdev_rebalance_node_t), offsetof(vdev_rebalance_node_t,
+	    vrn_node));*/
 
 	while ((head = list_remove_head(&svr.svr_sources))) {
 		kmem_free(head, sizeof (*head));
