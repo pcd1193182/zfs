@@ -63,6 +63,19 @@ typedef struct spa_vdev_removal {
 	nvlist_t	*svr_zaplist;
 } spa_vdev_removal_t;
 
+typedef struct spa_vdev_rebalance_source_info {
+	list_node_t	svrsi_node;
+	uint64_t	svrsi_id;
+	uint64_t	svrsi_bytes;
+} spa_vdev_rebalance_source_info_t;
+
+typedef struct spa_vdev_rebalance {
+	uint64_t	svr_vdev_id;
+	int		svr_target;
+	list_t		svr_sources;
+
+} spa_vdev_rebalance_t;
+
 typedef struct spa_condensing_indirect {
 	/*
 	 * New mappings to write out each txg.

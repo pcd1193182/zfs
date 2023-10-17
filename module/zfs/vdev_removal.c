@@ -2550,20 +2550,73 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 	vd = spa_lookup_by_guid(spa, vdev_guid, B_FALSE);
 	if (vd == NULL)
 		return (SET_ERROR(ENOENT));
+	if (vd->vdev_parent != spa->spa_root_vdev)
+		return (SET_ERROR(EINVAL));
 
 	int pfull = vd->vdev_stat.vs_alloc * 100 / vd->vdev_stat.vs_space;
 	zfs_dbgmsg("rebalancing vdev: %llu %s %d", (u_longlong_t)vdev_guid, vd->vdev_path, pfull);
+	spa_vdev_rebalance_t svr;
+	svr.svr_target = pfull;
+	svr.svr_vdev_id = vd->vdev_id;
+	list_create(&svr.svr_sources, sizeof (spa_vdev_rebalance_source_info_t),
+	    offsetof(spa_vdev_rebalance_source_info_t, svrsi_node));
 
 	vdev_t *rvd = spa->spa_root_vdev;
+	uint64_t talloc = vd->vdev_stat.vs_alloc, tspace = vd->vdev_stat.vs_space;
+	int count = 0;
 	for (uint64_t id = 0; id < rvd->vdev_children; id++) {
 		vdev_t *cvd = rvd->vdev_child[id];
 		if (vd == cvd)
 			continue;
 		int cfull = 100 * cvd->vdev_stat.vs_alloc / cvd->vdev_stat.vs_space;
-		if (cfull > pfull) {
+		int tfull = 100 * talloc / tspace;
+		zfs_dbgmsg("Considering %s %d %d %d", cvd->vdev_path, cfull, pfull, tfull);
+		if (cfull > pfull && cfull > tfull) {
+			spa_vdev_rebalance_source_info_t *svrsi = kmem_zalloc(sizeof (*svrsi), KM_SLEEP);
+			svrsi->svrsi_id = id;
+			list_insert_tail(&svr.svr_sources, svrsi);
 			zfs_dbgmsg("selected vdev: %s %d > %d", cvd->vdev_path, cfull, pfull);
+			talloc += cvd->vdev_stat.vs_alloc;
+			tspace += cvd->vdev_stat.vs_space;
+			count++;
 		}
 	}
+
+	if (count == 0) {
+		list_destroy(&svr.svr_sources);
+		return (0);
+	}
+
+	int tfull = 100 * talloc / tspace;
+	uint64_t sum = 0;
+	spa_vdev_rebalance_source_info_t *head = list_head(&svr.svr_sources);
+
+	ASSERT(head);
+	do {
+		vdev_t *cvd = rvd->vdev_child[head->svrsi_id];
+		int cfull = 100 * cvd->vdev_stat.vs_alloc / cvd->vdev_stat.vs_space;
+		if (cfull < tfull) {
+			zfs_dbgmsg("Skipping %s, %d", cvd->vdev_path, cfull);
+			spa_vdev_rebalance_source_info_t *cur = head;
+			head = list_next(&svr.svr_sources, head);
+			list_remove(&svr.svr_sources, cur);
+			kmem_free(cur, sizeof (*cur));
+			continue;
+		}
+		head->svrsi_bytes = (cfull - tfull) * cvd->vdev_stat.vs_space / 100;
+		sum += head->svrsi_bytes;
+		zfs_dbgmsg("Moving %llu bytes from %s to %s", (u_longlong_t)head->svrsi_bytes, cvd->vdev_path, vd->vdev_path);
+		zfs_dbgmsg("%s will be %d full", cvd->vdev_path, (int)(100 * (cvd->vdev_stat.vs_alloc - head->svrsi_bytes) / cvd->vdev_stat.vs_space));
+		head = list_next(&svr.svr_sources, head);
+	} while (head);
+
+	zfs_dbgmsg("Moving %llu bytes total to %s", (u_longlong_t)sum, vd->vdev_path);
+	zfs_dbgmsg("%s will be %d full", vd->vdev_path, (int)(100 * (vd->vdev_stat.vs_alloc + sum) / vd->vdev_stat.vs_space));
+
+	while ((head = list_remove_head(&svr.svr_sources))) {
+		kmem_free(head, sizeof (*head));
+	}
+	list_destroy(&svr.svr_sources);
 
 	return (0);
 }
