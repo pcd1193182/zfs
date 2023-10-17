@@ -2551,6 +2551,20 @@ spa_vdev_rebalance(spa_t *spa, uint64_t vdev_guid)
 	if (vd == NULL)
 		return (SET_ERROR(ENOENT));
 
+	int pfull = vd->vdev_stat.vs_alloc * 100 / vd->vdev_stat.vs_space;
+	zfs_dbgmsg("rebalancing vdev: %llu %s %d", (u_longlong_t)vdev_guid, vd->vdev_path, pfull);
+
+	vdev_t *rvd = spa->spa_root_vdev;
+	for (uint64_t id = 0; id < rvd->vdev_children; id++) {
+		vdev_t *cvd = rvd->vdev_child[id];
+		if (vd == cvd)
+			continue;
+		int cfull = 100 * cvd->vdev_stat.vs_alloc / cvd->vdev_stat.vs_space;
+		if (cfull > pfull) {
+			zfs_dbgmsg("selected vdev: %s %d > %d", cvd->vdev_path, cfull, pfull);
+		}
+	}
+
 	return (0);
 }
 
