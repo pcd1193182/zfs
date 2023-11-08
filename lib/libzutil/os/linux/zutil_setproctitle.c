@@ -82,6 +82,8 @@ spt_min(size_t a, size_t b)
 	return ((a < b) ? a : b);
 }
 
+char **global_tmp;
+
 /*
  * For discussion on the portability of the various methods, see
  * https://lists.freebsd.org/pipermail/freebsd-stable/2008-June/043136.html
@@ -97,6 +99,7 @@ spt_clearenv(void)
 
 	tmp[0] = NULL;
 	environ = tmp;
+	global_tmp = tmp;
 
 	return (0);
 }
