@@ -388,7 +388,7 @@ get_usage(zpool_help_t idx)
 		    "\t    [-d dir | -c cachefile] [-D] [-l] [-f] [-m] [-N] "
 		    "[-R root] [-F [-n]] -a\n"
 		    "\timport [-o mntopts] [-o property=value] ... \n"
-		    "\t    [-d dir | -c cachefile] [-D] [-l] [-f] [-m -L pool] "
+		    "\t    [-d dir | -c cachefile] [-D] [-l] [-f] [-m [-L pool]] "
 		    "[-N] [-R root] [-F [-n]]\n"
 		    "\t    [--rewind-to-checkpoint] <pool | id> [newpool]\n"));
 	case HELP_IOSTAT:
@@ -3661,10 +3661,29 @@ import_pools(nvlist_t *pools, nvlist_t *props, char *mntopts, int flags,
 	uint_t npools = 0;
 
 
+	int err = 0;
+	nvpair_t *elem = NULL, *next = NULL;
+	boolean_t first = B_TRUE;
 	tpool_t *tp = NULL;
 	if (import->do_all) {
 		tp = tpool_create(1, 5 * sysconf(_SC_NPROCESSORS_ONLN),
 		    0, NULL);
+
+		elem = nvlist_next_nvpair(pools, NULL);
+		next = nvlist_next_nvpair(pools, elem);
+
+		while (elem != NULL) {
+			verify(nvpair_value_nvlist(elem, &config) == 0);
+			if (fnvlist_lookup_boolean(config, ZPOOL_CONFIG_IS_SHARED_LOG)) {
+				err = do_import(config, NULL, mntopts, props, flags, mount_tp_nthr);
+				first = B_FALSE;
+				fnvlist_remove_nvpair(pools, elem);
+			}
+			elem = next;
+			next = nvlist_next_nvpair(pools, elem);
+		}
+		if (err != 0)
+			return (err);
 	}
 
 	/*
@@ -3673,9 +3692,6 @@ import_pools(nvlist_t *pools, nvlist_t *props, char *mntopts, int flags,
 	 * post-process the list to deal with pool state and possible
 	 * duplicate names.
 	 */
-	int err = 0;
-	nvpair_t *elem = NULL;
-	boolean_t first = B_TRUE;
 	if (!pool_specified && import->do_all) {
 		while ((elem = nvlist_next_nvpair(pools, elem)) != NULL)
 			npools++;
@@ -8009,31 +8025,36 @@ struct recycle_data {
 	boolean_t verbose;
 };
 
+static void
+print_recycle_info(nvlist_t *nvl, boolean_t dryrun)
+{
+	printf("Cleaned up%s: [", dryrun ? " (dry run)" : "");
+	nvpair_t *elem = NULL;
+	boolean_t first = B_TRUE;
+	while ((elem = nvlist_next_nvpair(nvl, elem))) {
+		printf("%s%s", first ? "" : ",\n\t", nvpair_name(elem));
+		first = B_FALSE;
+	}
+	printf("]\n");
+}
+
 static int
 recycle_callback(zpool_handle_t *zhp, void *data)
 {
 	struct recycle_data *rd = data;
 	nvlist_t *nvl;
 
-	int err = lzc_recycle(zpool_get_name(zhp), rd->dryrun, &nvl);
+	int err = lzc_recycle(zpool_get_name(zhp), NULL, rd->dryrun, &nvl);
 	if (err)
 		return (err);
-	if (rd->verbose) {
-		printf("Cleaned up%s: [", rd->dryrun ? " (dry run)" : "");
-		nvpair_t *elem = NULL;
-		boolean_t first = B_TRUE;
-		while ((elem = nvlist_next_nvpair(nvl, elem))) {
-			printf("%s%s", first ? "" : ",\n\t", nvpair_name(elem));
-			first = B_FALSE;
-		}
-		printf("]\n");
-	}
+	if (rd->verbose)
+		print_recycle_info(nvl, rd->dryrun);
 	nvlist_free(nvl);
 	return (0);
 }
 
 /*
- * zpool recycle <pool> ...
+ * zpool recycle [-a] [-n] [-v] <pool> [pool]...
  *
  *	Cleans up chain maps for non-attached client pools
  */
@@ -8042,15 +8063,19 @@ zpool_do_recycle(int argc, char **argv)
 {
 	int c;
 	struct recycle_data rd = {0};
+	boolean_t doall = B_FALSE;
 
 	/* check options */
-	while ((c = getopt(argc, argv, "nv")) != -1) {
+	while ((c = getopt(argc, argv, "nva")) != -1) {
 		switch (c) {
 		case 'n':
 			rd.dryrun = B_TRUE;
 			zfs_fallthrough;
 		case 'v':
 			rd.verbose = B_TRUE;
+			break;
+		case 'a':
+			doall = B_TRUE;
 			break;
 		case '?':
 			(void) fprintf(stderr, gettext("invalid option '%c'\n"),
@@ -8065,10 +8090,44 @@ zpool_do_recycle(int argc, char **argv)
 	if (argc < 1) {
 		(void) fprintf(stderr, gettext("missing pool name argument\n"));
 		usage(B_FALSE);
+	} else if (argc == 1 && !doall) {
+		(void) fprintf(stderr, gettext("missing client pools\n"));
+		usage(B_FALSE);
+	} else if (argc > 1 && doall) {
+		(void) fprintf(stderr, gettext("specific client pools and "
+		    "do_all\n"));
+		usage(B_FALSE);
 	}
 
-	return (for_each_pool(argc, argv, B_TRUE, NULL, ZFS_TYPE_POOL,
-	    B_FALSE, recycle_callback, &rd));
+	if (doall) {
+		return (for_each_pool(argc, argv, B_TRUE, NULL, ZFS_TYPE_POOL,
+		    B_FALSE, recycle_callback, &rd));
+	}
+
+	const char *pool = argv[0];
+	argc--;
+	argv++;
+
+	nvlist_t *clients = NULL;
+	if (argc > 0)
+		clients = fnvlist_alloc();
+	while (argc > 0) {
+		fnvlist_add_boolean(clients, argv[0]);
+		argc--;
+		argv++;
+	}
+
+	nvlist_t *nvl;
+	int err = lzc_recycle(pool, clients, rd.dryrun, &nvl);
+	if (clients)
+		nvlist_free(clients);
+	if (err)
+		return (err);
+	if (rd.verbose)
+		print_recycle_info(nvl, rd.dryrun);
+	nvlist_free(nvl);
+
+	return (0);
 }
 
 /*

@@ -487,13 +487,17 @@ zil_parse_raw_impl(spa_t *spa, const blkptr_t *bp,
 	return (error);
 }
 
+/*
+ * Because we don't have access to the zilog_t, we cannot know when the chain
+ * is supposed to end. As a result, all IOs need to be marked as speculative.
+ */
 int
 zil_parse_raw(spa_t *spa, const blkptr_t *bp,
     zil_parse_raw_blk_func_t *parse_blk_func,
     zil_parse_raw_lr_func_t *parse_lr_func, void *arg)
 {
 	return (zil_parse_raw_impl(spa, bp, parse_blk_func, parse_lr_func, arg,
-	    0));
+		ZIO_FLAG_SPECULATIVE | ZIO_FLAG_SCRUB));
 }
 
 struct parse_arg {
@@ -1195,6 +1199,49 @@ zil_destroy_sync(zilog_t *zilog, dmu_tx_t *tx)
 	ASSERT(list_is_empty(&zilog->zl_lwb_list));
 	(void) zil_parse(zilog, zil_free_log_block,
 	    zil_free_log_record, tx, zilog->zl_header->zh_claim_txg, B_FALSE);
+}
+
+/*
+ * This function's only job is to clear the zil chain for the given dataset.
+ * It is called when we're using a shared log pool and we import discarding
+ * logs.
+ */
+int
+zil_clear(dsl_pool_t *dp, dsl_dataset_t *ds, void *txarg)
+{
+	dmu_tx_t *tx = txarg;
+	zilog_t *zilog;
+	zil_header_t *zh;
+	objset_t *os;
+	int error;
+
+	ASSERT3U(spa_get_log_state(dp->dp_spa), ==, SPA_LOG_CLEAR);
+
+	error = dmu_objset_own_obj(dp, ds->ds_object,
+	    DMU_OST_ANY, B_FALSE, B_FALSE, FTAG, &os);
+	if (error != 0) {
+		/*
+		 * EBUSY indicates that the objset is inconsistent, in which
+		 * case it can not have a ZIL.
+		 */
+		if (error != EBUSY) {
+			cmn_err(CE_WARN, "can't open objset for %llu, error %u",
+			    (unsigned long long)ds->ds_object, error);
+		}
+
+		return (0);
+	}
+
+	zilog = dmu_objset_zil(os);
+	zh = zil_header_in_syncing_context(zilog);
+	ASSERT3U(tx->tx_txg, ==, spa_first_txg(zilog->zl_spa));
+
+	BP_ZERO(&zh->zh_log);
+	if (os->os_encrypted)
+		os->os_next_write_raw[tx->tx_txg & TXG_MASK] = B_TRUE;
+	dsl_dataset_dirty(dmu_objset_ds(os), tx);
+	dmu_objset_disown(os, B_FALSE, FTAG);
+	return (0);
 }
 
 int

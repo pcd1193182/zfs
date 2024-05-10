@@ -21,44 +21,31 @@
 #
 
 #
-# Copyright (c) 2023 by Delphix. All rights reserved.
+# Copyright (c) 2024 by Delphix. All rights reserved.
 #
 
 . $STF_SUITE/tests/functional/shared_log/shared_log.kshlib
 
 #
 # DESCRIPTION:
-#	Shared log pool can be exported and imported.
+#	Test fault behavior of shared log pool
 #
 # STRATEGY:
 #	1. Create shared log pool & client
-#	2. Write some data to the client pool
-#	3. Export client
-#	4. Export & import provider
-#	5. Import client
-#	6. Write data to client
+#	2. Fault the provider pool
+#	3. Verify the client pool also faults
 #
 
 verify_runnable "global"
 
-log_assert "Shared log pool can be exported and imported."
+log_assert "Test fault behavior of shared log pools."
 log_onexit cleanup
 
 typeset FS="$TESTPOOL/fs"
 
 log_must create_pool $LOGPOOL -L "$DISK0"
 log_must create_pool $TESTPOOL -l $LOGPOOL "$DISK1"
-log_must verify_shared_log $TESTPOOL $LOGPOOL
-log_must zfs create -o sync=always -o recordsize=8k $FS
-mntpnt=$(get_prop mountpoint $FS)
+log_must zinject -d "$DISK0" -A degrade $LOGPOOL
+log_must eval "zpool status -e $TESTPOOL | grep DEGRADED"
 
-log_must dd if=/dev/urandom of="$mntpnt/f1" bs=8k count=128
-log_must zpool export $TESTPOOL
-log_must zpool export $LOGPOOL
-log_must zpool import $LOGPOOL
-log_must zpool import $TESTPOOL
-log_must dd if=/dev/urandom of="$mntpnt/f2" bs=8k count=128
-verify_pool $LOGPOOL
-verify_pool $TESTPOOL
-
-log_pass "Shared log pool can be exported and imported."
+log_pass "Test fault behavior of shared log pools."
