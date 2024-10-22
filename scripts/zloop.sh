@@ -120,7 +120,7 @@ function store_core
 		foundcrashes=$((foundcrashes + 1))
 
 		# zdb debugging
-		zdbcmd="$ZDB -U "$workdir/zpool.cache" -dddMmDDG ztest"
+		zdbcmd="$ZDB -U "$workdir/zpool.cache" -dddMmDDG ztest-pool-0"
 		zdbdebug=$($zdbcmd 2>&1)
 		echo -e "$zdbcmd\n" >>ztest.zdb
 		echo "$zdbdebug" >>ztest.zdb
