@@ -19,6 +19,9 @@ include $(srcdir)/%D%/rpm/Makefile.am
 endif
 
 if CONFIG_USER
+if BUILD_RUST
+SUBDIRS += cmd/zrust
+endif
 include $(srcdir)/%D%/cmd/Makefile.am
 include $(srcdir)/%D%/contrib/Makefile.am
 include $(srcdir)/%D%/etc/Makefile.am
@@ -168,6 +171,33 @@ flake8:
 		flake8 $(top_srcdir); \
 	else \
 		echo "skipping flake8 because flake8 is not installed"; \
+	fi
+RUSTDIRS = cmd/zrust
+CHECKS += rustfmt
+rustfmt: $(RUSTDIRS)
+	@if type cargo-fmt > /dev/null 2>&1; then \
+		toolchain="" ; \
+		if rustup toolchain list | grep -q nightly ; then \
+			toolchain="+nightly" ; \
+		fi ; \
+		set -e ; \
+		for dir in $(RUSTDIRS) ; do \
+			cargo $$toolchain fmt --all --manifest-path $$dir/Cargo.toml -- --check ; \
+		done \
+	else \
+		echo "skipping rustfmt because cargo-fmt is not installed"; \
+	fi
+
+CHECKS += rustclippy
+rustclippy: $(RUSTDIRS)
+	@if type cargo-clippy > /dev/null 2>&1; then \
+		set -e ; \
+		for dir in $(RUSTDIRS) ; do \
+			cargo clippy --workspace --manifest-path $$dir/Cargo.toml -- -Dwarnings ; \
+			cargo clippy --tests --workspace --manifest-path $$dir/Cargo.toml -- -Dwarnings ; \
+		done \
+	else \
+		echo "skipping rustclippy because cargo-clippy is not installed"; \
 	fi
 
 PHONY += regen-tests

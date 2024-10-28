@@ -61,6 +61,7 @@
 !RELEASES.md
 !TEST
 !zfs.release.in
+!cmd/zrust/target
 
 #
 # Normal rules

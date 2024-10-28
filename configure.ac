@@ -69,6 +69,7 @@ AC_CONFIG_FILES([
 	contrib/debian/rules
 	contrib/debian/changelog
 	Makefile
+	cmd/zrust/Makefile
 	include/Makefile
 	lib/libzfs/libzfs.pc
 	lib/libzfs_core/libzfs_core.pc

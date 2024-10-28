@@ -96,7 +96,6 @@ SHELLCHECKSCRIPTS += %D%/zvol_wait
 include $(srcdir)/%D%/zed/Makefile.am
 endif
 
-
 if USING_PYTHON
 bin_SCRIPTS      += arc_summary     arcstat        dbufstat        zilstat
 CLEANFILES       += arc_summary     arcstat        dbufstat        zilstat
