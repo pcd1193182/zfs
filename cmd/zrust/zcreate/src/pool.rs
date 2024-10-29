@@ -246,6 +246,7 @@ impl Repl {
 
 impl Display for Repl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.current)?;
         self.pool.show(f, &self, None, 1)
     }
 }
