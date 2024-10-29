@@ -101,9 +101,10 @@ fn parse_props(props: Vec<String>) -> Result<NvList, ParseError> {
 
 fn main() {
     let args = Args::parse();
-    println!("Hello, world! {args:?}");
+    println!("DEBUG args: {args:?}");
 
     VDEV_TUNINGS.set(parse_config(args.config_file).expect("Could not open config file")).unwrap();
+    println!("DEBUG config: {0:#?}", VDEV_TUNINGS.get().unwrap());
 
     let fsprops = parse_props(args.fs_options).expect("Could not parse fs_options");
     let props = parse_props(args.options).expect("Could not parse pool options");
