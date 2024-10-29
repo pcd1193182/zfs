@@ -41,6 +41,11 @@ impl Pool {
     pub(crate) fn build(self) -> NvList {
         todo!()
     }
+    
+    fn show(&self, f: &mut std::fmt::Formatter<'_>, repl: &Repl, current: Option<u64>, indent: usize) -> Result<(), std::fmt::Error> {
+        write!(f, "{}\n", format!("{:<width$} {1}", " ", self.name, width=indent))?;
+        self.vdevs.get(&self.data).unwrap().show(f, repl, current, indent + 2)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -241,6 +246,6 @@ impl Repl {
 
 impl Display for Repl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        self.pool.show(f, &self, None, 1)
     }
 }
