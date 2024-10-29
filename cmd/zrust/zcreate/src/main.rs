@@ -14,7 +14,9 @@ mod pool;
 static VDEV_TUNINGS : OnceLock<Config> = OnceLock::new();
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(name = "zcreate")]
+#[command(version = "0.0.1.42")]
+#[command(about = "Interactive zpool create", long_about = None)]
 struct Args {
     /// Disable all featureflags
     #[arg(short='d', long)]

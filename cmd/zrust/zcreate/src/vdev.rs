@@ -171,7 +171,7 @@ impl Vdev for StripeVdev {
 pub(crate) fn select_vdev(parent: u64) -> Box<dyn Vdev> {
     println!("Select vdev type: [s]tripe, [l]eaf, [m]irror <count>, raid[z] <parity>, [d]raid <parity>");
     loop {
-        println!("slmzd> ");
+        print!("slmzd> ");
         let response: String = read!();
         match VdevTypes::try_from(response) {
             Ok(vdev_type) => match vdev_type{
