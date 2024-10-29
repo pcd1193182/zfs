@@ -42,9 +42,9 @@ impl Pool {
         todo!()
     }
     
-    fn show(&self, f: &mut std::fmt::Formatter<'_>, repl: &Repl, current: Option<u64>, indent: usize) -> Result<(), std::fmt::Error> {
-        write!(f, "{}\n", format!("{:<width$} {1}", " ", self.name, width=indent))?;
-        self.vdevs.get(&self.data).unwrap().show(f, repl, current, indent + 2)
+    fn show(&self, repl: &Repl, current: Option<u64>, indent: usize) {
+        println!("{}", format!("{:<width$} {1}", " ", self.name, width=indent));
+        self.vdevs.get(&self.data).unwrap().show(repl, current, indent + 2)
     }
 }
 
@@ -233,7 +233,7 @@ impl Repl {
             VdevPrompt::EDIT => todo!(),
             VdevPrompt::UP => todo!(),
             VdevPrompt::PRINT => {
-                println!("{self}");
+                self.pool.show(&self, current_vdev.map(|x| x.id()), 1);
                 self.current
             },
         })
@@ -246,7 +246,8 @@ impl Repl {
 
 impl Display for Repl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.current)?;
-        self.pool.show(f, &self, None, 1)
+        write!(f, "{:?}\n", self.current)?;
+        self.pool.show(&self, None, 1);
+        Ok(())
     }
 }

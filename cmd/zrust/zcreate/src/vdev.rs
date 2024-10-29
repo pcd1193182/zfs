@@ -12,7 +12,7 @@ use crate::pool::Repl;
 
 static ID: AtomicU64 = AtomicU64::new(1);
 pub trait Vdev: Display + Debug {
-    fn show(&self, f: &mut std::fmt::Formatter<'_>, repl: &Repl, current: Option<u64>, indent: usize) -> Result<(), std::fmt::Error>;
+    fn show(&self, repl: &Repl, current: Option<u64>, indent: usize);
     fn id(&self) -> u64;
     fn parent(&self) -> u64;
 }
@@ -147,18 +147,17 @@ impl Display for StripeVdev {
 }
 
 impl Vdev for StripeVdev {
-    fn show(&self, f: &mut std::fmt::Formatter<'_>, repl: &Repl, current: Option<u64>, indent: usize) -> Result<(), std::fmt::Error>{
+    fn show(&self, repl: &Repl, current: Option<u64>, indent: usize) {
         if Some(self.id) == current {
-            write!(f, "{} stripe({})", format!("{:<width$}", "*", width=indent), self.id)?;
+            println!("{} stripe({}):", format!("{:<width$}", "*", width=indent), self.id);
         } else {
-            write!(f, "{} stripe({})", format!("{:<width$}", " ", width=indent), self.id)?;
+            println!("{} stripe({}):", format!("{:<width$}", " ", width=indent), self.id);
         }
         for idx in 1..self.children.len() {
-            write!(f, "{idx}: ")?;
-            repl.pool.lookup(self.children[idx]).show(f, repl, current, indent)?;
+            print!("{idx}: ");
+            repl.pool.lookup(self.children[idx]).show(repl, current, indent);
         }
-        write!(f, "\n")?;
-        Ok(())
+        println!("");
     }
     
     fn id(&self) -> u64 {
