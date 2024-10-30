@@ -7,7 +7,7 @@ use crate::{prompt::{prompt_for_input, PromptOption}, vdev::{self, StripeVdev, V
 #[derive(Debug)]
 pub(crate) struct Pool {
     name: String,
-    vdevs: HashMap<u64, Box<dyn Vdev>>,
+    pub(crate) vdevs: HashMap<u64, Box<dyn Vdev>>,
     data: u64,
     log: Option<u64>,
     cache: Option<u64>,
@@ -19,6 +19,9 @@ pub(crate) struct Pool {
 impl Pool {
     pub(crate) fn lookup(&self, id: u64) -> &Box<dyn Vdev> {
         self.vdevs.get(&id).unwrap()
+    }
+    pub(crate) fn lookup_mut(&mut self, id: u64) -> &mut Box<dyn Vdev> {
+        self.vdevs.get_mut(&id).unwrap()
     }
 
     pub(crate) fn new(name: String) -> Self {
@@ -73,7 +76,7 @@ impl Into<u64> for ReplLocation {
     }
 }
 impl ReplLocation {
-    fn new_id(&self, id: u64) -> Self {
+    pub(crate) fn new_id(&self, id: u64) -> Self {
         match self {
             ReplLocation::Root => panic!("Trying to assign new id to root"),
             ReplLocation::Data(_) => ReplLocation::Data(id),
@@ -88,7 +91,7 @@ impl ReplLocation {
 
 pub(crate) struct Repl {
     pub(crate) pool: Pool,
-    current: ReplLocation,
+    pub(crate) current: ReplLocation,
 }
 
 impl Repl {
@@ -108,12 +111,69 @@ impl Repl {
     fn prompt(&mut self) -> Option<ReplLocation> {
         match self.current {
             ReplLocation::Root => self.root_prompt(),
-            ReplLocation::Data(id) => self.vdev_prompt(Some(id)),
-            ReplLocation::Log(opt) => self.vdev_prompt(opt),
-            ReplLocation::Cache(opt) => self.vdev_prompt(opt),
-            ReplLocation::Dedup(opt) => self.vdev_prompt(opt),
-            ReplLocation::Special(opt) => self.vdev_prompt(opt),
-            ReplLocation::Spares(opt) => self.spares_prompt(opt),
+            ReplLocation::Data(id) => {
+                let vdev = self.pool.lookup_mut(id).prompt().unwrap();
+                let id = vdev.id();
+                self.pool.vdevs.insert(id, vdev);
+                Some(ReplLocation::Data(id))
+            },
+            ReplLocation::Log(None) => self.tl_vdev_prompt(),
+            ReplLocation::Log(Some(id)) => {
+                let vdev = match self.pool.lookup_mut(id).prompt() {
+                    Some(v) => v,
+                    None => {
+                        self.pool.vdevs.remove(&id);
+                        self.pool.log = None;
+                        return Some(ReplLocation::Log(None))
+                    },
+                };
+                let id = vdev.id();
+                self.pool.vdevs.insert(id, vdev);
+                Some(ReplLocation::Log(Some(id)))
+            },
+            ReplLocation::Cache(None) => self.tl_vdev_prompt(),
+            ReplLocation::Cache(Some(id)) => {
+                let vdev = match self.pool.lookup_mut(id).prompt() {
+                    Some(v) => v,
+                    None => {
+                        self.pool.vdevs.remove(&id);
+                        self.pool.log = None;
+                        return Some(ReplLocation::Cache(None))
+                    },
+                };
+                let id = vdev.id();
+                self.pool.vdevs.insert(id, vdev);
+                Some(ReplLocation::Cache(Some(id)))
+            },
+            ReplLocation::Dedup(None) => self.tl_vdev_prompt(),
+            ReplLocation::Dedup(Some(id)) => {
+                let vdev = match self.pool.lookup_mut(id).prompt() {
+                    Some(v) => v,
+                    None => {
+                        self.pool.vdevs.remove(&id);
+                        self.pool.log = None;
+                        return Some(ReplLocation::Dedup(None))
+                    },
+                };
+                let id = vdev.id();
+                self.pool.vdevs.insert(id, vdev);
+                Some(ReplLocation::Dedup(Some(id)))
+            },
+            ReplLocation::Special(None) => self.tl_vdev_prompt(),
+            ReplLocation::Special(Some(id)) => {
+                let vdev = match self.pool.lookup_mut(id).prompt() {
+                    Some(v) => v,
+                    None => {
+                        self.pool.vdevs.remove(&id);
+                        self.pool.log = None;
+                        return Some(ReplLocation::Special(None))
+                    },
+                };
+                let id = vdev.id();
+                self.pool.vdevs.insert(id, vdev);
+                Some(ReplLocation::Special(Some(id)))
+            },
+            ReplLocation::Spares(_) => self.spares_prompt(),
         }
     }
     
@@ -185,7 +245,7 @@ impl Repl {
         }
     }
     
-    fn vdev_prompt(&mut self, id: Option<u64>) -> Option<ReplLocation> {
+    fn tl_vdev_prompt(&mut self) -> Option<ReplLocation> {
         #[derive(PartialEq, Eq, Hash, Clone, Copy)]
         enum VdevPrompt {
             CREATE,
@@ -239,7 +299,7 @@ impl Repl {
         })
     }
     
-    fn spares_prompt(&self, opt: Option<u64>) -> Option<ReplLocation> {
+    fn spares_prompt(&self) -> Option<ReplLocation> {
         todo!()
     }
 }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Debug;
 use std::num::ParseIntError;
@@ -8,11 +9,14 @@ use core::num::IntErrorKind;
 use text_io::read;
 
 use crate::pool::Repl;
+use crate::prompt::prompt_for_input;
+use crate::prompt::PromptOption;
 
 
 static ID: AtomicU64 = AtomicU64::new(1);
 pub trait Vdev: Display + Debug {
     fn show(&self, repl: &Repl, current: Option<u64>, indent: usize);
+    fn prompt(&mut self) -> Option<Box<dyn Vdev>>;
     fn id(&self) -> u64;
     fn parent(&self) -> u64;
 }
@@ -166,6 +170,68 @@ impl Vdev for StripeVdev {
     
     fn parent(&self) -> u64 {
         self.parent
+    }
+    
+    fn prompt(&mut self) -> Option<Box<dyn Vdev>> {
+        #[derive(PartialEq, Eq, Hash, Clone, Copy)]
+        enum StripeVdevPrompt {
+            ADD,
+            DELETE,
+            EDIT,
+            UP,
+            PRINT,
+        }
+        let mut prompt_map = HashMap::new();
+        prompt_map.insert(StripeVdevPrompt::ADD , PromptOption {
+            prompt_char: "a",
+            description: "Add child vdev",
+        });
+        
+        prompt_map.insert(StripeVdevPrompt::DELETE , PromptOption {
+            prompt_char: "d",
+            description: "Delete child vdev",
+        });
+        
+        prompt_map.insert(StripeVdevPrompt::EDIT , PromptOption {
+            prompt_char: "e",
+            description: "Edit child vdev",
+        });
+        
+        prompt_map.insert(StripeVdevPrompt::UP , PromptOption {
+            prompt_char: "u",
+            description: "Finish editing this vdev",
+        });
+        
+        prompt_map.insert(StripeVdevPrompt::PRINT , PromptOption {
+            prompt_char: "p",
+            description: "Print configuration",
+        });
+
+        loop {
+        let result = prompt_for_input(prompt_map);
+        match result {
+            StripeVdevPrompt::ADD => {
+                let new_vdev = select_vdev(self.id);
+                let id = new_vdev.id();
+                self.children.push(id);
+                return Some(new_vdev);
+            },
+            StripeVdevPrompt::DELETE => {
+                print!("Select child idx: ");
+                let idx: usize = read!();
+                let id_opt = self.children.get(idx);
+                let id = if let Some(id) = id_opt {
+                    id
+                } else {
+                    continue;
+                };
+                return None;
+            },
+            StripeVdevPrompt::EDIT => todo!(),
+            StripeVdevPrompt::UP => todo!(),
+            StripeVdevPrompt::PRINT => todo!(),
+        }
+    }
     }
 }
 
