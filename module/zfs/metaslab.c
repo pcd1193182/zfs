@@ -5884,7 +5884,7 @@ metaslab_alloc(spa_t *spa, metaslab_class_t *mc, uint64_t psize, blkptr_t *bp,
 	}
 
 	ASSERT(ndvas > 0 && ndvas <= spa_max_replication(spa));
-	ASSERT0(BP_GET_NDVAS(bp));
+	ASSERT(BP_GET_NDVAS(bp) == 0);
 	ASSERT(hintbp == NULL || ndvas <= BP_GET_NDVAS(hintbp));
 	ASSERT3P(zal, !=, NULL);
 
@@ -5910,8 +5910,8 @@ metaslab_alloc(spa_t *spa, metaslab_class_t *mc, uint64_t psize, blkptr_t *bp,
 			    DVA_GET_VDEV(&dva[d]), zio, flags, allocator);
 		}
 	}
-	ASSERT0(error);
-	ASSERT3U(BP_GET_NDVAS(bp), ==, ndvas);
+	ASSERT(error == 0);
+	ASSERT(BP_GET_NDVAS(bp) == ndvas);
 
 	spa_config_exit(spa, SCL_ALLOC, FTAG);
 

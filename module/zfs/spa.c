@@ -1716,7 +1716,7 @@ spa_thread(void *arg)
 static int
 get_shared_log_pool(nvlist_t *config, spa_t **out)
 {
-	if (config == 0)
+	if (config == NULL)
 		return (0);
 	uint64_t guid;
 	if (nvlist_lookup_uint64(config, ZPOOL_CONFIG_SHARED_LOG_POOL, &guid))
@@ -4817,8 +4817,7 @@ static int
 load_chain_map_claim_blk_cb(spa_t *spa, const blkptr_t *bp, void *arg)
 {
 	(void) arg;
-	int error = metaslab_claim(spa, bp,
-	    spa_get_dsl(spa)->dp_tx.tx_open_txg);
+	int error = metaslab_claim(spa, bp, spa_first_txg(spa));
 	if (error == ENOENT)
 		error = 0;
 	return (error);
@@ -7002,7 +7001,7 @@ spa_create(const char *pool, nvlist_t *nvroot, nvlist_t *props,
 	    sizeof (uint64_t), 1, &obj, tx) != 0) {
 		cmn_err(CE_PANIC, "failed to add bpobj");
 	}
-	VERIFY0(bpobj_open(&spa->spa_deferred_bpobj,
+	VERIFY3U(0, ==, bpobj_open(&spa->spa_deferred_bpobj,
 	    spa->spa_meta_objset, obj));
 
 	/*
@@ -7318,7 +7317,6 @@ spa_tryimport(nvlist_t *tryconfig)
 	/*
 	 * If 'tryconfig' was at least parsable, return the current config.
 	 */
-	zfs_dbgmsg("in tryimport");
 	if (spa->spa_root_vdev != NULL) {
 		config = spa_config_generate(spa, NULL, -1ULL, B_TRUE);
 		fnvlist_add_string(config, ZPOOL_CONFIG_POOL_NAME, poolname);
