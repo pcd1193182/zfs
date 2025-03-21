@@ -500,7 +500,8 @@ metaslab_class_validate(metaslab_class_t *mc)
 			vdev_t *vd = mg->mg_vd;
 
 			ASSERT3P(vd->vdev_top, ==, vd);
-			ASSERT(vd->vdev_mg == mg || vd->vdev_log_mg == mg);
+			ASSERT(vd->vdev_mg == mg || vd->vdev_log_mg == mg ||
+			    vd->vdev_special_mg == mg);
 			ASSERT3P(mg->mg_class, ==, mc);
 			ASSERT3P(vd->vdev_ops, !=, &vdev_hole_ops);
 			ASSERT0(zfs_refcount_count(&mga->mga_queue_depth));
@@ -761,7 +762,8 @@ metaslab_class_histogram_verify(metaslab_class_t *mc)
 
 		IMPLY(mg == mg->mg_vd->vdev_log_mg,
 		    mc == spa_embedded_log_class(mg->mg_vd->vdev_spa) ||
-		    mc == spa_special_embedded_log_class(mg->mg_vd->vdev_spa));
+		    mc == spa_special_embedded_log_class(mg->mg_vd->vdev_spa) ||
+		    mc == spa_embedded_special_class(spa));
 
 		for (i = 0; i < ZFS_RANGE_TREE_HISTOGRAM_SIZE; i++)
 			mc_hist[i] += mg->mg_histogram[i];
@@ -1302,7 +1304,8 @@ metaslab_group_histogram_add(metaslab_group_t *mg, metaslab_t *msp)
 	for (int i = 0; i < SPACE_MAP_HISTOGRAM_SIZE; i++) {
 		IMPLY(mg == mg->mg_vd->vdev_log_mg,
 		    mc == spa_embedded_log_class(mg->mg_vd->vdev_spa) ||
-		    mc == spa_special_embedded_log_class(mg->mg_vd->vdev_spa));
+		    mc == spa_special_embedded_log_class(mg->mg_vd->vdev_spa) ||
+		    mc == spa_embedded_special_class(mg->mg_vd->vdev_spa));
 		mg->mg_histogram[i + ashift] +=
 		    msp->ms_sm->sm_phys->smp_histogram[i];
 		mc->mc_histogram[i + ashift] +=
@@ -1331,7 +1334,8 @@ metaslab_group_histogram_remove(metaslab_group_t *mg, metaslab_t *msp)
 		    msp->ms_sm->sm_phys->smp_histogram[i]);
 		IMPLY(mg == mg->mg_vd->vdev_log_mg,
 		    mc == spa_embedded_log_class(mg->mg_vd->vdev_spa) ||
-		    mc == spa_special_embedded_log_class(mg->mg_vd->vdev_spa));
+		    mc == spa_special_embedded_log_class(mg->mg_vd->vdev_spa) ||
+		    mc == spa_embedded_special_class(mg->mg_vd->vdev_spa));
 
 		mg->mg_histogram[i + ashift] -=
 		    msp->ms_sm->sm_phys->smp_histogram[i];

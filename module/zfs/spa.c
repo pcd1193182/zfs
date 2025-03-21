@@ -455,6 +455,8 @@ spa_prop_get_config(spa_t *spa, nvlist_t *nv)
 		alloc += metaslab_class_get_alloc(spa_embedded_log_class(spa));
 		alloc += metaslab_class_get_alloc(
 		    spa_special_embedded_log_class(spa));
+		alloc +=
+		    metaslab_class_get_alloc(spa_embedded_special_class(spa));
 
 		size = metaslab_class_get_space(mc);
 		size += metaslab_class_get_space(spa_special_class(spa));
@@ -462,6 +464,8 @@ spa_prop_get_config(spa_t *spa, nvlist_t *nv)
 		size += metaslab_class_get_space(spa_embedded_log_class(spa));
 		size += metaslab_class_get_space(
 		    spa_special_embedded_log_class(spa));
+		size +=
+		    metaslab_class_get_space(spa_embedded_special_class(spa));
 
 		spa_prop_add_list(nv, ZPOOL_PROP_NAME, spa_name(spa), 0, src);
 		spa_prop_add_list(nv, ZPOOL_PROP_SIZE, NULL, size, src);
@@ -1721,6 +1725,8 @@ spa_activate(spa_t *spa, spa_mode_t mode)
 	    msp, B_FALSE);
 	spa->spa_special_embedded_log_class = metaslab_class_create(spa,
 	    "special_embedded_log", msp, B_TRUE);
+	spa->spa_embedded_special_class = metaslab_class_create(spa,
+	    "embedded_special", msp, B_FALSE);
 	spa->spa_dedup_class = metaslab_class_create(spa, "dedup",
 	    msp, B_FALSE);
 
@@ -1897,6 +1903,9 @@ spa_deactivate(spa_t *spa)
 
 	metaslab_class_destroy(spa->spa_special_embedded_log_class);
 	spa->spa_special_embedded_log_class = NULL;
+
+	metaslab_class_destroy(spa->spa_embedded_special_class);
+	spa->spa_embedded_special_class = NULL;
 
 	metaslab_class_destroy(spa->spa_dedup_class);
 	spa->spa_dedup_class = NULL;
@@ -9250,6 +9259,8 @@ spa_async_thread(void *arg)
 		    spa_embedded_log_class(spa));
 		old_space += metaslab_class_get_space(
 		    spa_special_embedded_log_class(spa));
+		old_space +=
+		    metaslab_class_get_space(spa_embedded_special_class(spa));
 
 		spa_config_update(spa, SPA_CONFIG_UPDATE_POOL);
 
@@ -9260,6 +9271,8 @@ spa_async_thread(void *arg)
 		    spa_embedded_log_class(spa));
 		new_space += metaslab_class_get_space(
 		    spa_special_embedded_log_class(spa));
+		new_space +=
+		    metaslab_class_get_space(spa_embedded_special_class(spa));
 		mutex_exit(&spa_namespace_lock);
 
 		/*
@@ -10128,6 +10141,7 @@ spa_sync_adjust_vdev_max_queue_depth(spa_t *spa)
 
 	metaslab_class_balance(spa_normal_class(spa), B_TRUE);
 	metaslab_class_balance(spa_special_class(spa), B_TRUE);
+	metaslab_class_balance(spa_embedded_special_class(spa), B_TRUE);
 	metaslab_class_balance(spa_dedup_class(spa), B_TRUE);
 }
 
@@ -10472,8 +10486,9 @@ spa_sync(spa_t *spa, uint64_t txg)
 
 	metaslab_class_evict_old(spa->spa_normal_class, txg);
 	metaslab_class_evict_old(spa->spa_log_class, txg);
-	/* Embedded log classes have only one metaslab per vdev. */
+	/* spa_embedded_log_class has only one metaslab per vdev. */
 	metaslab_class_evict_old(spa->spa_special_class, txg);
+	metaslab_class_evict_old(spa->spa_embedded_special_class, txg);
 	metaslab_class_evict_old(spa->spa_dedup_class, txg);
 
 	spa_sync_close_syncing_log_sm(spa);

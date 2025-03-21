@@ -1515,7 +1515,7 @@ zvol_create_minors_impl(zvol_task_t *task)
 	list_t minors_list;
 	minors_job_t *job;
 	uint64_t snapdev;
-	int total = 0, done = 0, last_error, error;
+	int total = 0, done = 0, last_error = 0, error = 0;
 
 	/*
 	 * Note: the dsl_pool_config_lock must not be held.
@@ -1756,7 +1756,7 @@ zvol_rename_minors_impl(zvol_task_t *task)
 	zvol_state_t *zv, *zv_next;
 	const char *oldname = task->zt_name1;
 	const char *newname = task->zt_name2;
-	int total = 0, done = 0, last_error, error, oldnamelen;
+	int total = 0, done = 0, last_error = 0, error = 0, oldnamelen;
 
 	if (zvol_inhibit_dev)
 		return;
@@ -1845,7 +1845,7 @@ zvol_set_volmode_impl(zvol_task_t *task)
 	fstrans_cookie_t cookie;
 	uint64_t old_volmode;
 	zvol_state_t *zv;
-	int error;
+	int error = 0;
 
 	if (strchr(name, '@') != NULL)
 		return;

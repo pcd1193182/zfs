@@ -7005,7 +7005,9 @@ zdb_leak_fini(spa_t *spa, zdb_cb_t *zcb)
 			ASSERT3P(msp->ms_group, ==, (msp->ms_group->mg_class ==
 			    spa_embedded_log_class(spa) ||
 			    msp->ms_group->mg_class ==
-			    spa_special_embedded_log_class(spa)) ?
+			    spa_special_embedded_log_class(spa) ||
+			    msp->ms_group->mg_class ==
+			    spa_embedded_special_class(spa)) ?
 			    vd->vdev_log_mg : vd->vdev_mg);
 
 			/*
@@ -7291,6 +7293,7 @@ dump_block_stats(spa_t *spa)
 	    metaslab_class_get_alloc(spa_embedded_log_class(spa)) +
 	    metaslab_class_get_alloc(spa_special_embedded_log_class(spa)) +
 	    metaslab_class_get_alloc(spa_special_class(spa)) +
+	    metaslab_class_get_alloc(spa_embedded_special_class(spa)) +
 	    metaslab_class_get_alloc(spa_dedup_class(spa)) +
 	    get_unflushed_alloc_space(spa);
 	total_found =
@@ -7348,6 +7351,18 @@ dump_block_stats(spa_t *spa)
 
 		(void) printf("\t%-16s %14llu     used: %5.2f%%\n",
 		    "Special class", (u_longlong_t)alloc,
+		    100.0 * alloc / space);
+	}
+
+	if (spa_embedded_special_class(spa)->mc_allocator[0].mca_rotor !=
+	    NULL) {
+		uint64_t alloc = metaslab_class_get_alloc(
+		    spa_embedded_special_class(spa));
+		uint64_t space = metaslab_class_get_space(
+		    spa_embedded_special_class(spa));
+
+		(void) printf("\t%-16s %14llu     used: %5.2f%%\n",
+		    "Embedded special class", (u_longlong_t)alloc,
 		    100.0 * alloc / space);
 	}
 

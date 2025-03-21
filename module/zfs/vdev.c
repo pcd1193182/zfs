@@ -85,6 +85,8 @@
  */
 static uint_t zfs_embedded_slog_min_ms = 64;
 
+uint_t zfs_embedded_special_enabled = B_TRUE;
+
 /* default target for number of metaslabs per top-level vdev */
 static uint_t zfs_vdev_default_ms_count = 200;
 
@@ -312,6 +314,9 @@ vdev_get_mg(vdev_t *vd, metaslab_class_t *mc)
 	    mc == spa_special_embedded_log_class(vd->vdev_spa)) &&
 	    vd->vdev_log_mg != NULL)
 		return (vd->vdev_log_mg);
+	if (mc == spa_embedded_special_class(vd->vdev_spa) &&
+	    vd->vdev_special_mg != NULL)
+		return (vd->vdev_special_mg);
 	else
 		return (vd->vdev_mg);
 }
@@ -1156,6 +1161,11 @@ vdev_free(vdev_t *vd)
 		metaslab_group_destroy(vd->vdev_log_mg);
 		vd->vdev_log_mg = NULL;
 	}
+	if (vd->vdev_special_mg != NULL) {
+		ASSERT0(vd->vdev_ms_count);
+		metaslab_group_destroy(vd->vdev_special_mg);
+		vd->vdev_special_mg = NULL;
+	}
 
 	ASSERT0(vd->vdev_stat.vs_space);
 	ASSERT0(vd->vdev_stat.vs_dspace);
@@ -1282,18 +1292,24 @@ vdev_top_transfer(vdev_t *svd, vdev_t *tvd)
 		ASSERT3P(tvd->vdev_mg, ==, svd->vdev_mg);
 	if (tvd->vdev_log_mg)
 		ASSERT3P(tvd->vdev_log_mg, ==, svd->vdev_log_mg);
+	if (tvd->vdev_special_mg)
+		ASSERT3P(tvd->vdev_special_mg, ==, svd->vdev_special_mg);
 	tvd->vdev_mg = svd->vdev_mg;
 	tvd->vdev_log_mg = svd->vdev_log_mg;
+	tvd->vdev_special_mg = svd->vdev_special_mg;
 	tvd->vdev_ms = svd->vdev_ms;
 
 	svd->vdev_mg = NULL;
 	svd->vdev_log_mg = NULL;
+	svd->vdev_special_mg = NULL;
 	svd->vdev_ms = NULL;
 
 	if (tvd->vdev_mg != NULL)
 		tvd->vdev_mg->mg_vd = tvd;
 	if (tvd->vdev_log_mg != NULL)
 		tvd->vdev_log_mg->mg_vd = tvd;
+	if (tvd->vdev_special_mg != NULL)
+		tvd->vdev_special_mg->mg_vd = tvd;
 
 	tvd->vdev_checkpoint_sm = svd->vdev_checkpoint_sm;
 	svd->vdev_checkpoint_sm = NULL;
@@ -1548,6 +1564,11 @@ vdev_metaslab_group_create(vdev_t *vd)
 			}
 		}
 
+		if (mc == spa_normal_class(spa)) {
+			vd->vdev_special_mg = metaslab_group_create(
+			    spa_embedded_special_class(spa), vd);
+		}
+
 		/*
 		 * The spa ashift min/max only apply for the normal metaslab
 		 * class. Class destination is late binding so ashift boundary
@@ -1582,6 +1603,70 @@ vdev_update_nonallocating_space(vdev_t *vd, boolean_t add)
 	} else {
 		ASSERT3U(spa->spa_nonallocating_dspace, >=, dspace);
 		spa->spa_nonallocating_dspace -= dspace;
+	}
+}
+
+/*
+ * tgtpct is the percent number of metaslabs in the vdev that we want to have
+ * be part of the embedded group. If tgtpct is 0, then we always have exactly
+ * one metaslab in the group, regardless of size.
+ */
+static void
+create_embedded_group(vdev_t *vd, uint64_t txg, metaslab_group_t *mg,
+    uint64_t oldc, uint64_t tgtpct)
+{
+	uint64_t newc = vd->vdev_ms_count;
+	uint64_t cur = avl_numnodes(&mg->mg_metaslab_tree);
+
+	zfs_dbgmsg("Create embedded group: %d %d %d %d", (int)cur, (int)newc,
+	    (int)tgtpct, (int)(newc * tgtpct) / 100);
+	for (int count = cur;
+	    (tgtpct == 0 && count == 0) || count < (newc * tgtpct) / 100;
+	    count++) {
+		uint64_t msid = 0;
+		uint64_t smallest = UINT64_MAX;
+		/*
+		 * Note, we only search the new metaslabs, because the old
+		 * (pre-existing) ones may be active (e.g. have non-empty
+		 * range_tree's), and we don't move them to the new
+		 * metaslab_t.
+		 */
+		for (uint64_t m = oldc; m < newc; m++) {
+			if (vd->vdev_ms[m]->ms_group != vd->vdev_mg)
+				continue;
+			uint64_t alloc =
+			    space_map_allocated(vd->vdev_ms[m]->ms_sm);
+			if (alloc < smallest) {
+				msid = m;
+				smallest = alloc;
+			}
+		}
+		zfs_dbgmsg("Smallest %llx", (u_longlong_t)smallest);
+		if (smallest == UINT64_MAX)
+			break;
+		if (mg == vd->vdev_log_mg) {
+			zfs_dbgmsg("Creating embedded log group for %llu with "
+			    "ms %llu", (u_longlong_t)vd->vdev_id,
+			    (u_longlong_t)msid);
+		} else if (mg == vd->vdev_special_mg) {
+			zfs_dbgmsg("Creating embedded special group for %llu "
+			    "with ms %llu", (u_longlong_t)vd->vdev_id,
+			    (u_longlong_t)msid);
+		}
+		metaslab_t *ms = vd->vdev_ms[msid];
+		/*
+		 * The metaslab was marked as dirty at the end of
+		 * metaslab_init(). Remove it from the dirty list so that we
+		 * can uninitialize and reinitialize it to the new class.
+		 */
+		if (txg != 0) {
+			(void) txg_list_remove_this(&vd->vdev_ms_list,
+			    ms, txg);
+		}
+		uint64_t sm_obj = space_map_object(ms->ms_sm);
+		metaslab_fini(ms);
+		VERIFY0(metaslab_init(mg, msid, sm_obj, txg,
+		    &vd->vdev_ms[msid]));
 	}
 }
 
@@ -1664,39 +1749,14 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	 */
 	if ((vd->vdev_mg->mg_class == spa_normal_class(spa) ||
 	    vd->vdev_mg->mg_class == spa_special_class(spa)) &&
+	    vd->vdev_ms_count > zfs_embedded_slog_min_ms) {
+		create_embedded_group(vd, txg, vd->vdev_log_mg, oldc,
+		    0);
+	}
+	if (vd->vdev_mg->mg_class == spa_normal_class(spa) &&
 	    vd->vdev_ms_count > zfs_embedded_slog_min_ms &&
-	    avl_is_empty(&vd->vdev_log_mg->mg_metaslab_tree)) {
-		uint64_t slog_msid = 0;
-		uint64_t smallest = UINT64_MAX;
-
-		/*
-		 * Note, we only search the new metaslabs, because the old
-		 * (pre-existing) ones may be active (e.g. have non-empty
-		 * range_tree's), and we don't move them to the new
-		 * metaslab_t.
-		 */
-		for (uint64_t m = oldc; m < newc; m++) {
-			uint64_t alloc =
-			    space_map_allocated(vd->vdev_ms[m]->ms_sm);
-			if (alloc < smallest) {
-				slog_msid = m;
-				smallest = alloc;
-			}
-		}
-		metaslab_t *slog_ms = vd->vdev_ms[slog_msid];
-		/*
-		 * The metaslab was marked as dirty at the end of
-		 * metaslab_init(). Remove it from the dirty list so that we
-		 * can uninitialize and reinitialize it to the new class.
-		 */
-		if (txg != 0) {
-			(void) txg_list_remove_this(&vd->vdev_ms_list,
-			    slog_ms, txg);
-		}
-		uint64_t sm_obj = space_map_object(slog_ms->ms_sm);
-		metaslab_fini(slog_ms);
-		VERIFY0(metaslab_init(vd->vdev_log_mg, slog_msid, sm_obj, txg,
-		    &vd->vdev_ms[slog_msid]));
+	    zfs_embedded_special_enabled) {
+		create_embedded_group(vd, txg, vd->vdev_special_mg, oldc, 1);
 	}
 
 	if (txg == 0)
@@ -1714,6 +1774,8 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 		metaslab_group_activate(vd->vdev_mg);
 		if (vd->vdev_log_mg != NULL)
 			metaslab_group_activate(vd->vdev_log_mg);
+		if (vd->vdev_special_mg != NULL)
+			metaslab_group_activate(vd->vdev_special_mg);
 	}
 
 	if (txg == 0)
@@ -1748,6 +1810,11 @@ vdev_metaslab_fini(vdev_t *vd)
 			ASSERT(!vd->vdev_islog);
 			metaslab_group_passivate(vd->vdev_log_mg);
 		}
+		if (vd->vdev_special_mg != NULL) {
+			ASSERT3P(mg->mg_class, ==,
+			    spa_normal_class(vd->vdev_spa));
+			metaslab_group_passivate(vd->vdev_special_mg);
+		}
 
 		uint64_t count = vd->vdev_ms_count;
 		for (uint64_t m = 0; m < count; m++) {
@@ -1763,6 +1830,8 @@ vdev_metaslab_fini(vdev_t *vd)
 			ASSERT0(mg->mg_histogram[i]);
 			if (vd->vdev_log_mg != NULL)
 				ASSERT0(vd->vdev_log_mg->mg_histogram[i]);
+			if (vd->vdev_special_mg != NULL)
+				ASSERT0(vd->vdev_special_mg->mg_histogram[i]);
 		}
 	}
 	ASSERT0(vd->vdev_ms_count);
@@ -4169,6 +4238,8 @@ vdev_sync_done(vdev_t *vd, uint64_t txg)
 		metaslab_sync_reassess(vd->vdev_mg);
 		if (vd->vdev_log_mg != NULL)
 			metaslab_sync_reassess(vd->vdev_log_mg);
+		if (vd->vdev_special_mg != NULL)
+			metaslab_sync_reassess(vd->vdev_special_mg);
 	}
 }
 
@@ -4549,6 +4620,7 @@ top:
 			 * Prevent any future allocations.
 			 */
 			ASSERT0P(tvd->vdev_log_mg);
+			ASSERT3P(tvd->vdev_special_mg, ==, NULL);
 			metaslab_group_passivate(mg);
 			(void) spa_vdev_state_exit(spa, vd, 0);
 
@@ -6781,6 +6853,9 @@ ZFS_MODULE_PARAM(zfs, zfs_, nocacheflush, INT, ZMOD_RW,
 
 ZFS_MODULE_PARAM(zfs, zfs_, embedded_slog_min_ms, UINT, ZMOD_RW,
 	"Minimum number of metaslabs required to dedicate one for log blocks");
+
+ZFS_MODULE_PARAM(zfs, zfs_, embedded_special_enabled, UINT, ZMOD_RW,
+	"Enable embedded special class");
 
 ZFS_MODULE_PARAM_CALL(zfs_vdev, zfs_vdev_, min_auto_ashift,
 	param_set_min_auto_ashift, param_get_uint, ZMOD_RW,

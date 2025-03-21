@@ -1089,6 +1089,9 @@ ddt_over_quota(spa_t *spa)
 		return (ddt_special_over_quota(spa_dedup_class(spa)));
 	else if (spa_special_has_ddt(spa))
 		return (ddt_special_over_quota(spa_special_class(spa)));
+	else if (spa_embedded_special_has_ddt(spa))
+		return (ddt_special_over_quota(
+		    spa_embedded_special_class(spa)));
 
 	return (B_FALSE);
 }

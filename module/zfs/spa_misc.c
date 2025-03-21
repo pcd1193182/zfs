@@ -1310,6 +1310,7 @@ spa_vdev_config_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error,
 	metaslab_class_validate(spa_embedded_log_class(spa));
 	metaslab_class_validate(spa_special_class(spa));
 	metaslab_class_validate(spa_special_embedded_log_class(spa));
+	metaslab_class_validate(spa_embedded_special_class(spa));
 	metaslab_class_validate(spa_dedup_class(spa));
 
 	spa_config_exit(spa, SCL_ALL, spa);
@@ -1874,6 +1875,7 @@ spa_get_worst_case_asize(spa_t *spa, uint64_t lsize)
  * default spa_slop_shift=5 and a non-tiny pool).
  *
  * See the comment above spa_slop_shift for more details.
+ * TODO should we do anything with embedded special here?
  */
 uint64_t
 spa_get_slop_space(spa_t *spa)
@@ -2011,6 +2013,12 @@ spa_special_embedded_log_class(spa_t *spa)
 }
 
 metaslab_class_t *
+spa_embedded_special_class(spa_t *spa)
+{
+	return (spa->spa_embedded_special_class);
+}
+
+metaslab_class_t *
 spa_dedup_class(spa_t *spa)
 {
 	return (spa->spa_dedup_class);
@@ -2022,6 +2030,12 @@ spa_special_has_ddt(spa_t *spa)
 	return (zfs_ddt_data_is_special && spa_has_special(spa));
 }
 
+boolean_t
+spa_embedded_special_has_ddt(spa_t *spa)
+{
+	return (zfs_ddt_data_is_special && spa_has_embedded_special(spa));
+}
+
 /*
  * Locate an appropriate allocation class
  */
@@ -2029,8 +2043,12 @@ metaslab_class_t *
 spa_preferred_class(spa_t *spa, const zio_t *zio)
 {
 	metaslab_class_t *mc = zio->io_metaslab_class;
-	boolean_t tried_dedup = (mc == spa_dedup_class(spa));
-	boolean_t tried_special = (mc == spa_special_class(spa));
+	boolean_t tried_embedded_special =
+	    (mc == spa_embedded_special_class(spa) ||
+	    mc == spa_normal_class(spa));
+	boolean_t tried_special = tried_embedded_special ||
+	    (mc == spa_special_class(spa));
+	boolean_t tried_dedup = tried_special || (mc == spa_dedup_class(spa));
 	const zio_prop_t *zp = &zio->io_prop;
 
 	/*
@@ -2049,10 +2067,13 @@ spa_preferred_class(spa_t *spa, const zio_t *zio)
 	ASSERT(objtype != DMU_OT_INTENT_LOG);
 
 	if (DMU_OT_IS_DDT(objtype)) {
-		if (spa_has_dedup(spa) && !tried_dedup && !tried_special)
+		if (spa_has_dedup(spa) && !tried_dedup)
 			return (spa_dedup_class(spa));
 		else if (spa_special_has_ddt(spa) && !tried_special)
 			return (spa_special_class(spa));
+		else if (spa_embedded_special_has_ddt(spa) &&
+		    !tried_embedded_special)
+			return (spa_embedded_special_class(spa));
 		else
 			return (spa_normal_class(spa));
 	}
@@ -2063,6 +2084,9 @@ spa_preferred_class(spa_t *spa, const zio_t *zio)
 		if (zfs_user_indirect_is_special && spa_has_special(spa) &&
 		    !tried_special)
 			return (spa_special_class(spa));
+		if (zfs_user_indirect_is_special &&
+		    spa_has_embedded_special(spa) && !tried_embedded_special)
+			return (spa_embedded_special_class(spa));
 		else
 			return (spa_normal_class(spa));
 	}
@@ -2070,6 +2094,8 @@ spa_preferred_class(spa_t *spa, const zio_t *zio)
 	if (DMU_OT_IS_METADATA(objtype) || zp->zp_level > 0) {
 		if (spa_has_special(spa) && !tried_special)
 			return (spa_special_class(spa));
+		if (spa_has_embedded_special(spa) && !tried_embedded_special)
+			return (spa_embedded_special_class(spa));
 		else
 			return (spa_normal_class(spa));
 	}
@@ -2665,6 +2691,12 @@ boolean_t
 spa_has_special(spa_t *spa)
 {
 	return (spa->spa_special_class->mc_groups != 0);
+}
+
+boolean_t
+spa_has_embedded_special(spa_t *spa)
+{
+	return (metaslab_class_get_space(spa->spa_embedded_special_class) != 0);
 }
 
 spa_log_state_t

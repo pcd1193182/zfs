@@ -178,6 +178,7 @@ vdev_activate(vdev_t *vd)
 
 	metaslab_group_activate(mg);
 	metaslab_group_activate(vd->vdev_log_mg);
+	metaslab_group_activate(vd->vdev_special_mg);
 
 	vdev_update_nonallocating_space(vd, B_FALSE);
 
@@ -225,6 +226,8 @@ vdev_passivate(vdev_t *vd, uint64_t *txg)
 	metaslab_group_passivate(mg);
 	ASSERT(!vd->vdev_islog);
 	metaslab_group_passivate(vd->vdev_log_mg);
+	if (vd->vdev_special_mg)
+		metaslab_group_passivate(vd->vdev_special_mg);
 
 	/*
 	 * Wait for the youngest allocations and frees to sync,
@@ -248,6 +251,8 @@ vdev_passivate(vdev_t *vd, uint64_t *txg)
 		ASSERT(!vd->vdev_islog);
 		if (vd->vdev_log_mg != NULL)
 			metaslab_group_activate(vd->vdev_log_mg);
+		if (vd->vdev_special_mg != NULL)
+			metaslab_group_activate(vd->vdev_special_mg);
 		return (error);
 	}
 
@@ -1390,6 +1395,11 @@ vdev_remove_complete(spa_t *spa)
 		metaslab_group_destroy(vd->vdev_log_mg);
 		vd->vdev_log_mg = NULL;
 	}
+	if (vd->vdev_special_mg != NULL) {
+		ASSERT0(vd->vdev_ms_count);
+		metaslab_group_destroy(vd->vdev_special_mg);
+		vd->vdev_special_mg = NULL;
+	}
 	ASSERT0(vd->vdev_stat.vs_space);
 	ASSERT0(vd->vdev_stat.vs_dspace);
 
@@ -2077,6 +2087,7 @@ spa_vdev_remove_log(vdev_t *vd, uint64_t *txg)
 	ASSERT(vd->vdev_islog);
 	ASSERT(vd == vd->vdev_top);
 	ASSERT0P(vd->vdev_log_mg);
+	ASSERT3P(vd->vdev_special_mg, ==, NULL);
 	ASSERT(MUTEX_HELD(&spa_namespace_lock));
 
 	/*
@@ -2113,6 +2124,7 @@ spa_vdev_remove_log(vdev_t *vd, uint64_t *txg)
 	if (error != 0) {
 		metaslab_group_activate(mg);
 		ASSERT0P(vd->vdev_log_mg);
+		ASSERT3P(vd->vdev_special_mg, ==, NULL);
 		return (error);
 	}
 	ASSERT0(vd->vdev_stat.vs_alloc);

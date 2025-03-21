@@ -4296,8 +4296,10 @@ again:
 	 * blocks to be processed.
 	 */
 	if (error == ENOSPC && spa->spa_dedup_class_full_txg != zio->io_txg &&
-	    (mc == spa_dedup_class(spa) || (mc == spa_special_class(spa) &&
-	    !spa_has_dedup(spa) && spa_special_has_ddt(spa)))) {
+	    (mc == spa_dedup_class(spa) || (!spa_has_dedup(spa) &&
+	    ((mc == spa_special_class(spa) && spa_special_has_ddt(spa)) ||
+	    (mc == spa_embedded_special_class(spa) &&
+	    spa_embedded_special_has_ddt(spa)))))) {
 		spa->spa_dedup_class_full_txg = zio->io_txg;
 		zfs_dbgmsg("%s[%llu]: %s class spilling, req size %llu, "
 		    "%llu allocated of %llu",
