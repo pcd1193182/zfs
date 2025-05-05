@@ -2755,16 +2755,6 @@ zpool_scan(zpool_handle_t *zhp, pool_scan_func_t func, pool_scrub_cmd_t cmd)
 		if (zfs_ioctl(hdl, ZFS_IOC_POOL_SCAN, &zc) == 0)
 			return (0);
 	}
-
-	/*
-	 * An ECANCELED on a scrub means one of the following:
-	 * 1. we resumed a paused scrub.
-	 * 2. we resumed a paused error scrub.
-	 * 3. Error scrub is not run because of no error log.
-	 */
-	if (err == ECANCELED && (func == POOL_SCAN_SCRUB ||
-	    func == POOL_SCAN_ERRORSCRUB) && cmd == POOL_SCRUB_NORMAL)
-		return (0);
 	/*
 	 * The following cases have been handled here:
 	 * 1. Paused a scrub/error scrub if there is none in progress.
