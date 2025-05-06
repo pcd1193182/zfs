@@ -8107,6 +8107,7 @@ zfsdev_ioctl_common(uint_t vecnum, zfs_cmd_t *zc, int flag)
 	}
 
 	if (error == 0) {
+		zfs_dbgmsg("ioc %d obj %llu", vecnum, (u_longlong_t)zc->zc_sendobj);
 		cookie = spl_fstrans_mark();
 		error = vec->zvec_secpolicy(zc, innvl, CRED());
 		spl_fstrans_unmark(cookie);
