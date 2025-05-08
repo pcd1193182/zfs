@@ -218,12 +218,6 @@ byteswap_record(dmu_replay_record_t *drr)
 		DO64(drr_object_range.drr_numslots);
 		DO64(drr_object_range.drr_toguid);
 		break;
-	case DRR_REDACT:
-		DO64(drr_redact.drr_object);
-		DO64(drr_redact.drr_offset);
-		DO64(drr_redact.drr_length);
-		DO64(drr_redact.drr_toguid);
-		break;
 	case DRR_END:
 		DO64(drr_end.drr_toguid);
 		ZIO_CHECKSUM_BSWAP(&drr->drr_u.drr_end.drr_checksum);
@@ -238,108 +232,6 @@ byteswap_record(dmu_replay_record_t *drr)
 
 #undef DO64
 #undef DO32
-}
-
-static boolean_t
-redact_snaps_contains(uint64_t *snaps, uint64_t num_snaps, uint64_t guid)
-{
-	for (int i = 0; i < num_snaps; i++) {
-		if (snaps[i] == guid)
-			return (B_TRUE);
-	}
-	return (B_FALSE);
-}
-
-/*
- * Check that the new stream we're trying to receive is redacted with respect to
- * a subset of the snapshots that the origin was redacted with respect to.  For
- * the reasons behind this, see the man page on redacted zfs sends and receives.
- */
-static boolean_t
-compatible_redact_snaps(uint64_t *origin_snaps, uint64_t origin_num_snaps,
-    uint64_t *redact_snaps, uint64_t num_redact_snaps)
-{
-	/*
-	 * Short circuit the comparison; if we are redacted with respect to
-	 * more snapshots than the origin, we can't be redacted with respect
-	 * to a subset.
-	 */
-	if (num_redact_snaps > origin_num_snaps) {
-		return (B_FALSE);
-	}
-
-	for (int i = 0; i < num_redact_snaps; i++) {
-		if (!redact_snaps_contains(origin_snaps, origin_num_snaps,
-		    redact_snaps[i])) {
-			return (B_FALSE);
-		}
-	}
-	return (B_TRUE);
-}
-
-static boolean_t
-redact_check(dmu_recv_begin_arg_t *drba, dsl_dataset_t *origin)
-{
-	uint64_t *origin_snaps;
-	uint64_t origin_num_snaps;
-	dmu_recv_cookie_t *drc = drba->drba_cookie;
-	struct drr_begin *drrb = drc->drc_drrb;
-	int featureflags = DMU_GET_FEATUREFLAGS(drrb->drr_versioninfo);
-	int err = 0;
-	boolean_t ret = B_TRUE;
-	uint64_t *redact_snaps;
-	uint_t numredactsnaps;
-
-	/*
-	 * If this is a full send stream, we're safe no matter what.
-	 */
-	if (drrb->drr_fromguid == 0)
-		return (ret);
-
-	VERIFY(dsl_dataset_get_uint64_array_feature(origin,
-	    SPA_FEATURE_REDACTED_DATASETS, &origin_num_snaps, &origin_snaps));
-
-	if (nvlist_lookup_uint64_array(drc->drc_begin_nvl,
-	    BEGINNV_REDACT_FROM_SNAPS, &redact_snaps, &numredactsnaps) ==
-	    0) {
-		/*
-		 * If the send stream was sent from the redaction bookmark or
-		 * the redacted version of the dataset, then we're safe.  Verify
-		 * that this is from the a compatible redaction bookmark or
-		 * redacted dataset.
-		 */
-		if (!compatible_redact_snaps(origin_snaps, origin_num_snaps,
-		    redact_snaps, numredactsnaps)) {
-			err = EINVAL;
-		}
-	} else if (featureflags & DMU_BACKUP_FEATURE_REDACTED) {
-		/*
-		 * If the stream is redacted, it must be redacted with respect
-		 * to a subset of what the origin is redacted with respect to.
-		 * See case number 2 in the zfs man page section on redacted zfs
-		 * send.
-		 */
-		err = nvlist_lookup_uint64_array(drc->drc_begin_nvl,
-		    BEGINNV_REDACT_SNAPS, &redact_snaps, &numredactsnaps);
-
-		if (err != 0 || !compatible_redact_snaps(origin_snaps,
-		    origin_num_snaps, redact_snaps, numredactsnaps)) {
-			err = EINVAL;
-		}
-	} else if (!redact_snaps_contains(origin_snaps, origin_num_snaps,
-	    drrb->drr_toguid)) {
-		/*
-		 * If the stream isn't redacted but the origin is, this must be
-		 * one of the snapshots the origin is redacted with respect to.
-		 * See case number 1 in the zfs man page section on redacted zfs
-		 * send.
-		 */
-		err = EINVAL;
-	}
-
-	if (err != 0)
-		ret = B_FALSE;
-	return (ret);
 }
 
 /*
@@ -499,13 +391,6 @@ recv_begin_check_existing_impl(dmu_recv_begin_arg_t *drba, dsl_dataset_t *ds,
 			    ds->ds_prev->ds_object;
 		}
 
-		if (dsl_dataset_feature_is_active(snap,
-		    SPA_FEATURE_REDACTED_DATASETS) && !redact_check(drba,
-		    snap)) {
-			dsl_dataset_rele(snap, FTAG);
-			return (SET_ERROR(EINVAL));
-		}
-
 		error = recv_check_large_blocks(snap, featureflags);
 		if (error != 0) {
 			dsl_dataset_rele(snap, FTAG);
@@ -596,14 +481,6 @@ recv_begin_check_feature_flags_impl(uint64_t featureflags, spa_t *spa)
 		return (SET_ERROR(ENOTSUP));
 	if ((featureflags & DMU_BACKUP_FEATURE_LARGE_MICROZAP) &&
 	    !spa_feature_is_enabled(spa, SPA_FEATURE_LARGE_MICROZAP))
-		return (SET_ERROR(ENOTSUP));
-
-	/*
-	 * Receiving redacted streams requires that redacted datasets are
-	 * enabled.
-	 */
-	if ((featureflags & DMU_BACKUP_FEATURE_REDACTED) &&
-	    !spa_feature_is_enabled(spa, SPA_FEATURE_REDACTED_DATASETS))
 		return (SET_ERROR(ENOTSUP));
 
 	/*
@@ -803,22 +680,6 @@ dmu_recv_begin_check(void *arg, dmu_tx_t *tx)
 				return (SET_ERROR(EINVAL));
 			}
 
-			/*
-			 * If the origin is redacted we need to verify that this
-			 * send stream can safely be received on top of the
-			 * origin.
-			 */
-			if (dsl_dataset_feature_is_active(origin,
-			    SPA_FEATURE_REDACTED_DATASETS)) {
-				if (!redact_check(drba, origin)) {
-					dsl_dataset_rele_flags(origin, dsflags,
-					    FTAG);
-					dsl_dataset_rele_flags(ds, dsflags,
-					    FTAG);
-					return (SET_ERROR(EINVAL));
-				}
-			}
-
 			error = recv_check_large_blocks(ds, featureflags);
 			if (error != 0) {
 				dsl_dataset_rele_flags(origin, dsflags, FTAG);
@@ -919,17 +780,6 @@ dmu_recv_begin_sync(void *arg, dmu_tx_t *tx)
 	}
 	VERIFY0(dsl_dataset_own_obj_force(dp, dsobj, dsflags, dmu_recv_tag,
 	    &newds));
-	if (dsl_dataset_feature_is_active(newds,
-	    SPA_FEATURE_REDACTED_DATASETS)) {
-		/*
-		 * If the origin dataset is redacted, the child will be redacted
-		 * when we create it.  We clear the new dataset's
-		 * redaction info; if it should be redacted, we'll fill
-		 * in its information later.
-		 */
-		dsl_dataset_deactivate_feature(newds,
-		    SPA_FEATURE_REDACTED_DATASETS, tx);
-	}
 	VERIFY0(dmu_objset_from_ds(newds, &os));
 
 	if (drc->drc_resumable) {
@@ -966,17 +816,6 @@ dmu_recv_begin_sync(void *arg, dmu_tx_t *tx)
 			VERIFY0(zap_add(mos, dsobj, DS_FIELD_RESUME_RAWOK,
 			    8, 1, &one, tx));
 		}
-
-		uint64_t *redact_snaps;
-		uint_t numredactsnaps;
-		if (nvlist_lookup_uint64_array(drc->drc_begin_nvl,
-		    BEGINNV_REDACT_FROM_SNAPS, &redact_snaps,
-		    &numredactsnaps) == 0) {
-			VERIFY0(zap_add(mos, dsobj,
-			    DS_FIELD_RESUME_REDACT_BOOKMARK_SNAPS,
-			    sizeof (*redact_snaps), numredactsnaps,
-			    redact_snaps, tx));
-		}
 	}
 
 	/*
@@ -987,15 +826,6 @@ dmu_recv_begin_sync(void *arg, dmu_tx_t *tx)
 	if (featureflags & DMU_BACKUP_FEATURE_RAW) {
 		os->os_encrypted = B_TRUE;
 		drba->drba_cookie->drc_raw = B_TRUE;
-	}
-
-	if (featureflags & DMU_BACKUP_FEATURE_REDACTED) {
-		uint64_t *redact_snaps;
-		uint_t numredactsnaps;
-		VERIFY0(nvlist_lookup_uint64_array(drc->drc_begin_nvl,
-		    BEGINNV_REDACT_SNAPS, &redact_snaps, &numredactsnaps));
-		dsl_dataset_activate_redaction(newds, redact_snaps,
-		    numredactsnaps, tx);
 	}
 
 	if (featureflags & DMU_BACKUP_FEATURE_LARGE_MICROZAP) {
@@ -1163,41 +993,6 @@ dmu_recv_resume_begin_check(void *arg, dmu_tx_t *tx)
 
 	if (ds->ds_prev != NULL && drrb->drr_fromguid != 0)
 		drc->drc_fromsnapobj = ds->ds_prev->ds_object;
-
-	/*
-	 * If we're resuming, and the send is redacted, then the original send
-	 * must have been redacted, and must have been redacted with respect to
-	 * the same snapshots.
-	 */
-	if (drc->drc_featureflags & DMU_BACKUP_FEATURE_REDACTED) {
-		uint64_t num_ds_redact_snaps;
-		uint64_t *ds_redact_snaps;
-
-		uint_t num_stream_redact_snaps;
-		uint64_t *stream_redact_snaps;
-
-		if (nvlist_lookup_uint64_array(drc->drc_begin_nvl,
-		    BEGINNV_REDACT_SNAPS, &stream_redact_snaps,
-		    &num_stream_redact_snaps) != 0) {
-			dsl_dataset_rele_flags(ds, dsflags, FTAG);
-			return (SET_ERROR(EINVAL));
-		}
-
-		if (!dsl_dataset_get_uint64_array_feature(ds,
-		    SPA_FEATURE_REDACTED_DATASETS, &num_ds_redact_snaps,
-		    &ds_redact_snaps)) {
-			dsl_dataset_rele_flags(ds, dsflags, FTAG);
-			return (SET_ERROR(EINVAL));
-		}
-
-		for (int i = 0; i < num_ds_redact_snaps; i++) {
-			if (!redact_snaps_contains(ds_redact_snaps,
-			    num_ds_redact_snaps, stream_redact_snaps[i])) {
-				dsl_dataset_rele_flags(ds, dsflags, FTAG);
-				return (SET_ERROR(EINVAL));
-			}
-		}
-	}
 
 	error = recv_check_large_blocks(ds, drc->drc_featureflags);
 	if (error != 0) {
@@ -2692,21 +2487,6 @@ receive_object_range(struct receive_writer_arg *rwa,
 	return (0);
 }
 
-/*
- * Until we have the ability to redact large ranges of data efficiently, we
- * process these records as frees.
- */
-noinline static int
-receive_redact(struct receive_writer_arg *rwa, struct drr_redact *drrr)
-{
-	struct drr_free drrf = {0};
-	drrf.drr_length = drrr->drr_length;
-	drrf.drr_object = drrr->drr_object;
-	drrf.drr_offset = drrr->drr_offset;
-	drrf.drr_toguid = drrr->drr_toguid;
-	return (receive_free(rwa, &drrf));
-}
-
 /* used to destroy the drc_ds on error */
 static void
 dmu_recv_cleanup_ds(dmu_recv_cookie_t *drc)
@@ -2932,7 +2712,6 @@ receive_read_record(dmu_recv_cookie_t *drc)
 		return (err);
 	}
 	case DRR_FREE:
-	case DRR_REDACT:
 	{
 		/*
 		 * It might be beneficial to prefetch indirect blocks here, but
@@ -3193,12 +2972,6 @@ receive_process_record(struct receive_writer_arg *rwa,
 		struct drr_object_range *drror =
 		    &rrd->header.drr_u.drr_object_range;
 		err = receive_object_range(rwa, drror);
-		break;
-	}
-	case DRR_REDACT:
-	{
-		struct drr_redact *drrr = &rrd->header.drr_u.drr_redact;
-		err = receive_redact(rwa, drrr);
 		break;
 	}
 	default:
@@ -3730,8 +3503,6 @@ dmu_recv_end_sync(void *arg, dmu_tx_t *tx)
 			    DS_FIELD_RESUME_TOGUID, tx);
 			(void) zap_remove(dp->dp_meta_objset, ds->ds_object,
 			    DS_FIELD_RESUME_TONAME, tx);
-			(void) zap_remove(dp->dp_meta_objset, ds->ds_object,
-			    DS_FIELD_RESUME_REDACT_BOOKMARK_SNAPS, tx);
 		}
 		newsnapobj =
 		    dsl_dataset_phys(drc->drc_ds)->ds_prev_snap_obj;

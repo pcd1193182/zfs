@@ -71,7 +71,6 @@ _LIBZFS_CORE_H int lzc_initialize(const char *, pool_initialize_func_t,
     nvlist_t *, nvlist_t **);
 _LIBZFS_CORE_H int lzc_trim(const char *, pool_trim_func_t, uint64_t, boolean_t,
     nvlist_t *, nvlist_t **);
-_LIBZFS_CORE_H int lzc_redact(const char *, const char *, nvlist_t *);
 
 _LIBZFS_CORE_H int lzc_snaprange_space(const char *, const char *, uint64_t *);
 
@@ -98,10 +97,6 @@ _LIBZFS_CORE_H int lzc_send_space(const char *, const char *,
 
 struct dmu_replay_record;
 
-_LIBZFS_CORE_H int lzc_send_redacted(const char *, const char *, int,
-    enum lzc_send_flags, const char *);
-_LIBZFS_CORE_H int lzc_send_resume_redacted(const char *, const char *, int,
-    enum lzc_send_flags, uint64_t, uint64_t, const char *);
 _LIBZFS_CORE_H int lzc_receive(const char *, nvlist_t *, const char *,
     boolean_t, boolean_t, int);
 _LIBZFS_CORE_H int lzc_receive_resumable(const char *, nvlist_t *, const char *,
@@ -122,9 +117,6 @@ _LIBZFS_CORE_H int lzc_receive_with_heal(const char *, nvlist_t *, nvlist_t *,
     uint64_t *, nvlist_t **);
 _LIBZFS_CORE_H int lzc_send_space(const char *, const char *,
     enum lzc_send_flags, uint64_t *);
-_LIBZFS_CORE_H int lzc_send_space_resume_redacted(const char *, const char *,
-    enum lzc_send_flags, uint64_t, uint64_t, uint64_t, const char *,
-    int, uint64_t *);
 _LIBZFS_CORE_H uint64_t lzc_send_progress(int);
 
 _LIBZFS_CORE_H boolean_t lzc_exists(const char *);
@@ -164,7 +156,8 @@ _LIBZFS_CORE_H int lzc_scrub(zfs_ioc_t, const char *, nvlist_t *, nvlist_t **);
 
 _LIBZFS_CORE_H int lzc_ddt_prune(const char *, zpool_ddt_prune_unit_t,
     uint64_t);
-
+_LIBZFS_CORE_H int lzc_send_space_resume(const char *, const char *,
+    enum lzc_send_flags, uint64_t, uint64_t, uint64_t, int, uint64_t *);
 #ifdef	__cplusplus
 }
 #endif

@@ -501,13 +501,6 @@ timeout = 1800
 tests = ['poolversion_001_pos', 'poolversion_002_pos']
 tags = ['functional', 'poolversion']
 
-[tests/functional/redacted_send]
-tests = ['redacted_compressed', 'redacted_contents', 'redacted_deleted',
-    'redacted_disabled_feature', 'redacted_incrementals',
-    'redacted_largeblocks', 'redacted_mixed_recsize', 'redacted_negative',
-    'redacted_origin', 'redacted_props', 'redacted_resume', 'redacted_size']
-tags = ['functional', 'redacted_send']
-
 [tests/functional/raidz]
 tests = ['raidz_001_neg']
 tags = ['functional', 'raidz']

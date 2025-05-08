@@ -354,8 +354,6 @@ nobase_dist_datadir_zfs_tests_tests_DATA += \
 	functional/projectquota/projectquota_common.kshlib \
 	functional/quota/quota.cfg \
 	functional/quota/quota.kshlib \
-	functional/redacted_send/redacted.cfg \
-	functional/redacted_send/redacted.kshlib \
 	functional/redundancy/redundancy.cfg \
 	functional/redundancy/redundancy.kshlib \
 	functional/refreserv/refreserv.cfg \
@@ -1797,26 +1795,6 @@ nobase_dist_datadir_zfs_tests_tests_SCRIPTS += \
 	functional/raidz/raidz_expand_006_neg.ksh \
 	functional/raidz/raidz_expand_007_neg.ksh \
 	functional/raidz/setup.ksh \
-	functional/redacted_send/cleanup.ksh \
-	functional/redacted_send/redacted_compressed.ksh \
-	functional/redacted_send/redacted_contents.ksh \
-	functional/redacted_send/redacted_deleted.ksh \
-	functional/redacted_send/redacted_disabled_feature.ksh \
-	functional/redacted_send/redacted_embedded.ksh \
-	functional/redacted_send/redacted_holes.ksh \
-	functional/redacted_send/redacted_incrementals.ksh \
-	functional/redacted_send/redacted_largeblocks.ksh \
-	functional/redacted_send/redacted_many_clones.ksh \
-	functional/redacted_send/redacted_mixed_recsize.ksh \
-	functional/redacted_send/redacted_mounts.ksh \
-	functional/redacted_send/redacted_negative.ksh \
-	functional/redacted_send/redacted_origin.ksh \
-	functional/redacted_send/redacted_panic.ksh \
-	functional/redacted_send/redacted_props.ksh \
-	functional/redacted_send/redacted_resume.ksh \
-	functional/redacted_send/redacted_size.ksh \
-	functional/redacted_send/redacted_volume.ksh \
-	functional/redacted_send/setup.ksh \
 	functional/redundancy/cleanup.ksh \
 	functional/redundancy/redundancy_draid1.ksh \
 	functional/redundancy/redundancy_draid2.ksh \

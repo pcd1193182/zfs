@@ -156,8 +156,7 @@ bptree_visit_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 	int err;
 	struct bptree_args *ba = arg;
 
-	if (zb->zb_level == ZB_DNODE_LEVEL || BP_IS_HOLE(bp) ||
-	    BP_IS_REDACTED(bp))
+	if (zb->zb_level == ZB_DNODE_LEVEL || BP_IS_HOLE(bp))
 		return (0);
 
 	err = ba->ba_func(ba->ba_arg, bp, ba->ba_tx);

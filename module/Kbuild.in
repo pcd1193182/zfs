@@ -332,7 +332,6 @@ ZFS_OBJS := \
 	dmu_object.o \
 	dmu_objset.o \
 	dmu_recv.o \
-	dmu_redact.o \
 	dmu_send.o \
 	dmu_traverse.o \
 	dmu_tx.o \

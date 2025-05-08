@@ -127,34 +127,13 @@ struct send_thread_arg {
 	uint64_t	*num_blocks_visited;
 };
 
-struct redact_list_thread_arg {
-	boolean_t		cancel;
-	bqueue_t		q;
-	zbookmark_phys_t	resume;
-	redaction_list_t	*rl;
-	boolean_t		mark_redact;
-	int			error_code;
-	uint64_t		*num_blocks_visited;
-};
-
-struct send_merge_thread_arg {
-	bqueue_t			q;
-	objset_t			*os;
-	struct redact_list_thread_arg	*from_arg;
-	struct send_thread_arg		*to_arg;
-	struct redact_list_thread_arg	*redact_arg;
-	int				error;
-	boolean_t			cancel;
-};
-
 struct send_range {
 	boolean_t		eos_marker; /* Marks the end of the stream */
 	uint64_t		object;
 	uint64_t		start_blkid;
 	uint64_t		end_blkid;
 	bqueue_node_t		ln;
-	enum type {DATA, HOLE, OBJECT, OBJECT_RANGE, REDACT,
-	    PREVIOUSLY_REDACTED} type;
+	enum type {DATA, HOLE, OBJECT, OBJECT_RANGE} type;
 	union {
 		struct srd {
 			dmu_object_type_t	obj_type;
@@ -184,9 +163,6 @@ struct send_range {
 			/* Piggyback unmodified spill block */
 			struct send_range	*spill_range;
 		} object;
-		struct srr {
-			uint32_t		datablksz;
-		} redact;
 		struct sror {
 			blkptr_t		bp;
 		} object_range;
@@ -196,14 +172,13 @@ struct send_range {
 /*
  * The list of data whose inclusion in a send stream can be pending from
  * one call to backup_cb to another.  Multiple calls to dump_free(),
- * dump_freeobjects(), and dump_redact() can be aggregated into a single
- * DRR_FREE, DRR_FREEOBJECTS, or DRR_REDACT replay record.
+ * dump_freeobjects() can be aggregated into a single
+ * DRR_FREE, DRR_FREEOBJECTS replay record.
  */
 typedef enum {
 	PENDING_NONE,
 	PENDING_FREE,
-	PENDING_FREEOBJECTS,
-	PENDING_REDACT
+	PENDING_FREEOBJECTS
 } dmu_pendop_t;
 
 typedef struct dmu_send_cookie {
@@ -399,57 +374,6 @@ dump_free(dmu_send_cookie_t *dscp, uint64_t object, uint64_t offset,
 	} else {
 		dscp->dsc_pending_op = PENDING_FREE;
 	}
-
-	return (0);
-}
-
-/*
- * Fill in the drr_redact struct, or perform aggregation if the previous record
- * is also a redaction record, and the two are adjacent.
- */
-static int
-dump_redact(dmu_send_cookie_t *dscp, uint64_t object, uint64_t offset,
-    uint64_t length)
-{
-	struct drr_redact *drrr = &dscp->dsc_drr->drr_u.drr_redact;
-
-	/*
-	 * If there is a pending op, but it's not PENDING_REDACT, push it out,
-	 * since free block aggregation can only be done for blocks of the
-	 * same type (i.e., DRR_REDACT records can only be aggregated with
-	 * other DRR_REDACT records).
-	 */
-	if (dscp->dsc_pending_op != PENDING_NONE &&
-	    dscp->dsc_pending_op != PENDING_REDACT) {
-		if (dump_record(dscp, NULL, 0) != 0)
-			return (SET_ERROR(EINTR));
-		dscp->dsc_pending_op = PENDING_NONE;
-	}
-
-	if (dscp->dsc_pending_op == PENDING_REDACT) {
-		/*
-		 * Check to see whether this redacted block can be aggregated
-		 * with pending one.
-		 */
-		if (drrr->drr_object == object && drrr->drr_offset +
-		    drrr->drr_length == offset) {
-			drrr->drr_length += length;
-			return (0);
-		} else {
-			/* not a continuation.  Push out pending record */
-			if (dump_record(dscp, NULL, 0) != 0)
-				return (SET_ERROR(EINTR));
-			dscp->dsc_pending_op = PENDING_NONE;
-		}
-	}
-	/* create a REDACT record and make it pending */
-	memset(dscp->dsc_drr, 0, sizeof (dmu_replay_record_t));
-	dscp->dsc_drr->drr_type = DRR_REDACT;
-	drrr->drr_object = object;
-	drrr->drr_offset = offset;
-	drrr->drr_length = length;
-	drrr->drr_toguid = dscp->dsc_toguid;
-	dscp->dsc_pending_op = PENDING_REDACT;
 
 	return (0);
 }
@@ -903,13 +827,6 @@ do_dump(dmu_send_cookie_t *dscp, struct send_range *range)
 		    firstobj, epb);
 		break;
 	}
-	case REDACT: {
-		struct srr *srrp = &range->sru.redact;
-		err = dump_redact(dscp, range->object, range->start_blkid *
-		    srrp->datablksz, (range->end_blkid - range->start_blkid) *
-		    srrp->datablksz);
-		return (err);
-	}
 	case DATA: {
 		struct srd *srdp = &range->sru.data;
 		blkptr_t *bp = &srdp->bp;
@@ -1140,8 +1057,6 @@ send_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 	enum type record_type = DATA;
 	if (BP_IS_HOLE(bp))
 		record_type = HOLE;
-	else if (BP_IS_REDACTED(bp))
-		record_type = REDACT;
 	else
 		record_type = DATA;
 
@@ -1153,8 +1068,6 @@ send_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 
 	if (BP_IS_HOLE(bp)) {
 		record->sru.hole.datablksz = datablksz;
-	} else if (BP_IS_REDACTED(bp)) {
-		record->sru.redact.datablksz = datablksz;
 	} else {
 		record->sru.data.datablksz = datablksz;
 		record->sru.data.obj_type = dnp->dn_type;
@@ -1162,36 +1075,6 @@ send_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 	}
 
 	bqueue_enqueue(&sta->q, record, sizeof (*record));
-	return (0);
-}
-
-struct redact_list_cb_arg {
-	uint64_t *num_blocks_visited;
-	bqueue_t *q;
-	boolean_t *cancel;
-	boolean_t mark_redact;
-};
-
-static int
-redact_list_cb(redact_block_phys_t *rb, void *arg)
-{
-	struct redact_list_cb_arg *rlcap = arg;
-
-	atomic_inc_64(rlcap->num_blocks_visited);
-	if (*rlcap->cancel)
-		return (-1);
-
-	struct send_range *data = range_alloc(REDACT, rb->rbp_object,
-	    rb->rbp_blkid, rb->rbp_blkid + redact_block_get_count(rb), B_FALSE);
-	ASSERT3U(data->end_blkid, >, rb->rbp_blkid);
-	if (rlcap->mark_redact) {
-		data->type = REDACT;
-		data->sru.redact.datablksz = redact_block_get_size(rb);
-	} else {
-		data->type = PREVIOUSLY_REDACTED;
-	}
-	bqueue_enqueue(rlcap->q, data, sizeof (*data));
-
 	return (0);
 }
 
@@ -1290,276 +1173,8 @@ get_next_range(bqueue_t *bq, struct send_range *prev)
 	return (next);
 }
 
-static __attribute__((noreturn)) void
-redact_list_thread(void *arg)
-{
-	struct redact_list_thread_arg *rlt_arg = arg;
-	struct send_range *record;
-	fstrans_cookie_t cookie = spl_fstrans_mark();
-	if (rlt_arg->rl != NULL) {
-		struct redact_list_cb_arg rlcba = {0};
-		rlcba.cancel = &rlt_arg->cancel;
-		rlcba.q = &rlt_arg->q;
-		rlcba.num_blocks_visited = rlt_arg->num_blocks_visited;
-		rlcba.mark_redact = rlt_arg->mark_redact;
-		int err = dsl_redaction_list_traverse(rlt_arg->rl,
-		    &rlt_arg->resume, redact_list_cb, &rlcba);
-		if (err != EINTR)
-			rlt_arg->error_code = err;
-	}
-	record = range_alloc(DATA, 0, 0, 0, B_TRUE);
-	bqueue_enqueue_flush(&rlt_arg->q, record, sizeof (*record));
-	spl_fstrans_unmark(cookie);
-
-	thread_exit();
-}
-
-/*
- * Compare the start point of the two provided ranges. End of stream ranges
- * compare last, objects compare before any data or hole inside that object and
- * multi-object holes that start at the same object.
- */
-static int
-send_range_start_compare(struct send_range *r1, struct send_range *r2)
-{
-	uint64_t r1_objequiv = r1->object;
-	uint64_t r1_l0equiv = r1->start_blkid;
-	uint64_t r2_objequiv = r2->object;
-	uint64_t r2_l0equiv = r2->start_blkid;
-	int64_t cmp = TREE_CMP(r1->eos_marker, r2->eos_marker);
-	if (unlikely(cmp))
-		return (cmp);
-	if (r1->object == 0) {
-		r1_objequiv = r1->start_blkid * DNODES_PER_BLOCK;
-		r1_l0equiv = 0;
-	}
-	if (r2->object == 0) {
-		r2_objequiv = r2->start_blkid * DNODES_PER_BLOCK;
-		r2_l0equiv = 0;
-	}
-
-	cmp = TREE_CMP(r1_objequiv, r2_objequiv);
-	if (likely(cmp))
-		return (cmp);
-	cmp = TREE_CMP(r2->type == OBJECT_RANGE, r1->type == OBJECT_RANGE);
-	if (unlikely(cmp))
-		return (cmp);
-	cmp = TREE_CMP(r2->type == OBJECT, r1->type == OBJECT);
-	if (unlikely(cmp))
-		return (cmp);
-
-	return (TREE_CMP(r1_l0equiv, r2_l0equiv));
-}
-
-enum q_idx {
-	REDACT_IDX = 0,
-	TO_IDX,
-	FROM_IDX,
-	NUM_THREADS
-};
-
-/*
- * This function returns the next range the send_merge_thread should operate on.
- * The inputs are two arrays; the first one stores the range at the front of the
- * queues stored in the second one.  The ranges are sorted in descending
- * priority order; the metadata from earlier ranges overrules metadata from
- * later ranges.  out_mask is used to return which threads the ranges came from;
- * bit i is set if ranges[i] started at the same place as the returned range.
- *
- * This code is not hardcoded to compare a specific number of threads; it could
- * be used with any number, just by changing the q_idx enum.
- *
- * The "next range" is the one with the earliest start; if two starts are equal,
- * the highest-priority range is the next to operate on.  If a higher-priority
- * range starts in the middle of the first range, then the first range will be
- * truncated to end where the higher-priority range starts, and we will operate
- * on that one next time.   In this way, we make sure that each block covered by
- * some range gets covered by a returned range, and each block covered is
- * returned using the metadata of the highest-priority range it appears in.
- *
- * For example, if the three ranges at the front of the queues were [2,4),
- * [3,5), and [1,3), then the ranges returned would be [1,2) with the metadata
- * from the third range, [2,4) with the metadata from the first range, and then
- * [4,5) with the metadata from the second.
- */
-static struct send_range *
-find_next_range(struct send_range **ranges, bqueue_t **qs, uint64_t *out_mask)
-{
-	int idx = 0; // index of the range with the earliest start
-	int i;
-	uint64_t bmask = 0;
-	for (i = 1; i < NUM_THREADS; i++) {
-		if (send_range_start_compare(ranges[i], ranges[idx]) < 0)
-			idx = i;
-	}
-	if (ranges[idx]->eos_marker) {
-		struct send_range *ret = range_alloc(DATA, 0, 0, 0, B_TRUE);
-		*out_mask = 0;
-		return (ret);
-	}
-	/*
-	 * Find all the ranges that start at that same point.
-	 */
-	for (i = 0; i < NUM_THREADS; i++) {
-		if (send_range_start_compare(ranges[i], ranges[idx]) == 0)
-			bmask |= 1 << i;
-	}
-	*out_mask = bmask;
-	/*
-	 * OBJECT_RANGE records only come from the TO thread, and should always
-	 * be treated as overlapping with nothing and sent on immediately.  They
-	 * are only used in raw sends, and are never redacted.
-	 */
-	if (ranges[idx]->type == OBJECT_RANGE) {
-		ASSERT3U(idx, ==, TO_IDX);
-		ASSERT3U(*out_mask, ==, 1 << TO_IDX);
-		struct send_range *ret = ranges[idx];
-		ranges[idx] = get_next_range_nofree(qs[idx], ranges[idx]);
-		return (ret);
-	}
-	/*
-	 * Find the first start or end point after the start of the first range.
-	 */
-	uint64_t first_change = ranges[idx]->end_blkid;
-	for (i = 0; i < NUM_THREADS; i++) {
-		if (i == idx || ranges[i]->eos_marker ||
-		    ranges[i]->object > ranges[idx]->object ||
-		    ranges[i]->object == DMU_META_DNODE_OBJECT)
-			continue;
-		ASSERT3U(ranges[i]->object, ==, ranges[idx]->object);
-		if (first_change > ranges[i]->start_blkid &&
-		    (bmask & (1 << i)) == 0)
-			first_change = ranges[i]->start_blkid;
-		else if (first_change > ranges[i]->end_blkid)
-			first_change = ranges[i]->end_blkid;
-	}
-	/*
-	 * Update all ranges to no longer overlap with the range we're
-	 * returning. All such ranges must start at the same place as the range
-	 * being returned, and end at or after first_change. Thus we update
-	 * their start to first_change. If that makes them size 0, then free
-	 * them and pull a new range from that thread.
-	 */
-	for (i = 0; i < NUM_THREADS; i++) {
-		if (i == idx || (bmask & (1 << i)) == 0)
-			continue;
-		ASSERT3U(first_change, >, ranges[i]->start_blkid);
-		ranges[i]->start_blkid = first_change;
-		ASSERT3U(ranges[i]->start_blkid, <=, ranges[i]->end_blkid);
-		if (ranges[i]->start_blkid == ranges[i]->end_blkid)
-			ranges[i] = get_next_range(qs[i], ranges[i]);
-	}
-	/*
-	 * Short-circuit the simple case; if the range doesn't overlap with
-	 * anything else, or it only overlaps with things that start at the same
-	 * place and are longer, send it on.
-	 */
-	if (first_change == ranges[idx]->end_blkid) {
-		struct send_range *ret = ranges[idx];
-		ranges[idx] = get_next_range_nofree(qs[idx], ranges[idx]);
-		return (ret);
-	}
-
-	/*
-	 * Otherwise, return a truncated copy of ranges[idx] and move the start
-	 * of ranges[idx] back to first_change.
-	 */
-	struct send_range *ret = kmem_alloc(sizeof (*ret), KM_SLEEP);
-	*ret = *ranges[idx];
-	ret->end_blkid = first_change;
-	ranges[idx]->start_blkid = first_change;
-	return (ret);
-}
-
-#define	FROM_AND_REDACT_BITS ((1 << REDACT_IDX) | (1 << FROM_IDX))
-
-/*
- * Merge the results from the from thread and the to thread, and then hand the
- * records off to send_prefetch_thread to prefetch them.  If this is not a
- * send from a redaction bookmark, the from thread will push an end of stream
- * record and stop, and we'll just send everything that was changed in the
- * to_ds since the ancestor's creation txg. If it is, then since
- * traverse_dataset has a canonical order, we can compare each change as
- * they're pulled off the queues.  That will give us a stream that is
- * appropriately sorted, and covers all records.  In addition, we pull the
- * data from the redact_list_thread and use that to determine which blocks
- * should be redacted.
- */
-static __attribute__((noreturn)) void
-send_merge_thread(void *arg)
-{
-	struct send_merge_thread_arg *smt_arg = arg;
-	struct send_range *front_ranges[NUM_THREADS];
-	bqueue_t *queues[NUM_THREADS];
-	int err = 0;
-	fstrans_cookie_t cookie = spl_fstrans_mark();
-
-	if (smt_arg->redact_arg == NULL) {
-		front_ranges[REDACT_IDX] =
-		    kmem_zalloc(sizeof (struct send_range), KM_SLEEP);
-		front_ranges[REDACT_IDX]->eos_marker = B_TRUE;
-		front_ranges[REDACT_IDX]->type = REDACT;
-		queues[REDACT_IDX] = NULL;
-	} else {
-		front_ranges[REDACT_IDX] =
-		    bqueue_dequeue(&smt_arg->redact_arg->q);
-		queues[REDACT_IDX] = &smt_arg->redact_arg->q;
-	}
-	front_ranges[TO_IDX] = bqueue_dequeue(&smt_arg->to_arg->q);
-	queues[TO_IDX] = &smt_arg->to_arg->q;
-	front_ranges[FROM_IDX] = bqueue_dequeue(&smt_arg->from_arg->q);
-	queues[FROM_IDX] = &smt_arg->from_arg->q;
-	uint64_t mask = 0;
-	struct send_range *range;
-	for (range = find_next_range(front_ranges, queues, &mask);
-	    !range->eos_marker && err == 0 && !smt_arg->cancel;
-	    range = find_next_range(front_ranges, queues, &mask)) {
-		/*
-		 * If the range in question was in both the from redact bookmark
-		 * and the bookmark we're using to redact, then don't send it.
-		 * It's already redacted on the receiving system, so a redaction
-		 * record would be redundant.
-		 */
-		if ((mask & FROM_AND_REDACT_BITS) == FROM_AND_REDACT_BITS) {
-			ASSERT3U(range->type, ==, REDACT);
-			range_free(range);
-			continue;
-		}
-		bqueue_enqueue(&smt_arg->q, range, sizeof (*range));
-
-		if (smt_arg->to_arg->error_code != 0) {
-			err = smt_arg->to_arg->error_code;
-		} else if (smt_arg->from_arg->error_code != 0) {
-			err = smt_arg->from_arg->error_code;
-		} else if (smt_arg->redact_arg != NULL &&
-		    smt_arg->redact_arg->error_code != 0) {
-			err = smt_arg->redact_arg->error_code;
-		}
-	}
-	if (smt_arg->cancel && err == 0)
-		err = SET_ERROR(EINTR);
-	smt_arg->error = err;
-	if (smt_arg->error != 0) {
-		smt_arg->to_arg->cancel = B_TRUE;
-		smt_arg->from_arg->cancel = B_TRUE;
-		if (smt_arg->redact_arg != NULL)
-			smt_arg->redact_arg->cancel = B_TRUE;
-	}
-	for (int i = 0; i < NUM_THREADS; i++) {
-		while (!front_ranges[i]->eos_marker) {
-			front_ranges[i] = get_next_range(queues[i],
-			    front_ranges[i]);
-		}
-		range_free(front_ranges[i]);
-	}
-	range->eos_marker = B_TRUE;
-	bqueue_enqueue_flush(&smt_arg->q, range, 1);
-	spl_fstrans_unmark(cookie);
-	thread_exit();
-}
-
 struct send_reader_thread_arg {
-	struct send_merge_thread_arg *smta;
+	struct send_thread_arg *sta;
 	bqueue_t q;
 	boolean_t cancel;
 	boolean_t issue_reads;
@@ -1590,7 +1205,7 @@ issue_data_read(struct send_reader_thread_arg *srta, struct send_range *range)
 {
 	struct srd *srdp = &range->sru.data;
 	blkptr_t *bp = &srdp->bp;
-	objset_t *os = srta->smta->os;
+	objset_t *os = srta->sta->os;
 
 	ASSERT3U(range->type, ==, DATA);
 	ASSERT3U(range->start_blkid + 1, ==, range->end_blkid);
@@ -1633,8 +1248,6 @@ issue_data_read(struct send_reader_thread_arg *srta, struct send_range *range)
 
 	if (!srta->issue_reads)
 		return;
-	if (BP_IS_REDACTED(bp))
-		return;
 	if (send_do_embed(bp, srta->featureflags))
 		return;
 
@@ -1666,44 +1279,6 @@ issue_data_read(struct send_reader_thread_arg *srta, struct send_range *range)
 }
 
 /*
- * Create a new record with the given values.
- */
-static void
-enqueue_range(struct send_reader_thread_arg *srta, bqueue_t *q, dnode_t *dn,
-    uint64_t blkid, uint64_t count, const blkptr_t *bp, uint32_t datablksz)
-{
-	enum type range_type = (bp == NULL || BP_IS_HOLE(bp) ? HOLE :
-	    (BP_IS_REDACTED(bp) ? REDACT : DATA));
-
-	struct send_range *range = range_alloc(range_type, dn->dn_object,
-	    blkid, blkid + count, B_FALSE);
-
-	if (blkid == DMU_SPILL_BLKID) {
-		ASSERT3P(bp, !=, NULL);
-		ASSERT3U(BP_GET_TYPE(bp), ==, DMU_OT_SA);
-	}
-
-	switch (range_type) {
-	case HOLE:
-		range->sru.hole.datablksz = datablksz;
-		break;
-	case DATA:
-		ASSERT3U(count, ==, 1);
-		range->sru.data.datablksz = datablksz;
-		range->sru.data.obj_type = dn->dn_type;
-		range->sru.data.bp = *bp;
-		issue_data_read(srta, range);
-		break;
-	case REDACT:
-		range->sru.redact.datablksz = datablksz;
-		break;
-	default:
-		break;
-	}
-	bqueue_enqueue(q, range, datablksz);
-}
-
-/*
  * Send DRR_SPILL records for unmodified spill blocks.	This is useful
  * because changing certain attributes of the object (e.g. blocksize)
  * can cause old versions of ZFS to incorrectly remove a spill block.
@@ -1722,7 +1297,7 @@ piggyback_unmodified_spill(struct send_reader_thread_arg *srta,
 	ASSERT3U(range->type, ==, OBJECT);
 
 	dnode_phys_t *dnp = range->sru.object.dnp;
-	uint64_t fromtxg = srta->smta->to_arg->fromtxg;
+	uint64_t fromtxg = srta->sta->fromtxg;
 
 	if (!zfs_send_unmodified_spill_blocks ||
 	    !(dnp->dn_flags & DNODE_FLAG_SPILL_BLKPTR) ||
@@ -1753,25 +1328,18 @@ static __attribute__((noreturn)) void
 send_reader_thread(void *arg)
 {
 	struct send_reader_thread_arg *srta = arg;
-	struct send_merge_thread_arg *smta = srta->smta;
-	bqueue_t *inq = &smta->q;
+	struct send_thread_arg *sta = srta->sta;
+	bqueue_t *inq = &sta->q;
 	bqueue_t *outq = &srta->q;
-	objset_t *os = smta->os;
 	fstrans_cookie_t cookie = spl_fstrans_mark();
 	struct send_range *range = bqueue_dequeue(inq);
 	int err = 0;
 
 	/*
-	 * If the record we're analyzing is from a redaction bookmark from the
-	 * fromds, then we need to know whether or not it exists in the tods so
-	 * we know whether to create records for it or not. If it does, we need
-	 * the datablksz so we can generate an appropriate record for it.
-	 * Finally, if it isn't redacted, we need the blkptr so that we can send
+	 *  we need the blkptr so that we can send
 	 * a WRITE record containing the actual data.
 	 */
-	uint64_t last_obj = UINT64_MAX;
-	uint64_t last_obj_exists = B_TRUE;
-	while (!range->eos_marker && !srta->cancel && smta->error == 0 &&
+	while (!range->eos_marker && !srta->cancel && sta->error_code == 0 &&
 	    err == 0) {
 		uint64_t spill = 0;
 		switch (range->type) {
@@ -1785,128 +1353,16 @@ send_reader_thread(void *arg)
 			zfs_fallthrough;
 		case HOLE:
 		case OBJECT_RANGE:
-		case REDACT: // Redacted blocks must exist
 			bqueue_enqueue(outq, range, sizeof (*range) + spill);
 			range = get_next_range_nofree(inq, range);
 			break;
-		case PREVIOUSLY_REDACTED: {
-			/*
-			 * This entry came from the "from bookmark" when
-			 * sending from a bookmark that has a redaction
-			 * list.  We need to check if this object/blkid
-			 * exists in the target ("to") dataset, and if
-			 * not then we drop this entry.  We also need
-			 * to fill in the block pointer so that we know
-			 * what to prefetch.
-			 *
-			 * To accomplish the above, we first cache whether or
-			 * not the last object we examined exists.  If it
-			 * doesn't, we can drop this record. If it does, we hold
-			 * the dnode and use it to call dbuf_dnode_findbp. We do
-			 * this instead of dbuf_bookmark_findbp because we will
-			 * often operate on large ranges, and holding the dnode
-			 * once is more efficient.
-			 */
-			boolean_t object_exists = B_TRUE;
-			/*
-			 * If the data is redacted, we only care if it exists,
-			 * so that we don't send records for objects that have
-			 * been deleted.
-			 */
-			dnode_t *dn;
-			if (range->object == last_obj && !last_obj_exists) {
-				/*
-				 * If we're still examining the same object as
-				 * previously, and it doesn't exist, we don't
-				 * need to call dbuf_bookmark_findbp.
-				 */
-				object_exists = B_FALSE;
-			} else {
-				err = dnode_hold(os, range->object, FTAG, &dn);
-				if (err == ENOENT) {
-					object_exists = B_FALSE;
-					err = 0;
-				}
-				last_obj = range->object;
-				last_obj_exists = object_exists;
-			}
-
-			if (err != 0) {
-				break;
-			} else if (!object_exists) {
-				/*
-				 * The block was modified, but doesn't
-				 * exist in the to dataset; if it was
-				 * deleted in the to dataset, then we'll
-				 * visit the hole bp for it at some point.
-				 */
-				range = get_next_range(inq, range);
-				continue;
-			}
-			uint64_t file_max =
-			    MIN(dn->dn_maxblkid, range->end_blkid);
-			/*
-			 * The object exists, so we need to try to find the
-			 * blkptr for each block in the range we're processing.
-			 */
-			rw_enter(&dn->dn_struct_rwlock, RW_READER);
-			for (uint64_t blkid = range->start_blkid;
-			    blkid < file_max; blkid++) {
-				blkptr_t bp;
-				uint32_t datablksz =
-				    dn->dn_phys->dn_datablkszsec <<
-				    SPA_MINBLOCKSHIFT;
-				uint64_t offset = blkid * datablksz;
-				/*
-				 * This call finds the next non-hole block in
-				 * the object. This is to prevent a
-				 * performance problem where we're unredacting
-				 * a large hole. Using dnode_next_offset to
-				 * skip over the large hole avoids iterating
-				 * over every block in it.
-				 */
-				err = dnode_next_offset(dn, DNODE_FIND_HAVELOCK,
-				    &offset, 1, 1, 0);
-				if (err == ESRCH) {
-					offset = UINT64_MAX;
-					err = 0;
-				} else if (err != 0) {
-					break;
-				}
-				if (offset != blkid * datablksz) {
-					/*
-					 * if there is a hole from here
-					 * (blkid) to offset
-					 */
-					offset = MIN(offset, file_max *
-					    datablksz);
-					uint64_t nblks = (offset / datablksz) -
-					    blkid;
-					enqueue_range(srta, outq, dn, blkid,
-					    nblks, NULL, datablksz);
-					blkid += nblks;
-				}
-				if (blkid >= file_max)
-					break;
-				err = dbuf_dnode_findbp(dn, 0, blkid, &bp,
-				    NULL, NULL);
-				if (err != 0)
-					break;
-				ASSERT(!BP_IS_HOLE(&bp));
-				enqueue_range(srta, outq, dn, blkid, 1, &bp,
-				    datablksz);
-			}
-			rw_exit(&dn->dn_struct_rwlock);
-			dnode_rele(dn, FTAG);
-			range = get_next_range(inq, range);
-		}
 		}
 	}
 	if (srta->cancel || err != 0) {
-		smta->cancel = B_TRUE;
+		sta->cancel = B_TRUE;
 		srta->error = err;
-	} else if (smta->error != 0) {
-		srta->error = smta->error;
+	} else if (sta->error_code != 0) {
+		srta->error = sta->error_code;
 	}
 	while (!range->eos_marker)
 		range = get_next_range(inq, range);
@@ -1915,8 +1371,6 @@ send_reader_thread(void *arg)
 	spl_fstrans_unmark(cookie);
 	thread_exit();
 }
-
-#define	NUM_SNAPS_NOT_REDACTED UINT64_MAX
 
 struct dmu_send_params {
 	/* Pool args */
@@ -1927,9 +1381,6 @@ struct dmu_send_params {
 	dsl_dataset_t *to_ds;
 	/* From snapshot args */
 	zfs_bookmark_phys_t ancestor_zb;
-	uint64_t *fromredactsnaps;
-	/* NUM_SNAPS_NOT_REDACTED if not sending from redaction bookmark */
-	uint64_t numfromredactsnaps;
 	/* Stream params */
 	boolean_t is_clone;
 	boolean_t embedok;
@@ -1940,7 +1391,6 @@ struct dmu_send_params {
 	uint64_t resumeobj;
 	uint64_t resumeoff;
 	uint64_t saved_guid;
-	zfs_bookmark_phys_t *redactbook;
 	/* Stream output params */
 	dmu_send_outparams_t *dso;
 
@@ -2005,10 +1455,6 @@ setup_featureflags(struct dmu_send_params *dspp, objset_t *os,
 
 	if (dspp->resumeobj != 0 || dspp->resumeoff != 0) {
 		*featureflags |= DMU_BACKUP_FEATURE_RESUMING;
-	}
-
-	if (dspp->redactbook != NULL) {
-		*featureflags |= DMU_BACKUP_FEATURE_REDACTED;
 	}
 
 	if (dsl_dataset_feature_is_active(to_ds, SPA_FEATURE_LARGE_DNODE)) {
@@ -2096,75 +1542,14 @@ setup_to_thread(struct send_thread_arg *to_arg, objset_t *to_os,
 }
 
 static void
-setup_from_thread(struct redact_list_thread_arg *from_arg,
-    redaction_list_t *from_rl, dmu_sendstatus_t *dssp)
-{
-	VERIFY0(bqueue_init(&from_arg->q, zfs_send_no_prefetch_queue_ff,
-	    MAX(zfs_send_no_prefetch_queue_length, 2 * zfs_max_recordsize),
-	    offsetof(struct send_range, ln)));
-	from_arg->error_code = 0;
-	from_arg->cancel = B_FALSE;
-	from_arg->rl = from_rl;
-	from_arg->mark_redact = B_FALSE;
-	from_arg->num_blocks_visited = &dssp->dss_blocks;
-	/*
-	 * If from_ds is null, send_traverse_thread just returns success and
-	 * enqueues an eos marker.
-	 */
-	(void) thread_create(NULL, 0, redact_list_thread, from_arg, 0,
-	    curproc, TS_RUN, minclsyspri);
-}
-
-static void
-setup_redact_list_thread(struct redact_list_thread_arg *rlt_arg,
-    struct dmu_send_params *dspp, redaction_list_t *rl, dmu_sendstatus_t *dssp)
-{
-	if (dspp->redactbook == NULL)
-		return;
-
-	rlt_arg->cancel = B_FALSE;
-	VERIFY0(bqueue_init(&rlt_arg->q, zfs_send_no_prefetch_queue_ff,
-	    MAX(zfs_send_no_prefetch_queue_length, 2 * zfs_max_recordsize),
-	    offsetof(struct send_range, ln)));
-	rlt_arg->error_code = 0;
-	rlt_arg->mark_redact = B_TRUE;
-	rlt_arg->rl = rl;
-	rlt_arg->num_blocks_visited = &dssp->dss_blocks;
-
-	(void) thread_create(NULL, 0, redact_list_thread, rlt_arg, 0,
-	    curproc, TS_RUN, minclsyspri);
-}
-
-static void
-setup_merge_thread(struct send_merge_thread_arg *smt_arg,
-    struct dmu_send_params *dspp, struct redact_list_thread_arg *from_arg,
-    struct send_thread_arg *to_arg, struct redact_list_thread_arg *rlt_arg,
-    objset_t *os)
-{
-	VERIFY0(bqueue_init(&smt_arg->q, zfs_send_no_prefetch_queue_ff,
-	    MAX(zfs_send_no_prefetch_queue_length, 2 * zfs_max_recordsize),
-	    offsetof(struct send_range, ln)));
-	smt_arg->cancel = B_FALSE;
-	smt_arg->error = 0;
-	smt_arg->from_arg = from_arg;
-	smt_arg->to_arg = to_arg;
-	if (dspp->redactbook != NULL)
-		smt_arg->redact_arg = rlt_arg;
-
-	smt_arg->os = os;
-	(void) thread_create(NULL, 0, send_merge_thread, smt_arg, 0, curproc,
-	    TS_RUN, minclsyspri);
-}
-
-static void
 setup_reader_thread(struct send_reader_thread_arg *srt_arg,
-    struct dmu_send_params *dspp, struct send_merge_thread_arg *smt_arg,
+    struct dmu_send_params *dspp, struct send_thread_arg *st_arg,
     uint64_t featureflags)
 {
 	VERIFY0(bqueue_init(&srt_arg->q, zfs_send_queue_ff,
 	    MAX(zfs_send_queue_length, 2 * zfs_max_recordsize),
 	    offsetof(struct send_range, ln)));
-	srt_arg->smta = smt_arg;
+	srt_arg->sta = st_arg;
 	srt_arg->issue_reads = !dspp->dso->dso_dryrun;
 	srt_arg->featureflags = featureflags;
 	(void) thread_create(NULL, 0, send_reader_thread, srt_arg, 0,
@@ -2173,12 +1558,8 @@ setup_reader_thread(struct send_reader_thread_arg *srt_arg,
 
 static int
 setup_resume_points(struct dmu_send_params *dspp,
-    struct send_thread_arg *to_arg, struct redact_list_thread_arg *from_arg,
-    struct redact_list_thread_arg *rlt_arg,
-    struct send_merge_thread_arg *smt_arg, boolean_t resuming, objset_t *os,
-    redaction_list_t *redact_rl, nvlist_t *nvl)
+    struct send_thread_arg *to_arg,  boolean_t resuming, objset_t *os, nvlist_t *nvl)
 {
-	(void) smt_arg;
 	dsl_dataset_t *to_ds = dspp->to_ds;
 	int err = 0;
 
@@ -2193,34 +1574,8 @@ setup_resume_points(struct dmu_send_params *dspp,
 
 		blkid = dspp->resumeoff / to_doi.doi_data_block_size;
 	}
-	/*
-	 * If we're resuming a redacted send, we can skip to the appropriate
-	 * point in the redaction bookmark by binary searching through it.
-	 */
-	if (redact_rl != NULL) {
-		SET_BOOKMARK(&rlt_arg->resume, to_ds->ds_object, obj, 0, blkid);
-	}
 
 	SET_BOOKMARK(&to_arg->resume, to_ds->ds_object, obj, 0, blkid);
-	if (nvlist_exists(nvl, BEGINNV_REDACT_FROM_SNAPS)) {
-		uint64_t objset = dspp->ancestor_zb.zbm_redaction_obj;
-		/*
-		 * Note: If the resume point is in an object whose
-		 * blocksize is different in the from vs to snapshots,
-		 * we will have divided by the "wrong" blocksize.
-		 * However, in this case fromsnap's send_cb() will
-		 * detect that the blocksize has changed and therefore
-		 * ignore this object.
-		 *
-		 * If we're resuming a send from a redaction bookmark,
-		 * we still cannot accidentally suggest blocks behind
-		 * the to_ds.  In addition, we know that any blocks in
-		 * the object in the to_ds will have to be sent, since
-		 * the size changed.  Therefore, we can't cause any harm
-		 * this way either.
-		 */
-		SET_BOOKMARK(&from_arg->resume, objset, obj, 0, blkid);
-	}
 	if (resuming) {
 		fnvlist_add_uint64(nvl, BEGINNV_RESUME_OBJECT, dspp->resumeobj);
 		fnvlist_add_uint64(nvl, BEGINNV_RESUME_OFFSET, dspp->resumeoff);
@@ -2241,124 +1596,6 @@ setup_send_progress(struct dmu_send_params *dspp)
 	return (dssp);
 }
 
-/*
- * Actually do the bulk of the work in a zfs send.
- *
- * The idea is that we want to do a send from ancestor_zb to to_ds.  We also
- * want to not send any data that has been modified by all the datasets in
- * redactsnaparr, and store the list of blocks that are redacted in this way in
- * a bookmark named redactbook, created on the to_ds.  We do this by creating
- * several worker threads, whose function is described below.
- *
- * There are three cases.
- * The first case is a redacted zfs send.  In this case there are 5 threads.
- * The first thread is the to_ds traversal thread: it calls dataset_traverse on
- * the to_ds and finds all the blocks that have changed since ancestor_zb (if
- * it's a full send, that's all blocks in the dataset).  It then sends those
- * blocks on to the send merge thread. The redact list thread takes the data
- * from the redaction bookmark and sends those blocks on to the send merge
- * thread.  The send merge thread takes the data from the to_ds traversal
- * thread, and combines it with the redaction records from the redact list
- * thread.  If a block appears in both the to_ds's data and the redaction data,
- * the send merge thread will mark it as redacted and send it on to the prefetch
- * thread.  Otherwise, the send merge thread will send the block on to the
- * prefetch thread unchanged. The prefetch thread will issue prefetch reads for
- * any data that isn't redacted, and then send the data on to the main thread.
- * The main thread behaves the same as in a normal send case, issuing demand
- * reads for data blocks and sending out records over the network
- *
- * The graphic below diagrams the flow of data in the case of a redacted zfs
- * send.  Each box represents a thread, and each line represents the flow of
- * data.
- *
- *             Records from the |
- *           redaction bookmark |
- * +--------------------+       |  +---------------------------+
- * |                    |       v  | Send Merge Thread         |
- * | Redact List Thread +----------> Apply redaction marks to  |
- * |                    |          | records as specified by   |
- * +--------------------+          | redaction ranges          |
- *                                 +----^---------------+------+
- *                                      |               | Merged data
- *                                      |               |
- *                                      |  +------------v--------+
- *                                      |  | Prefetch Thread     |
- * +--------------------+               |  | Issues prefetch     |
- * | to_ds Traversal    |               |  | reads of data blocks|
- * | Thread (finds      +---------------+  +------------+--------+
- * | candidate blocks)  |  Blocks modified              | Prefetched data
- * +--------------------+  by to_ds since               |
- *                         ancestor_zb     +------------v----+
- *                                         | Main Thread     |  File Descriptor
- *                                         | Sends data over +->(to zfs receive)
- *                                         | wire            |
- *                                         +-----------------+
- *
- * The second case is an incremental send from a redaction bookmark.  The to_ds
- * traversal thread and the main thread behave the same as in the redacted
- * send case.  The new thread is the from bookmark traversal thread.  It
- * iterates over the redaction list in the redaction bookmark, and enqueues
- * records for each block that was redacted in the original send.  The send
- * merge thread now has to merge the data from the two threads.  For details
- * about that process, see the header comment of send_merge_thread().  Any data
- * it decides to send on will be prefetched by the prefetch thread.  Note that
- * you can perform a redacted send from a redaction bookmark; in that case,
- * the data flow behaves very similarly to the flow in the redacted send case,
- * except with the addition of the bookmark traversal thread iterating over the
- * redaction bookmark.  The send_merge_thread also has to take on the
- * responsibility of merging the redact list thread's records, the bookmark
- * traversal thread's records, and the to_ds records.
- *
- * +---------------------+
- * |                     |
- * | Redact List Thread  +--------------+
- * |                     |              |
- * +---------------------+              |
- *        Blocks in redaction list      | Ranges modified by every secure snap
- *        of from bookmark              | (or EOS if not readcted)
- *                                      |
- * +---------------------+   |     +----v----------------------+
- * | bookmark Traversal  |   v     | Send Merge Thread         |
- * | Thread (finds       +---------> Merges bookmark, rlt, and |
- * | candidate blocks)   |         | to_ds send records        |
- * +---------------------+         +----^---------------+------+
- *                                      |               | Merged data
- *                                      |  +------------v--------+
- *                                      |  | Prefetch Thread     |
- * +--------------------+               |  | Issues prefetch     |
- * | to_ds Traversal    |               |  | reads of data blocks|
- * | Thread (finds      +---------------+  +------------+--------+
- * | candidate blocks)  |  Blocks modified              | Prefetched data
- * +--------------------+  by to_ds since  +------------v----+
- *                         ancestor_zb     | Main Thread     |  File Descriptor
- *                                         | Sends data over +->(to zfs receive)
- *                                         | wire            |
- *                                         +-----------------+
- *
- * The final case is a simple zfs full or incremental send.  The to_ds traversal
- * thread behaves the same as always. The redact list thread is never started.
- * The send merge thread takes all the blocks that the to_ds traversal thread
- * sends it, prefetches the data, and sends the blocks on to the main thread.
- * The main thread sends the data over the wire.
- *
- * To keep performance acceptable, we want to prefetch the data in the worker
- * threads.  While the to_ds thread could simply use the TRAVERSE_PREFETCH
- * feature built into traverse_dataset, the combining and deletion of records
- * due to redaction and sends from redaction bookmarks mean that we could
- * issue many unnecessary prefetches.  As a result, we only prefetch data
- * after we've determined that the record is not going to be redacted.  To
- * prevent the prefetching from getting too far ahead of the main thread, the
- * blocking queues that are used for communication are capped not by the
- * number of entries in the queue, but by the sum of the size of the
- * prefetches associated with them.  The limit on the amount of data that the
- * thread can prefetch beyond what the main thread has reached is controlled
- * by the global variable zfs_send_queue_length.  In addition, to prevent poor
- * performance in the beginning of a send, we also limit the distance ahead
- * that the traversal threads can be.  That distance is controlled by the
- * zfs_send_no_prefetch_queue_length tunable.
- *
- * Note: Releases dp using the specified tag.
- */
 static int
 dmu_send_impl(struct dmu_send_params *dspp)
 {
@@ -2369,14 +1606,9 @@ dmu_send_impl(struct dmu_send_params *dspp)
 	int err;
 	uint64_t fromtxg = dspp->ancestor_zb.zbm_creation_txg;
 	uint64_t featureflags = 0;
-	struct redact_list_thread_arg *from_arg;
 	struct send_thread_arg *to_arg;
-	struct redact_list_thread_arg *rlt_arg;
-	struct send_merge_thread_arg *smt_arg;
 	struct send_reader_thread_arg *srt_arg;
 	struct send_range *range;
-	redaction_list_t *from_rl = NULL;
-	redaction_list_t *redact_rl = NULL;
 	boolean_t resuming = (dspp->resumeobj != 0 || dspp->resumeoff != 0);
 	boolean_t book_resuming = resuming;
 
@@ -2418,44 +1650,9 @@ dmu_send_impl(struct dmu_send_params *dspp)
 		return (err);
 	}
 
-	/*
-	 * If we're doing a redacted send, hold the bookmark's redaction list.
-	 */
-	if (dspp->redactbook != NULL) {
-		err = dsl_redaction_list_hold_obj(dp,
-		    dspp->redactbook->zbm_redaction_obj, FTAG,
-		    &redact_rl);
-		if (err != 0) {
-			dsl_pool_rele(dp, tag);
-			return (SET_ERROR(EINVAL));
-		}
-		dsl_redaction_list_long_hold(dp, redact_rl, FTAG);
-	}
-
-	/*
-	 * If we're sending from a redaction bookmark, hold the redaction list
-	 * so that we can consider sending the redacted blocks.
-	 */
-	if (ancestor_zb->zbm_redaction_obj != 0) {
-		err = dsl_redaction_list_hold_obj(dp,
-		    ancestor_zb->zbm_redaction_obj, FTAG, &from_rl);
-		if (err != 0) {
-			if (redact_rl != NULL) {
-				dsl_redaction_list_long_rele(redact_rl, FTAG);
-				dsl_redaction_list_rele(redact_rl, FTAG);
-			}
-			dsl_pool_rele(dp, tag);
-			return (SET_ERROR(EINVAL));
-		}
-		dsl_redaction_list_long_hold(dp, from_rl, FTAG);
-	}
-
 	dsl_dataset_long_hold(to_ds, FTAG);
 
-	from_arg = kmem_zalloc(sizeof (*from_arg), KM_SLEEP);
 	to_arg = kmem_zalloc(sizeof (*to_arg), KM_SLEEP);
-	rlt_arg = kmem_zalloc(sizeof (*rlt_arg), KM_SLEEP);
-	smt_arg = kmem_zalloc(sizeof (*smt_arg), KM_SLEEP);
 	srt_arg = kmem_zalloc(sizeof (*srt_arg), KM_SLEEP);
 
 	drr = create_begin_record(dspp, os, featureflags);
@@ -2478,55 +1675,8 @@ dmu_send_impl(struct dmu_send_params *dspp)
 	size_t payload_len = 0;
 	nvlist_t *nvl = fnvlist_alloc();
 
-	/*
-	 * If we're doing a redacted send, we include the snapshots we're
-	 * redacted with respect to so that the target system knows what send
-	 * streams can be correctly received on top of this dataset. If we're
-	 * instead sending a redacted dataset, we include the snapshots that the
-	 * dataset was created with respect to.
-	 */
-	if (dspp->redactbook != NULL) {
-		fnvlist_add_uint64_array(nvl, BEGINNV_REDACT_SNAPS,
-		    redact_rl->rl_phys->rlp_snaps,
-		    redact_rl->rl_phys->rlp_num_snaps);
-	} else if (dsl_dataset_feature_is_active(to_ds,
-	    SPA_FEATURE_REDACTED_DATASETS)) {
-		uint64_t *tods_guids;
-		uint64_t length;
-		VERIFY(dsl_dataset_get_uint64_array_feature(to_ds,
-		    SPA_FEATURE_REDACTED_DATASETS, &length, &tods_guids));
-		fnvlist_add_uint64_array(nvl, BEGINNV_REDACT_SNAPS, tods_guids,
-		    length);
-	}
-
-	/*
-	 * If we're sending from a redaction bookmark, then we should retrieve
-	 * the guids of that bookmark so we can send them over the wire.
-	 */
-	if (from_rl != NULL) {
-		fnvlist_add_uint64_array(nvl, BEGINNV_REDACT_FROM_SNAPS,
-		    from_rl->rl_phys->rlp_snaps,
-		    from_rl->rl_phys->rlp_num_snaps);
-	}
-
-	/*
-	 * If the snapshot we're sending from is redacted, include the redaction
-	 * list in the stream.
-	 */
-	if (dspp->numfromredactsnaps != NUM_SNAPS_NOT_REDACTED) {
-		ASSERT3P(from_rl, ==, NULL);
-		fnvlist_add_uint64_array(nvl, BEGINNV_REDACT_FROM_SNAPS,
-		    dspp->fromredactsnaps, (uint_t)dspp->numfromredactsnaps);
-		if (dspp->numfromredactsnaps > 0) {
-			kmem_free(dspp->fromredactsnaps,
-			    dspp->numfromredactsnaps * sizeof (uint64_t));
-			dspp->fromredactsnaps = NULL;
-		}
-	}
-
 	if (resuming || book_resuming) {
-		err = setup_resume_points(dspp, to_arg, from_arg,
-		    rlt_arg, smt_arg, resuming, os, redact_rl, nvl);
+		err = setup_resume_points(dspp, to_arg, resuming, os, nvl);
 		if (err != 0)
 			goto out;
 	}
@@ -2561,10 +1711,7 @@ dmu_send_impl(struct dmu_send_params *dspp)
 	}
 
 	setup_to_thread(to_arg, os, dssp, fromtxg, dspp->rawok);
-	setup_from_thread(from_arg, from_rl, dssp);
-	setup_redact_list_thread(rlt_arg, dspp, redact_rl, dssp);
-	setup_merge_thread(smt_arg, dspp, from_arg, to_arg, rlt_arg, os);
-	setup_reader_thread(srt_arg, dspp, smt_arg, featureflags);
+	setup_reader_thread(srt_arg, dspp, to_arg, featureflags);
 
 	range = bqueue_dequeue(&srt_arg->q);
 	while (err == 0 && !range->eos_marker) {
@@ -2589,11 +1736,7 @@ dmu_send_impl(struct dmu_send_params *dspp)
 	range_free(range);
 
 	bqueue_destroy(&srt_arg->q);
-	bqueue_destroy(&smt_arg->q);
-	if (dspp->redactbook != NULL)
-		bqueue_destroy(&rlt_arg->q);
 	bqueue_destroy(&to_arg->q);
-	bqueue_destroy(&from_arg->q);
 
 	if (err == 0 && srt_arg->error != 0)
 		err = srt_arg->error;
@@ -2635,21 +1778,10 @@ out:
 
 	kmem_free(drr, sizeof (dmu_replay_record_t));
 	kmem_free(dssp, sizeof (dmu_sendstatus_t));
-	kmem_free(from_arg, sizeof (*from_arg));
 	kmem_free(to_arg, sizeof (*to_arg));
-	kmem_free(rlt_arg, sizeof (*rlt_arg));
-	kmem_free(smt_arg, sizeof (*smt_arg));
 	kmem_free(srt_arg, sizeof (*srt_arg));
 
 	dsl_dataset_long_rele(to_ds, FTAG);
-	if (from_rl != NULL) {
-		dsl_redaction_list_long_rele(from_rl, FTAG);
-		dsl_redaction_list_rele(from_rl, FTAG);
-	}
-	if (redact_rl != NULL) {
-		dsl_redaction_list_long_rele(redact_rl, FTAG);
-		dsl_redaction_list_rele(redact_rl, FTAG);
-	}
 
 	return (err);
 }
@@ -2706,21 +1838,6 @@ dmu_send_obj(const char *pool, uint64_t tosnap, uint64_t fromsnap,
 			    &dspp.ancestor_zb.zbm_ivset_guid);
 		}
 
-		/* See dmu_send for the reasons behind this. */
-		uint64_t *fromredact;
-
-		if (!dsl_dataset_get_uint64_array_feature(fromds,
-		    SPA_FEATURE_REDACTED_DATASETS,
-		    &dspp.numfromredactsnaps,
-		    &fromredact)) {
-			dspp.numfromredactsnaps = NUM_SNAPS_NOT_REDACTED;
-		} else if (dspp.numfromredactsnaps > 0) {
-			uint64_t size = dspp.numfromredactsnaps *
-			    sizeof (uint64_t);
-			dspp.fromredactsnaps = kmem_zalloc(size, KM_SLEEP);
-			memcpy(dspp.fromredactsnaps, fromredact, size);
-		}
-
 		boolean_t is_before =
 		    dsl_dataset_is_before(dspp.to_ds, fromds, 0);
 		dspp.is_clone = (dspp.to_ds->ds_dir !=
@@ -2733,12 +1850,8 @@ dmu_send_obj(const char *pool, uint64_t tosnap, uint64_t fromsnap,
 			err = dmu_send_impl(&dspp);
 		}
 	} else {
-		dspp.numfromredactsnaps = NUM_SNAPS_NOT_REDACTED;
 		err = dmu_send_impl(&dspp);
 	}
-	if (dspp.fromredactsnaps)
-		kmem_free(dspp.fromredactsnaps,
-		    dspp.numfromredactsnaps * sizeof (uint64_t));
 
 	dsl_dataset_rele(dspp.to_ds, FTAG);
 	return (err);
@@ -2747,15 +1860,13 @@ dmu_send_obj(const char *pool, uint64_t tosnap, uint64_t fromsnap,
 int
 dmu_send(const char *tosnap, const char *fromsnap, boolean_t embedok,
     boolean_t large_block_ok, boolean_t compressok, boolean_t rawok,
-    boolean_t savedok, uint64_t resumeobj, uint64_t resumeoff,
-    const char *redactbook, int outfd, offset_t *off,
+    boolean_t savedok, uint64_t resumeobj, uint64_t resumeoff, int outfd, offset_t *off,
     dmu_send_outparams_t *dsop)
 {
 	int err = 0;
 	ds_hold_flags_t dsflags;
 	boolean_t owned = B_FALSE;
 	dsl_dataset_t *fromds = NULL;
-	zfs_bookmark_phys_t book = {0};
 	struct dmu_send_params dspp = {0};
 
 	dsflags = (rawok) ? DS_HOLD_FLAG_NONE : DS_HOLD_FLAG_DECRYPT;
@@ -2844,21 +1955,6 @@ dmu_send(const char *tosnap, const char *fromsnap, boolean_t embedok,
 		return (err);
 	}
 
-	if (redactbook != NULL) {
-		char path[ZFS_MAX_DATASET_NAME_LEN];
-		(void) strlcpy(path, tosnap, sizeof (path));
-		char *at = strchr(path, '@');
-		if (at == NULL) {
-			err = EINVAL;
-		} else {
-			(void) snprintf(at, sizeof (path) - (at - path), "#%s",
-			    redactbook);
-			err = dsl_bookmark_lookup(dspp.dp, path,
-			    NULL, &book);
-			dspp.redactbook = &book;
-		}
-	}
-
 	if (err != 0) {
 		dsl_pool_rele(dspp.dp, FTAG);
 		if (owned)
@@ -2893,27 +1989,6 @@ dmu_send(const char *tosnap, const char *fromsnap, boolean_t embedok,
 			if (err != 0) {
 				ASSERT3P(fromds, ==, NULL);
 			} else {
-				/*
-				 * We need to make a deep copy of the redact
-				 * snapshots of the from snapshot, because the
-				 * array will be freed when we evict from_ds.
-				 */
-				uint64_t *fromredact;
-				if (!dsl_dataset_get_uint64_array_feature(
-				    fromds, SPA_FEATURE_REDACTED_DATASETS,
-				    &dspp.numfromredactsnaps,
-				    &fromredact)) {
-					dspp.numfromredactsnaps =
-					    NUM_SNAPS_NOT_REDACTED;
-				} else if (dspp.numfromredactsnaps > 0) {
-					uint64_t size =
-					    dspp.numfromredactsnaps *
-					    sizeof (uint64_t);
-					dspp.fromredactsnaps = kmem_zalloc(size,
-					    KM_SLEEP);
-					memcpy(dspp.fromredactsnaps, fromredact,
-					    size);
-				}
 				if (!dsl_dataset_is_before(dspp.to_ds, fromds,
 				    0)) {
 					err = SET_ERROR(EXDEV);
@@ -2926,7 +2001,6 @@ dmu_send(const char *tosnap, const char *fromsnap, boolean_t embedok,
 					    ds_creation_time;
 					zb->zbm_guid =
 					    dsl_dataset_phys(fromds)->ds_guid;
-					zb->zbm_redaction_obj = 0;
 
 					if (dsl_dataset_is_zapified(fromds)) {
 						(void) zap_lookup(
@@ -2939,27 +2013,17 @@ dmu_send(const char *tosnap, const char *fromsnap, boolean_t embedok,
 				dsl_dataset_rele(fromds, FTAG);
 			}
 		} else {
-			dspp.numfromredactsnaps = NUM_SNAPS_NOT_REDACTED;
 			err = dsl_bookmark_lookup(dspp.dp, fromsnap, dspp.to_ds,
 			    zb);
-			if (err == EXDEV && zb->zbm_redaction_obj != 0 &&
-			    zb->zbm_guid ==
-			    dsl_dataset_phys(dspp.to_ds)->ds_guid)
-				err = 0;
 		}
 
 		if (err == 0) {
 			/* dmu_send_impl will call dsl_pool_rele for us. */
 			err = dmu_send_impl(&dspp);
 		} else {
-			if (dspp.fromredactsnaps)
-				kmem_free(dspp.fromredactsnaps,
-				    dspp.numfromredactsnaps *
-				    sizeof (uint64_t));
 			dsl_pool_rele(dspp.dp, FTAG);
 		}
 	} else {
-		dspp.numfromredactsnaps = NUM_SNAPS_NOT_REDACTED;
 		err = dmu_send_impl(&dspp);
 	}
 	if (owned)

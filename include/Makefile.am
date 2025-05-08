@@ -43,7 +43,6 @@ COMMON_H = \
 	sys/dmu_impl.h \
 	sys/dmu_objset.h \
 	sys/dmu_recv.h \
-	sys/dmu_redact.h \
 	sys/dmu_send.h \
 	sys/dmu_traverse.h \
 	sys/dmu_tx.h \

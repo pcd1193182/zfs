@@ -716,28 +716,6 @@ zfs_destroy(const char *dataset)
 	return (err == 0 ? 0 : errno);
 }
 
-static void
-test_redact(const char *snapshot1, const char *snapshot2)
-{
-	nvlist_t *required = fnvlist_alloc();
-	nvlist_t *snapnv = fnvlist_alloc();
-	char bookmark[MAXNAMELEN + 32];
-
-	fnvlist_add_string(required, "bookname", "testbookmark");
-	fnvlist_add_boolean(snapnv, snapshot2);
-	fnvlist_add_nvlist(required, "snapnv", snapnv);
-
-	IOC_INPUT_TEST(ZFS_IOC_REDACT, snapshot1, required, NULL, 0);
-
-	nvlist_free(snapnv);
-	nvlist_free(required);
-
-	strlcpy(bookmark, snapshot1, sizeof (bookmark));
-	*strchr(bookmark, '@') = '\0';
-	strlcat(bookmark, "#testbookmark", sizeof (bookmark) -
-	    strlen(bookmark));
-	zfs_destroy(bookmark);
-}
 
 static void
 test_get_bookmark_props(const char *bookmark)
@@ -859,7 +837,6 @@ zfs_ioc_input_tests(const char *pool)
 
 	test_clone(snapshot, clone);
 	test_snapshot(pool, clonesnap);
-	test_redact(snapshot, clonesnap);
 	zfs_destroy(clonesnap);
 	zfs_destroy(clone);
 
@@ -1035,11 +1012,10 @@ validate_ioc_values(void)
 	CHECK(ZFS_IOC_BASE + 78 == ZFS_IOC_POOL_DISCARD_CHECKPOINT);
 	CHECK(ZFS_IOC_BASE + 79 == ZFS_IOC_POOL_INITIALIZE);
 	CHECK(ZFS_IOC_BASE + 80 == ZFS_IOC_POOL_TRIM);
-	CHECK(ZFS_IOC_BASE + 81 == ZFS_IOC_REDACT);
-	CHECK(ZFS_IOC_BASE + 82 == ZFS_IOC_GET_BOOKMARK_PROPS);
-	CHECK(ZFS_IOC_BASE + 83 == ZFS_IOC_WAIT);
-	CHECK(ZFS_IOC_BASE + 84 == ZFS_IOC_WAIT_FS);
-	CHECK(ZFS_IOC_BASE + 87 == ZFS_IOC_POOL_SCRUB);
+	CHECK(ZFS_IOC_BASE + 81 == ZFS_IOC_GET_BOOKMARK_PROPS);
+	CHECK(ZFS_IOC_BASE + 82 == ZFS_IOC_WAIT);
+	CHECK(ZFS_IOC_BASE + 83 == ZFS_IOC_WAIT_FS);
+	CHECK(ZFS_IOC_BASE + 86 == ZFS_IOC_POOL_SCRUB);
 	CHECK(ZFS_IOC_PLATFORM_BASE + 1 == ZFS_IOC_EVENTS_NEXT);
 	CHECK(ZFS_IOC_PLATFORM_BASE + 2 == ZFS_IOC_EVENTS_CLEAR);
 	CHECK(ZFS_IOC_PLATFORM_BASE + 3 == ZFS_IOC_EVENTS_SEEK);

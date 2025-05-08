@@ -618,10 +618,6 @@ zfs_prop_init(void)
 	    "none", PROP_DEFAULT, ZFS_TYPE_FILESYSTEM | ZFS_TYPE_VOLUME,
 	    "prompt | <file URI> | <https URL> | <http URL>", "KEYLOCATION",
 	    sfeatures);
-	zprop_register_string(ZFS_PROP_REDACT_SNAPS,
-	    "redact_snaps", NULL, PROP_READONLY,
-	    ZFS_TYPE_DATASET | ZFS_TYPE_BOOKMARK, "<snapshot>[,...]",
-	    "RSNAPS", sfeatures);
 
 	/* readonly number properties */
 	zprop_register_number(ZFS_PROP_USED, "used", 0, PROP_READONLY,
@@ -774,8 +770,6 @@ zfs_prop_init(void)
 	    sfeatures);
 	zprop_register_hidden(ZFS_PROP_KEY_GUID, "keyguid", PROP_TYPE_NUMBER,
 	    PROP_READONLY, ZFS_TYPE_DATASET, "KEYGUID", B_TRUE, sfeatures);
-	zprop_register_hidden(ZFS_PROP_REDACTED, "redacted", PROP_TYPE_NUMBER,
-	    PROP_READONLY, ZFS_TYPE_DATASET, "REDACTED", B_FALSE, sfeatures);
 
 	/*
 	 * Properties that are obsolete and not used.  These are retained so

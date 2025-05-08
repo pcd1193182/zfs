@@ -409,7 +409,6 @@ void dmu_buf_write_embedded(dmu_buf_t *dbuf, void *data,
 int dmu_lightweight_write_by_dnode(dnode_t *dn, uint64_t offset, abd_t *abd,
     const struct zio_prop *zp, zio_flag_t flags, dmu_tx_t *tx);
 
-void dmu_buf_redact(dmu_buf_t *dbuf, dmu_tx_t *tx);
 void dbuf_destroy(dmu_buf_impl_t *db);
 
 void dbuf_unoverride(dbuf_dirty_record_t *dr);

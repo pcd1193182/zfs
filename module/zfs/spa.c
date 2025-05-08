@@ -2785,7 +2785,7 @@ spa_load_verify_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 	}
 
 	if (zb->zb_level == ZB_DNODE_LEVEL || BP_IS_HOLE(bp) ||
-	    BP_IS_EMBEDDED(bp) || BP_IS_REDACTED(bp))
+	    BP_IS_EMBEDDED(bp))
 		return (0);
 
 	if (!BP_IS_METADATA(bp) &&

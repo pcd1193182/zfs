@@ -833,8 +833,7 @@ typedef boolean_t (snapfilter_cb_t)(zfs_handle_t *, void *);
 
 _LIBZFS_H int zfs_send(zfs_handle_t *, const char *, const char *,
     sendflags_t *, int, snapfilter_cb_t, void *, nvlist_t **);
-_LIBZFS_H int zfs_send_one(zfs_handle_t *, const char *, int, sendflags_t *,
-    const char *);
+_LIBZFS_H int zfs_send_one(zfs_handle_t *, const char *, int, sendflags_t *);
 _LIBZFS_H int zfs_send_progress(zfs_handle_t *, int, uint64_t *, uint64_t *);
 _LIBZFS_H int zfs_send_resume(libzfs_handle_t *, sendflags_t *, int outfd,
     const char *);

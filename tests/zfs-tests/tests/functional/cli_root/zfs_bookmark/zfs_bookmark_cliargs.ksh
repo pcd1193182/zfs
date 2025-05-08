@@ -210,31 +210,4 @@ log_must eval "destroy_dataset $DATASET@$TESTSNAP2"
 log_must zfs destroy "$DATASET#$TESTBMCOPY"
 log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
 
-# Verify that copied redaction bookmarks are independent of the source bookmark
-## create redaction bookmark
-log_must zfs destroy "$DATASET#$TESTBM"
-log_must zfs destroy "$DATASET@$TESTSNAP"
-log_must eval "echo secret > $TESTDIR/secret"
-log_must zfs snapshot "$DATASET@$TESTSNAP"
-log_must eval "echo redacted > $TESTDIR/secret"
-log_must zfs snapshot "$DATASET@$TESTSNAP2" # TESTSNAP2 is the redaction snapshot
-log_must zfs list -t all -o name,createtxg,guid,mountpoint,written
-log_must zfs redact "$DATASET@$TESTSNAP" "$TESTBM" "$DATASET@$TESTSNAP2"
-# ensure our primitive for testing whether a bookmark is a redaction bookmark works
-log_must eval "zfs get all $DATASET#$TESTBM | grep redact_snaps"
-## copy the redaction bookmark
-log_must zfs bookmark "$DATASET#$TESTBM" "#$TESTBMCOPY"
-log_mustnot eval "zfs get all $DATASET#$TESTBMCOPY | grep redact_snaps"
-log_must eval "zfs send --redact "$TESTBMCOPY" -i $DATASET@$TESTSNAP $DATASET@$TESTSNAP2 2>&1 | head -n 100 | grep 'not a redaction bookmark'"
-# try the above again after destroying the source bookmark, preventive measure for future work
-log_must zfs destroy "$DATASET#$TESTBM"
-log_mustnot eval "zfs get all $DATASET#$TESTBMCOPY | grep redact_snaps"
-log_must eval "zfs send --redact "$TESTBMCOPY" -i $DATASET@$TESTSNAP $DATASET@$TESTSNAP2 2>&1 | head -n 100 | grep 'not a redaction bookmark'"
-## cleanup
-log_must eval "destroy_dataset $DATASET@$TESTSNAP2"
-log_must zfs destroy "$DATASET#$TESTBMCOPY"
-log_must eval "destroy_dataset $DATASET@$TESTSNAP"
-log_must zfs snapshot "$DATASET@$TESTSNAP"
-log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
-
 log_pass "'zfs bookmark' works as expected"

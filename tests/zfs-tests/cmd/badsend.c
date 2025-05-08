@@ -113,24 +113,24 @@ main(int argc, char const * const argv[])
 	/*
 	 * Exercise EXDEV in dmu_send.
 	 */
-	error = lzc_send_resume_redacted(fromfull, tofull, fd, 0, 0, 0, NULL);
+	error = lzc_send_resume(fromfull, tofull, fd, 0, 0, 0);
 	if (error != EXDEV)
-		errx(EX_OSERR, "lzc_send_resume_redacted(\"%s\", \"%s\")"
+		errx(EX_OSERR, "lzc_send_resume(\"%s\", \"%s\")"
 		    " should have failed with EXDEV, not %d",
 		    fromfull, tofull, error);
-	printf("lzc_send_resume_redacted(\"%s\", \"%s\"): %s\n",
+	printf("lzc_send_resume(\"%s\", \"%s\"): %s\n",
 	    fromfull, tofull, strerror(error));
 
 	/*
 	 * Exercise EXDEV in dmu_send_estimate_fast.
 	 */
-	error = lzc_send_space_resume_redacted(fromfull, tofull, 0, 0, 0, 0,
-	    NULL, fd, &size);
+	error = lzc_send_space_resume(fromfull, tofull, 0, 0, 0, 0,
+	    fd, &size);
 	if (error != EXDEV)
-		errx(EX_OSERR, "lzc_send_space_resume_redacted(\"%s\", \"%s\")"
+		errx(EX_OSERR, "lzc_send_space_resume(\"%s\", \"%s\")"
 		    " should have failed with EXDEV, not %d",
 		    fromfull, tofull, error);
-	printf("lzc_send_space_resume_redacted(\"%s\", \"%s\"): %s\n",
+	printf("lzc_send_space_resume(\"%s\", \"%s\"): %s\n",
 	    fromfull, tofull, strerror(error));
 
 	close(fd);

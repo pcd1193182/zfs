@@ -47,7 +47,6 @@ dist_man_MANS = \
 	%D%/man8/zfs-promote.8 \
 	%D%/man8/zfs-receive.8 \
 	%D%/man8/zfs-recv.8 \
-	%D%/man8/zfs-redact.8 \
 	%D%/man8/zfs-release.8 \
 	%D%/man8/zfs-rename.8 \
 	%D%/man8/zfs-rollback.8 \

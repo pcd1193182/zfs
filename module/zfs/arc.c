@@ -5689,7 +5689,6 @@ arc_read(zio_t *pio, spa_t *spa, const blkptr_t *bp,
 	ASSERT(!embedded_bp ||
 	    BPE_GET_ETYPE(bp) == BP_EMBEDDED_TYPE_DATA);
 	ASSERT(!BP_IS_HOLE(bp));
-	ASSERT(!BP_IS_REDACTED(bp));
 
 	/*
 	 * Normally SPL_FSTRANS will already be set since kernel threads which

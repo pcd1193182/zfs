@@ -228,7 +228,6 @@ zfs_sort_only_by_fast(const zfs_sort_column_t *sc)
 		case ZFS_PROP_CREATETXG:
 		case ZFS_PROP_NUMCLONES:
 		case ZFS_PROP_INCONSISTENT:
-		case ZFS_PROP_REDACTED:
 		case ZFS_PROP_ORIGIN:
 			break;
 		default:
@@ -255,7 +254,6 @@ zfs_list_only_by_fast(const zprop_list_t *p)
 		case ZFS_PROP_CREATETXG:
 		case ZFS_PROP_NUMCLONES:
 		case ZFS_PROP_INCONSISTENT:
-		case ZFS_PROP_REDACTED:
 		case ZFS_PROP_ORIGIN:
 			break;
 		default:

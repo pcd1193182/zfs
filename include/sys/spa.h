@@ -348,7 +348,6 @@ typedef struct zio_cksum_salt {
 typedef enum bp_embedded_type {
 	BP_EMBEDDED_TYPE_DATA,
 	BP_EMBEDDED_TYPE_RESERVED, /* Reserved for Delphix byteswap feature. */
-	BP_EMBEDDED_TYPE_REDACTED,
 	NUM_BP_EMBEDDED_TYPES
 } bp_embedded_type_t;
 
@@ -562,14 +561,6 @@ typedef struct blkptr {
 #define	BP_IS_HOLE(bp) \
 	(!BP_IS_EMBEDDED(bp) && DVA_IS_EMPTY(BP_IDENTITY(bp)))
 
-#define	BP_SET_REDACTED(bp) \
-{							\
-	BP_SET_EMBEDDED(bp, B_TRUE);			\
-	BPE_SET_ETYPE(bp, BP_EMBEDDED_TYPE_REDACTED);	\
-}
-#define	BP_IS_REDACTED(bp) \
-	(BP_IS_EMBEDDED(bp) && BPE_GET_ETYPE(bp) == BP_EMBEDDED_TYPE_REDACTED)
-
 /* BP_IS_RAIDZ(bp) assumes no block compression */
 #define	BP_IS_RAIDZ(bp)		(DVA_GET_ASIZE(&(bp)->blk_dva[0]) > \
 				BP_GET_PSIZE(bp))
@@ -651,13 +642,6 @@ typedef struct blkptr {
 		    compress,						\
 		    (u_longlong_t)BPE_GET_LSIZE(bp),			\
 		    (u_longlong_t)BPE_GET_PSIZE(bp),			\
-		    (u_longlong_t)BP_GET_LOGICAL_BIRTH(bp));		\
-	} else if (BP_IS_REDACTED(bp)) {				\
-		len += func(buf + len, size - len,			\
-		    "REDACTED [L%llu %s] size=%llxL birth=%lluL",	\
-		    (u_longlong_t)BP_GET_LEVEL(bp),			\
-		    type,						\
-		    (u_longlong_t)BP_GET_LSIZE(bp),			\
 		    (u_longlong_t)BP_GET_LOGICAL_BIRTH(bp));		\
 	} else {							\
 		for (int d = 0; d < BP_GET_NDVAS(bp); d++) {		\

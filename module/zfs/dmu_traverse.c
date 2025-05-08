@@ -198,7 +198,6 @@ traverse_prefetch_metadata(traverse_data_t *td, const dnode_phys_t *dnp,
 		return (B_FALSE);
 	if (BP_GET_LEVEL(bp) == 0 && BP_GET_TYPE(bp) != DMU_OT_DNODE)
 		return (B_FALSE);
-	ASSERT(!BP_IS_REDACTED(bp));
 
 	if ((td->td_flags & TRAVERSE_NO_DECRYPT) && BP_IS_PROTECTED(bp))
 		zio_flags |= ZIO_FLAG_RAW;
@@ -213,7 +212,7 @@ prefetch_needed(prefetch_data_t *pfd, const blkptr_t *bp)
 {
 	ASSERT(pfd->pd_flags & TRAVERSE_PREFETCH_DATA);
 	if (BP_IS_HOLE(bp) || BP_IS_EMBEDDED(bp) ||
-	    BP_GET_TYPE(bp) == DMU_OT_INTENT_LOG || BP_IS_REDACTED(bp))
+	    BP_GET_TYPE(bp) == DMU_OT_INTENT_LOG)
 		return (B_FALSE);
 	return (B_TRUE);
 }
@@ -280,7 +279,7 @@ traverse_visitbp(traverse_data_t *td, const dnode_phys_t *dnp,
 		mutex_exit(&pd->pd_mtx);
 	}
 
-	if (BP_IS_HOLE(bp) || BP_IS_REDACTED(bp)) {
+	if (BP_IS_HOLE(bp)) {
 		err = td->td_func(td->td_spa, NULL, bp, zb, dnp, td->td_arg);
 		if (err != 0)
 			goto post;
@@ -672,7 +671,6 @@ traverse_impl(spa_t *spa, dsl_dataset_t *ds, uint64_t objset, blkptr_t *rootbp,
 		uint32_t flags = ARC_FLAG_WAIT;
 		objset_phys_t *osp;
 		arc_buf_t *buf;
-		ASSERT(!BP_IS_REDACTED(rootbp));
 
 		if ((td->td_flags & TRAVERSE_NO_DECRYPT) &&
 		    BP_IS_PROTECTED(rootbp))

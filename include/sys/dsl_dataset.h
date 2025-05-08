@@ -117,13 +117,6 @@ struct zfs_bookmark_phys;
 #define	DS_FIELD_REMAP_DEADLIST	"com.delphix:remap_deadlist"
 
 /*
- * We were receiving an incremental from a redaction bookmark, and these are the
- * guids of its snapshots.
- */
-#define	DS_FIELD_RESUME_REDACT_BOOKMARK_SNAPS \
-	"com.delphix:resume_redact_book_snaps"
-
-/*
  * This field is set to the ivset guid for encrypted snapshots. This is used
  * for validating raw receives.
  */
@@ -413,11 +406,9 @@ uint64_t dsl_get_defer_destroy(dsl_dataset_t *ds);
 uint64_t dsl_get_referenced(dsl_dataset_t *ds);
 uint64_t dsl_get_numclones(dsl_dataset_t *ds);
 uint64_t dsl_get_inconsistent(dsl_dataset_t *ds);
-uint64_t dsl_get_redacted(dsl_dataset_t *ds);
 uint64_t dsl_get_available(dsl_dataset_t *ds);
 int dsl_get_written(dsl_dataset_t *ds, uint64_t *written);
 int dsl_get_prev_snap(dsl_dataset_t *ds, char *snap);
-void dsl_get_redact_snaps(dsl_dataset_t *ds, nvlist_t *propval);
 int dsl_get_mountpoint(dsl_dataset_t *ds, const char *dsname, char *value,
     char *source);
 
@@ -497,9 +488,6 @@ void dsl_dataset_deactivate_feature(dsl_dataset_t *ds, spa_feature_t f,
 boolean_t dsl_dataset_feature_is_active(dsl_dataset_t *ds, spa_feature_t f);
 boolean_t dsl_dataset_get_uint64_array_feature(dsl_dataset_t *ds,
     spa_feature_t f, uint64_t *outlength, uint64_t **outp);
-
-void dsl_dataset_activate_redaction(dsl_dataset_t *ds, uint64_t *redact_snaps,
-    uint64_t num_redact_snaps, dmu_tx_t *tx);
 
 int dsl_dataset_oldest_snapshot(spa_t *spa, uint64_t head_ds, uint64_t min_txg,
     uint64_t *oldest_dsobj);

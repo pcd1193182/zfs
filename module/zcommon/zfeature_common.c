@@ -550,34 +550,6 @@ zpool_feature_init(void)
 		    ZFEATURE_FLAG_PER_DATASET, ZFEATURE_TYPE_BOOLEAN,
 		    edonr_deps, sfeatures);
 	}
-
-	{
-		static const spa_feature_t redact_books_deps[] = {
-			SPA_FEATURE_BOOKMARK_V2,
-			SPA_FEATURE_EXTENSIBLE_DATASET,
-			SPA_FEATURE_BOOKMARKS,
-			SPA_FEATURE_NONE
-		};
-		zfeature_register(SPA_FEATURE_REDACTION_BOOKMARKS,
-		    "com.delphix:redaction_bookmarks", "redaction_bookmarks",
-		    "Support for bookmarks which store redaction lists for zfs "
-		    "redacted send/recv.", 0, ZFEATURE_TYPE_BOOLEAN,
-		    redact_books_deps, sfeatures);
-	}
-
-	{
-		static const spa_feature_t redact_datasets_deps[] = {
-			SPA_FEATURE_EXTENSIBLE_DATASET,
-			SPA_FEATURE_NONE
-		};
-		zfeature_register(SPA_FEATURE_REDACTED_DATASETS,
-		    "com.delphix:redacted_datasets", "redacted_datasets",
-		    "Support for redacted datasets, produced by receiving "
-		    "a redacted zfs send stream.",
-		    ZFEATURE_FLAG_PER_DATASET, ZFEATURE_TYPE_UINT64_ARRAY,
-		    redact_datasets_deps, sfeatures);
-	}
-
 	{
 		static const spa_feature_t bookmark_written_deps[] = {
 			SPA_FEATURE_BOOKMARK_V2,
@@ -738,17 +710,6 @@ zpool_feature_init(void)
 	    ZFEATURE_FLAG_MOS, ZFEATURE_TYPE_BOOLEAN, NULL,
 	    sfeatures);
 
-	{
-		static const spa_feature_t redact_list_spill_deps[] = {
-			SPA_FEATURE_REDACTION_BOOKMARKS,
-			SPA_FEATURE_NONE
-		};
-		zfeature_register(SPA_FEATURE_REDACTION_LIST_SPILL,
-		    "com.delphix:redaction_list_spill", "redaction_list_spill",
-		    "Support for increased number of redaction_snapshot "
-		    "arguments in zfs redact.", 0, ZFEATURE_TYPE_BOOLEAN,
-		    redact_list_spill_deps, sfeatures);
-	}
 
 	zfeature_register(SPA_FEATURE_RAIDZ_EXPANSION,
 	    "org.openzfs:raidz_expansion", "raidz_expansion",

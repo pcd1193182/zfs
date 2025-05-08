@@ -274,7 +274,6 @@ SRCS+=	abd.c \
 	dmu_object.c \
 	dmu_objset.c \
 	dmu_recv.c \
-	dmu_redact.c \
 	dmu_send.c \
 	dmu_traverse.c \
 	dmu_tx.c \

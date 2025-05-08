@@ -241,6 +241,7 @@ static boolean_t
 zfs_is_mountable(zfs_handle_t *zhp, char *buf, size_t buflen,
     zprop_source_t *source, int flags)
 {
+	(void) flags;
 	char sourceloc[MAXNAMELEN];
 	zprop_source_t sourcetype;
 
@@ -259,9 +260,6 @@ zfs_is_mountable(zfs_handle_t *zhp, char *buf, size_t buflen,
 		return (B_FALSE);
 
 	if (!zfs_is_mountable_internal(zhp))
-		return (B_FALSE);
-
-	if (zfs_prop_get_int(zhp, ZFS_PROP_REDACTED) && !(flags & MS_FORCE))
 		return (B_FALSE);
 
 	if (source)

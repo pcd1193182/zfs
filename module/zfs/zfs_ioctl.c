@@ -181,7 +181,6 @@
 #include <sys/dsl_deleg.h>
 #include <sys/dmu_objset.h>
 #include <sys/dmu_impl.h>
-#include <sys/dmu_redact.h>
 #include <sys/dmu_tx.h>
 #include <sys/sunddi.h>
 #include <sys/policy.h>
@@ -4726,41 +4725,6 @@ recursive_unmount(const char *fsname, void *arg)
 }
 
 /*
- *
- * snapname is the snapshot to redact.
- * innvl: {
- *     "bookname" -> (string)
- *         shortname of the redaction bookmark to generate
- *     "snapnv" -> (nvlist, values ignored)
- *         snapshots to redact snapname with respect to
- * }
- *
- * outnvl is unused
- */
-
-static const zfs_ioc_key_t zfs_keys_redact[] = {
-	{"bookname",		DATA_TYPE_STRING,	0},
-	{"snapnv",		DATA_TYPE_NVLIST,	0},
-};
-
-static int
-zfs_ioc_redact(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
-{
-	(void) outnvl;
-	nvlist_t *redactnvl = NULL;
-	const char *redactbook = NULL;
-
-	if (nvlist_lookup_nvlist(innvl, "snapnv", &redactnvl) != 0)
-		return (SET_ERROR(EINVAL));
-	if (fnvlist_num_pairs(redactnvl) == 0)
-		return (SET_ERROR(ENXIO));
-	if (nvlist_lookup_string(innvl, "bookname", &redactbook) != 0)
-		return (SET_ERROR(EINVAL));
-
-	return (dmu_redact_snap(snapname, redactnvl, redactbook));
-}
-
-/*
  * inputs:
  * zc_name	old name of dataset
  * zc_value	new name of dataset
@@ -5284,7 +5248,6 @@ zfs_ioc_recv_impl(char *tofs, char *tosnap, const char *origin,
 	nvlist_t *origprops = NULL; /* existing properties */
 	nvlist_t *origrecvd = NULL; /* existing received properties */
 	boolean_t first_recvd_props = B_FALSE;
-	boolean_t tofs_was_redacted;
 	zfs_file_t *input_fp;
 
 	*read_bytes = 0;
@@ -5301,7 +5264,6 @@ zfs_ioc_recv_impl(char *tofs, char *tosnap, const char *origin,
 	    &off);
 	if (error != 0)
 		goto out;
-	tofs_was_redacted = dsl_get_redacted(drc.drc_ds);
 
 	/*
 	 * Set properties before we receive the stream so that they are applied
@@ -5413,9 +5375,6 @@ zfs_ioc_recv_impl(char *tofs, char *tosnap, const char *origin,
 			/* online recv */
 			dsl_dataset_t *ds;
 			int end_err;
-			boolean_t stream_is_redacted = DMU_GET_FEATUREFLAGS(
-			    begin_record->drr_u.drr_begin.
-			    drr_versioninfo) & DMU_BACKUP_FEATURE_REDACTED;
 
 			ds = dmu_objset_ds(zfsvfs->z_os);
 			error = zfs_suspend_fs(zfsvfs);
@@ -5424,15 +5383,7 @@ zfs_ioc_recv_impl(char *tofs, char *tosnap, const char *origin,
 			 * likely also fail, and clean up after itself.
 			 */
 			end_err = dmu_recv_end(&drc, zfsvfs);
-			/*
-			 * If the dataset was not redacted, but we received a
-			 * redacted stream onto it, we need to unmount the
-			 * dataset.  Otherwise, resume the filesystem.
-			 */
-			if (error == 0 && !drc.drc_newfs &&
-			    stream_is_redacted && !tofs_was_redacted) {
-				error = zfs_end_fs(zfsvfs, ds);
-			} else if (error == 0) {
+			if (error == 0) {
 				error = zfs_resume_fs(zfsvfs, ds);
 			}
 			error = error ? error : end_err;
@@ -6892,9 +6843,6 @@ zfs_ioc_space_snaps(const char *lastsnap, nvlist_t *innvl, nvlist_t *outnvl)
  *         presence indicates we should send a partially received snapshot
  *     (optional) "resume_object" and "resume_offset" -> (uint64)
  *         if present, resume send stream from specified object and offset.
- *     (optional) "redactbook" -> (string)
- *         if present, use this bookmark's redaction list to generate a redacted
- *         send stream
  * }
  *
  * outnvl is unused
@@ -6909,7 +6857,6 @@ static const zfs_ioc_key_t zfs_keys_send_new[] = {
 	{"savedok",		DATA_TYPE_BOOLEAN,	ZK_OPTIONAL},
 	{"resume_object",	DATA_TYPE_UINT64,	ZK_OPTIONAL},
 	{"resume_offset",	DATA_TYPE_UINT64,	ZK_OPTIONAL},
-	{"redactbook",		DATA_TYPE_STRING,	ZK_OPTIONAL},
 };
 
 static int
@@ -6927,7 +6874,6 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 	boolean_t savedok;
 	uint64_t resumeobj = 0;
 	uint64_t resumeoff = 0;
-	const char *redactbook = NULL;
 
 	fd = fnvlist_lookup_int32(innvl, "fd");
 
@@ -6942,8 +6888,6 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 	(void) nvlist_lookup_uint64(innvl, "resume_object", &resumeobj);
 	(void) nvlist_lookup_uint64(innvl, "resume_offset", &resumeoff);
 
-	(void) nvlist_lookup_string(innvl, "redactbook", &redactbook);
-
 	dump_bytes_arg_t dba;
 	dmu_send_outparams_t out;
 	error = dump_bytes_init(&dba, fd, &out);
@@ -6952,8 +6896,7 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 
 	off = zfs_file_off(dba.dba_fp);
 	error = dmu_send(snapname, fromname, embedok, largeblockok,
-	    compressok, rawok, savedok, resumeobj, resumeoff,
-	    redactbook, fd, &off, &out);
+	    compressok, rawok, savedok, resumeobj, resumeoff, fd, &off, &out);
 
 	dump_bytes_fini(&dba);
 
@@ -7003,7 +6946,6 @@ static const zfs_ioc_key_t zfs_keys_send_space[] = {
 	{"compressok",		DATA_TYPE_BOOLEAN,	ZK_OPTIONAL},
 	{"rawok",		DATA_TYPE_BOOLEAN,	ZK_OPTIONAL},
 	{"fd",			DATA_TYPE_INT32,	ZK_OPTIONAL},
-	{"redactbook",		DATA_TYPE_STRING,	ZK_OPTIONAL},
 	{"resume_object",	DATA_TYPE_UINT64,	ZK_OPTIONAL},
 	{"resume_offset",	DATA_TYPE_UINT64,	ZK_OPTIONAL},
 	{"bytes",		DATA_TYPE_UINT64,	ZK_OPTIONAL},
@@ -7017,7 +6959,6 @@ zfs_ioc_send_space(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 	dsl_dataset_t *fromsnap = NULL;
 	int error;
 	const char *fromname = NULL;
-	const char *redactlist_book = NULL;
 	boolean_t largeblockok;
 	boolean_t embedok;
 	boolean_t compressok;
@@ -7048,40 +6989,26 @@ zfs_ioc_send_space(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 	rawok = nvlist_exists(innvl, "rawok");
 	savedok = nvlist_exists(innvl, "savedok");
 	boolean_t from = (nvlist_lookup_string(innvl, "from", &fromname) == 0);
-	boolean_t altbook = (nvlist_lookup_string(innvl, "redactbook",
-	    &redactlist_book) == 0);
 
 	(void) nvlist_lookup_uint64(innvl, "resume_object", &resumeobj);
 	(void) nvlist_lookup_uint64(innvl, "resume_offset", &resumeoff);
 	(void) nvlist_lookup_uint64(innvl, "bytes", &resume_bytes);
 
-	if (altbook) {
-		full_estimate = B_TRUE;
-	} else if (from) {
+	if (from) {
 		if (strchr(fromname, '#')) {
 			error = dsl_bookmark_lookup(dp, fromname, tosnap, &zbm);
 
 			/*
 			 * dsl_bookmark_lookup() will fail with EXDEV if
 			 * the from-bookmark and tosnap are at the same txg.
-			 * However, it's valid to do a send (and therefore,
-			 * a send estimate) from and to the same time point,
-			 * if the bookmark is redacted (the incremental send
-			 * can change what's redacted on the target).  In
-			 * this case, dsl_bookmark_lookup() fills in zbm
-			 * but returns EXDEV.  Ignore this error.
 			 */
-			if (error == EXDEV && zbm.zbm_redaction_obj != 0 &&
-			    zbm.zbm_guid ==
-			    dsl_dataset_phys(tosnap)->ds_guid)
-				error = 0;
 
 			if (error != 0) {
 				dsl_dataset_rele(tosnap, FTAG);
 				dsl_pool_rele(dp, FTAG);
 				return (error);
 			}
-			if (zbm.zbm_redaction_obj != 0 || !(zbm.zbm_flags &
+			if (!(zbm.zbm_flags &
 			    ZBM_FLAG_HAS_FBN)) {
 				full_estimate = B_TRUE;
 			}
@@ -7121,8 +7048,7 @@ zfs_ioc_send_space(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 		dsl_dataset_rele(tosnap, FTAG);
 		dsl_pool_rele(dp, FTAG);
 		error = dmu_send(snapname, fromname, embedok, largeblockok,
-		    compressok, rawok, savedok, resumeobj, resumeoff,
-		    redactlist_book, fd, &off, &out);
+		    compressok, rawok, savedok, resumeobj, resumeoff, fd, &off, &out);
 	} else {
 		error = dmu_send_estimate_fast(tosnap, fromsnap,
 		    (from && strchr(fromname, '#') != NULL ? &zbm : NULL),
@@ -7542,11 +7468,6 @@ zfs_ioctl_init(void)
 	    POOL_NAME, POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_TRUE,
 	    B_TRUE, zfs_keys_channel_program,
 	    ARRAY_SIZE(zfs_keys_channel_program));
-
-	zfs_ioctl_register("redact", ZFS_IOC_REDACT,
-	    zfs_ioc_redact, zfs_secpolicy_config, DATASET_NAME,
-	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_TRUE, B_TRUE,
-	    zfs_keys_redact, ARRAY_SIZE(zfs_keys_redact));
 
 	zfs_ioctl_register("zpool_checkpoint", ZFS_IOC_POOL_CHECKPOINT,
 	    zfs_ioc_pool_checkpoint, zfs_secpolicy_config, POOL_NAME,

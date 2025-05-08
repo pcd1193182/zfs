@@ -88,7 +88,6 @@ uint_t zfs_max_recordsize =  1 * 1024 * 1024;
 #else
 uint_t zfs_max_recordsize = 16 * 1024 * 1024;
 #endif
-static int zfs_allow_redacted_dataset_mount = 0;
 
 int zfs_snapshot_history_enabled = 1;
 
@@ -148,7 +147,7 @@ dsl_dataset_block_born(dsl_dataset_t *ds, const blkptr_t *bp, dmu_tx_t *tx)
 
 	ASSERT(dmu_tx_is_syncing(tx));
 	/* It could have been compressed away to nothing */
-	if (BP_IS_HOLE(bp) || BP_IS_REDACTED(bp))
+	if (BP_IS_HOLE(bp))
 		return;
 	ASSERT(BP_GET_TYPE(bp) != DMU_OT_NONE);
 	ASSERT(DMU_OT_IS_VALID(BP_GET_TYPE(bp)));
@@ -258,7 +257,7 @@ dsl_dataset_block_kill(dsl_dataset_t *ds, const blkptr_t *bp, dmu_tx_t *tx,
 	int compressed = BP_GET_PSIZE(bp);
 	int uncompressed = BP_GET_UCSIZE(bp);
 
-	if (BP_IS_HOLE(bp) || BP_IS_REDACTED(bp))
+	if (BP_IS_HOLE(bp))
 		return (0);
 
 	ASSERT(dmu_tx_is_syncing(tx));
@@ -1049,10 +1048,7 @@ dsl_dataset_tryown(dsl_dataset_t *ds, const void *tag, boolean_t override)
 
 	ASSERT(dsl_pool_config_held(ds->ds_dir->dd_pool));
 	mutex_enter(&ds->ds_lock);
-	if (ds->ds_owner == NULL && (override || !(DS_IS_INCONSISTENT(ds) ||
-	    (dsl_dataset_feature_is_active(ds,
-	    SPA_FEATURE_REDACTED_DATASETS) &&
-	    !zfs_allow_redacted_dataset_mount)))) {
+	if (ds->ds_owner == NULL && (override || !(DS_IS_INCONSISTENT(ds)))) {
 		ds->ds_owner = tag;
 		dsl_dataset_long_hold(ds, tag);
 		gotit = TRUE;
@@ -2427,34 +2423,7 @@ get_receive_resume_token_impl(dsl_dataset_t *ds)
 	    DS_FIELD_RESUME_RAWOK) == 0) {
 		fnvlist_add_boolean(token_nv, "rawok");
 	}
-	if (dsl_dataset_feature_is_active(ds,
-	    SPA_FEATURE_REDACTED_DATASETS)) {
-		uint64_t num_redact_snaps = 0;
-		uint64_t *redact_snaps = NULL;
-		VERIFY3B(dsl_dataset_get_uint64_array_feature(ds,
-		    SPA_FEATURE_REDACTED_DATASETS, &num_redact_snaps,
-		    &redact_snaps), ==, B_TRUE);
-		fnvlist_add_uint64_array(token_nv, "redact_snaps",
-		    redact_snaps, num_redact_snaps);
-	}
-	if (zap_contains(dp->dp_meta_objset, ds->ds_object,
-	    DS_FIELD_RESUME_REDACT_BOOKMARK_SNAPS) == 0) {
-		uint64_t num_redact_snaps = 0, int_size = 0;
-		uint64_t *redact_snaps = NULL;
-		VERIFY0(zap_length(dp->dp_meta_objset, ds->ds_object,
-		    DS_FIELD_RESUME_REDACT_BOOKMARK_SNAPS, &int_size,
-		    &num_redact_snaps));
-		ASSERT3U(int_size, ==, sizeof (uint64_t));
 
-		redact_snaps = kmem_alloc(int_size * num_redact_snaps,
-		    KM_SLEEP);
-		VERIFY0(zap_lookup(dp->dp_meta_objset, ds->ds_object,
-		    DS_FIELD_RESUME_REDACT_BOOKMARK_SNAPS, int_size,
-		    num_redact_snaps, redact_snaps));
-		fnvlist_add_uint64_array(token_nv, "book_redact_snaps",
-		    redact_snaps, num_redact_snaps);
-		kmem_free(redact_snaps, int_size * num_redact_snaps);
-	}
 	packed = fnvlist_pack(token_nv, &packed_size);
 	fnvlist_free(token_nv);
 	compressed = kmem_alloc(packed_size, KM_SLEEP);
@@ -2639,13 +2608,6 @@ dsl_get_inconsistent(dsl_dataset_t *ds)
 }
 
 uint64_t
-dsl_get_redacted(dsl_dataset_t *ds)
-{
-	return (dsl_dataset_feature_is_active(ds,
-	    SPA_FEATURE_REDACTED_DATASETS));
-}
-
-uint64_t
 dsl_get_available(dsl_dataset_t *ds)
 {
 	uint64_t refdbytes = dsl_get_referenced(ds);
@@ -2697,18 +2659,6 @@ dsl_get_prev_snap(dsl_dataset_t *ds, char *snap)
 		return (0);
 	} else {
 		return (SET_ERROR(ENOENT));
-	}
-}
-
-void
-dsl_get_redact_snaps(dsl_dataset_t *ds, nvlist_t *propval)
-{
-	uint64_t nsnaps;
-	uint64_t *snaps;
-	if (dsl_dataset_get_uint64_array_feature(ds,
-	    SPA_FEATURE_REDACTED_DATASETS, &nsnaps, &snaps)) {
-		fnvlist_add_uint64_array(propval, ZPROP_VALUE, snaps,
-		    nsnaps);
 	}
 }
 
@@ -2821,9 +2771,6 @@ dsl_dataset_stats(dsl_dataset_t *ds, nvlist_t *nv)
 	}
 
 	nvlist_t *propval = fnvlist_alloc();
-	dsl_get_redact_snaps(ds, propval);
-	fnvlist_add_nvlist(nv, zfs_prop_to_name(ZFS_PROP_REDACT_SNAPS),
-	    propval);
 	nvlist_free(propval);
 
 	dsl_prop_nvlist_add_uint64(nv, ZFS_PROP_AVAILABLE,
@@ -2879,7 +2826,6 @@ dsl_dataset_fast_stat(dsl_dataset_t *ds, dmu_objset_stats_t *stat)
 	stat->dds_creation_txg = dsl_get_creationtxg(ds);
 	stat->dds_inconsistent = dsl_get_inconsistent(ds);
 	stat->dds_guid = dsl_get_guid(ds);
-	stat->dds_redacted = dsl_get_redacted(ds);
 	stat->dds_origin[0] = '\0';
 	if (ds->ds_is_snapshot) {
 		stat->dds_is_snapshot = B_TRUE;
@@ -4970,25 +4916,6 @@ dsl_dataset_create_remap_deadlist(dsl_dataset_t *ds, dmu_tx_t *tx)
 	spa_feature_incr(spa, SPA_FEATURE_OBSOLETE_COUNTS, tx);
 }
 
-void
-dsl_dataset_activate_redaction(dsl_dataset_t *ds, uint64_t *redact_snaps,
-    uint64_t num_redact_snaps, dmu_tx_t *tx)
-{
-	uint64_t dsobj = ds->ds_object;
-	struct feature_type_uint64_array_arg *ftuaa =
-	    kmem_zalloc(sizeof (*ftuaa), KM_SLEEP);
-	ftuaa->length = (int64_t)num_redact_snaps;
-	if (num_redact_snaps > 0) {
-		ftuaa->array = kmem_alloc(num_redact_snaps * sizeof (uint64_t),
-		    KM_SLEEP);
-		memcpy(ftuaa->array, redact_snaps, num_redact_snaps *
-		    sizeof (uint64_t));
-	}
-	dsl_dataset_activate_feature(dsobj, SPA_FEATURE_REDACTED_DATASETS,
-	    ftuaa, tx);
-	ds->ds_feature[SPA_FEATURE_REDACTED_DATASETS] = ftuaa;
-}
-
 /*
  * Find and return (in *oldest_dsobj) the oldest snapshot of the dsobj
  * dataset whose birth time is >= min_txg.
@@ -5022,9 +4949,6 @@ dsl_dataset_oldest_snapshot(spa_t *spa, uint64_t head_ds, uint64_t min_txg,
 
 ZFS_MODULE_PARAM(zfs, zfs_, max_recordsize, UINT, ZMOD_RW,
 	"Max allowed record size");
-
-ZFS_MODULE_PARAM(zfs, zfs_, allow_redacted_dataset_mount, INT, ZMOD_RW,
-	"Allow mounting of redacted datasets");
 
 ZFS_MODULE_PARAM(zfs, zfs_, snapshot_history_enabled, INT, ZMOD_RW,
 	"Include snapshot events in pool history/events");
