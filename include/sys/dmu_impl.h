@@ -40,6 +40,7 @@
 #include <sys/abd.h>
 #include <sys/arc.h>
 #include <sys/dbuf.h>
+#include <sys/vnode.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -245,6 +246,9 @@ struct dmu_pool;
 struct dmu_buf;
 struct zgd;
 
+struct dmu_send_outparams;
+typedef struct dmu_send_outparams dmu_send_outparams_t;
+
 typedef struct dmu_sendstatus {
 	list_node_t dss_link;
 	int dss_outfd;
@@ -253,6 +257,39 @@ typedef struct dmu_sendstatus {
 	uint64_t dss_blocks; /* blocks visited during the sending process */
 } dmu_sendstatus_t;
 
+/*
+ * The list of data whose inclusion in a send stream can be pending from
+ * one call to backup_cb to another.  Multiple calls to dump_free(),
+ * dump_freeobjects() can be aggregated into a single
+ * DRR_FREE, DRR_FREEOBJECTS replay record.
+ */
+typedef enum {
+	PENDING_NONE,
+	PENDING_FREE,
+	PENDING_FREEOBJECTS
+} dmu_pendop_t;
+
+typedef struct dmu_sendarg {
+	list_node_t dsa_link;
+	dmu_replay_record_t *dsa_drr;
+	int dsa_outfd;
+	proc_t *dsa_proc;
+	offset_t *dsa_off;
+	objset_t *dsa_os;
+	zio_cksum_t dsa_zc;
+	uint64_t dsa_toguid;
+	uint64_t dsa_fromtxg;
+	int dsa_err;
+	dmu_pendop_t dsa_pending_op;
+	uint64_t dsa_featureflags;
+	uint64_t dsa_last_data_object;
+	uint64_t dsa_last_data_offset;
+	uint64_t dsa_resume_object;
+	uint64_t dsa_resume_offset;
+	boolean_t dsa_sent_begin;
+	boolean_t dsa_sent_end;
+	dmu_send_outparams_t *dsa_dso;
+} dmu_sendarg_t;
 /*
  * dmu_sync_{ready/done} args
  */
