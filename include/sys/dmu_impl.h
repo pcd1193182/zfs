@@ -288,7 +288,9 @@ typedef struct dmu_sendarg {
 	uint64_t dsa_resume_offset;
 	boolean_t dsa_sent_begin;
 	boolean_t dsa_sent_end;
-	dmu_send_outparams_t *dsa_dso;
+	zfs_file_t *dsa_fp;
+	taskq_t *dsa_tq;
+	taskq_ent_t	dsp_tqent;
 } dmu_sendarg_t;
 /*
  * dmu_sync_{ready/done} args

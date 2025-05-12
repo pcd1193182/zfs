@@ -5051,29 +5051,6 @@ dump_path(char *ds, char *path, uint64_t *retobj)
 	return (err);
 }
 
-static int
-dump_backup_bytes(objset_t *os, void *buf, int len, void *arg)
-{
-	const char *p = (const char *)buf;
-	ssize_t nwritten;
-
-	(void) os;
-	(void) arg;
-
-	/* Write the data out, handling short writes and signals. */
-	while ((nwritten = write(STDOUT_FILENO, p, len)) < len) {
-		if (nwritten < 0) {
-			if (errno == EINTR)
-				continue;
-			return (errno);
-		}
-		p += nwritten;
-		len -= nwritten;
-	}
-
-	return (0);
-}
-
 static void
 dump_backup(const char *pool, uint64_t objset_id, const char *flagstr)
 {
@@ -5111,14 +5088,10 @@ dump_backup(const char *pool, uint64_t objset_id, const char *flagstr)
 	}
 
 	offset_t off = 0;
-	dmu_send_outparams_t out = {
-	    .dso_outfunc = dump_backup_bytes,
-	    .dso_dryrun  = B_FALSE,
-	};
 
 	int err = dmu_send_obj(pool, objset_id, /* fromsnap */0, embed,
-	    large_block, compress, raw, /* saved */ B_FALSE, STDOUT_FILENO,
-	    &off, &out);
+	    large_block, compress, raw, STDOUT_FILENO,
+	    zfs_file_get(STDOUT_FILENO), &off);
 	if (err != 0) {
 		fprintf(stderr, "dump_backup: dmu_send_obj: %s\n",
 		    strerror(err));
