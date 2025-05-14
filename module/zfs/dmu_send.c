@@ -1026,21 +1026,12 @@ do_dump(dmu_sendarg_t *dsa, struct send_block_record *data)
 }
 
 static int
-dmu_send_impl(struct dmu_send_params *dspp)
+dmu_send_impl(void *tag, dsl_pool_t *dp, dsl_dataset_t *to_ds,
+    zfs_bookmark_phys_t *ancestor_zb, boolean_t is_clone,
+    boolean_t embedok, boolean_t large_block_ok, boolean_t compressok,
+    boolean_t rawok, int outfd, uint64_t resumeobj, uint64_t resumeoff,
+    dmu_send_outparams_t *dso, offset_t *off)
 {
-	const void *tag = dspp->tag;
-	dsl_pool_t *dp = dspp->dp;
-	dsl_dataset_t *to_ds = dspp->to_ds;
-	zfs_bookmark_phys_t *ancestor_zb = &dspp->ancestor_zb;
-	boolean_t is_clone = dspp->is_clone;
-	boolean_t embedok = dspp->is_clone;
-	boolean_t large_block_ok = dspp->large_block_ok;
-	boolean_t compressok = dspp->compressok;
-	boolean_t rawok = dspp->rawok;
-	int outfd = dspp->outfd;
-	uint64_t resumeobj = dspp->resumeobj;
-	uint64_t resumeoff = dspp->resumeoff;
-	offset_t *off = dspp->off;
 	objset_t *os;
 	dmu_replay_record_t *drr;
 	dmu_sendarg_t *dsp;
@@ -1173,7 +1164,7 @@ dmu_send_impl(struct dmu_send_params *dspp)
 	dsp->dsa_featureflags = featureflags;
 	dsp->dsa_resume_object = resumeobj;
 	dsp->dsa_resume_offset = resumeoff;
-	dsp->dsa_dso = dspp->dso;
+	dsp->dsa_dso = dso;
 
 	mutex_enter(&to_ds->ds_sendstream_lock);
 	list_insert_head(&to_ds->ds_sendstreams, dsp);
@@ -1306,71 +1297,64 @@ out:
 int
 dmu_send_obj(const char *pool, uint64_t tosnap, uint64_t fromsnap,
     boolean_t embedok, boolean_t large_block_ok, boolean_t compressok,
-    boolean_t rawok, boolean_t savedok, int outfd, offset_t *off,
-    dmu_send_outparams_t *dsop)
+    boolean_t rawok, int outfd, dmu_send_outparams_t *dso, offset_t *off)
 {
+	dsl_pool_t *dp;
+	dsl_dataset_t *ds;
+	dsl_dataset_t *fromds = NULL;
+	ds_hold_flags_t dsflags = (rawok) ? 0 : DS_HOLD_FLAG_DECRYPT;
 	int err;
-	dsl_dataset_t *fromds;
-	ds_hold_flags_t dsflags;
-	struct dmu_send_params dspp = {0};
-	dspp.embedok = embedok;
-	dspp.large_block_ok = large_block_ok;
-	dspp.compressok = compressok;
-	dspp.outfd = outfd;
-	dspp.off = off;
-	dspp.dso = dsop;
-	dspp.tag = FTAG;
-	dspp.rawok = rawok;
-	dspp.savedok = savedok;
 
-	dsflags = (rawok) ? DS_HOLD_FLAG_NONE : DS_HOLD_FLAG_DECRYPT;
-	err = dsl_pool_hold(pool, FTAG, &dspp.dp);
+	err = dsl_pool_hold(pool, FTAG, &dp);
 	if (err != 0)
 		return (err);
 
-	err = dsl_dataset_hold_obj_flags(dspp.dp, tosnap, dsflags, FTAG,
-	    &dspp.to_ds);
+	err = dsl_dataset_hold_obj_flags(dp, tosnap, dsflags, FTAG, &ds);
 	if (err != 0) {
-		dsl_pool_rele(dspp.dp, FTAG);
+		dsl_pool_rele(dp, FTAG);
 		return (err);
 	}
 
 	if (fromsnap != 0) {
-		err = dsl_dataset_hold_obj_flags(dspp.dp, fromsnap, dsflags,
-		    FTAG, &fromds);
+		zfs_bookmark_phys_t zb = { 0 };
+		boolean_t is_clone;
+
+		err = dsl_dataset_hold_obj(dp, fromsnap, FTAG, &fromds);
 		if (err != 0) {
-			dsl_dataset_rele_flags(dspp.to_ds, dsflags, FTAG);
-			dsl_pool_rele(dspp.dp, FTAG);
+			dsl_dataset_rele_flags(ds, dsflags, FTAG);
+			dsl_pool_rele(dp, FTAG);
 			return (err);
 		}
-		dspp.ancestor_zb.zbm_guid = dsl_dataset_phys(fromds)->ds_guid;
-		dspp.ancestor_zb.zbm_creation_txg =
-		    dsl_dataset_phys(fromds)->ds_creation_txg;
-		dspp.ancestor_zb.zbm_creation_time =
+		if (!dsl_dataset_is_before(ds, fromds, 0)) {
+			err = SET_ERROR(EXDEV);
+			dsl_dataset_rele(fromds, FTAG);
+			dsl_dataset_rele_flags(ds, dsflags, FTAG);
+			dsl_pool_rele(dp, FTAG);
+			return (err);
+		}
+
+		zb.zbm_creation_time =
 		    dsl_dataset_phys(fromds)->ds_creation_time;
+		zb.zbm_creation_txg = dsl_dataset_phys(fromds)->ds_creation_txg;
+		zb.zbm_guid = dsl_dataset_phys(fromds)->ds_guid;
 
 		if (dsl_dataset_is_zapified(fromds)) {
-			(void) zap_lookup(dspp.dp->dp_meta_objset,
+			(void) zap_lookup(dp->dp_meta_objset,
 			    fromds->ds_object, DS_FIELD_IVSET_GUID, 8, 1,
-			    &dspp.ancestor_zb.zbm_ivset_guid);
+			    &zb.zbm_ivset_guid);
 		}
 
-		boolean_t is_before =
-		    dsl_dataset_is_before(dspp.to_ds, fromds, 0);
-		dspp.is_clone = (dspp.to_ds->ds_dir !=
-		    fromds->ds_dir);
+		is_clone = (fromds->ds_dir != ds->ds_dir);
 		dsl_dataset_rele(fromds, FTAG);
-		if (!is_before) {
-			dsl_pool_rele(dspp.dp, FTAG);
-			err = SET_ERROR(EXDEV);
-		} else {
-			err = dmu_send_impl(&dspp);
-		}
+		err = dmu_send_impl(FTAG, dp, ds, &zb, is_clone,
+		    embedok, large_block_ok, compressok, rawok, outfd,
+		    0, 0, dso, off);
 	} else {
-		err = dmu_send_impl(&dspp);
+		err = dmu_send_impl(FTAG, dp, ds, NULL, B_FALSE,
+		    embedok, large_block_ok, compressok, rawok, outfd,
+		    0, 0, dso, off);
 	}
-
-	dsl_dataset_rele(dspp.to_ds, FTAG);
+	dsl_dataset_rele_flags(ds, dsflags, FTAG);
 	return (err);
 }
 
@@ -1536,12 +1520,15 @@ dmu_send(const char *tosnap, const char *fromsnap, boolean_t embedok,
 
 		if (err == 0) {
 			/* dmu_send_impl will call dsl_pool_rele for us. */
-			err = dmu_send_impl(&dspp);
+			err = dmu_send_impl(FTAG, dspp.dp, dspp.to_ds, &dspp.ancestor_zb, dspp.is_clone,
+			    embedok, large_block_ok, compressok, rawok,
+			    outfd, resumeobj, resumeoff, dspp.dso, off);
 		} else {
 			dsl_pool_rele(dspp.dp, FTAG);
 		}
 	} else {
-		err = dmu_send_impl(&dspp);
+		err = dmu_send_impl(FTAG, dspp.dp, dspp.to_ds, NULL, B_FALSE,
+		    embedok, large_block_ok, compressok, rawok,		    outfd, resumeobj, resumeoff, dspp.dso, off);
 	}
 	if (owned)
 		dsl_dataset_disown(dspp.to_ds, dsflags, FTAG);

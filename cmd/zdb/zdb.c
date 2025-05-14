@@ -5117,8 +5117,8 @@ dump_backup(const char *pool, uint64_t objset_id, const char *flagstr)
 	};
 
 	int err = dmu_send_obj(pool, objset_id, /* fromsnap */0, embed,
-	    large_block, compress, raw, /* saved */ B_FALSE, STDOUT_FILENO,
-	    &off, &out);
+	    large_block, compress, raw, STDOUT_FILENO,
+	    &out, &off);
 	if (err != 0) {
 		fprintf(stderr, "dump_backup: dmu_send_obj: %s\n",
 		    strerror(err));

@@ -5922,7 +5922,7 @@ zfs_ioc_send(zfs_cmd_t *zc)
 		off = zfs_file_off(dba.dba_fp);
 		error = dmu_send_obj(zc->zc_name, zc->zc_sendobj,
 		    zc->zc_fromobj, embedok, large_block_ok, compressok,
-		    rawok, savedok, zc->zc_cookie, &off, &out);
+		    rawok, zc->zc_cookie, &out, &off);
 
 		dump_bytes_fini(&dba);
 	}

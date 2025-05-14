@@ -55,8 +55,7 @@ int dmu_send_estimate_fast(struct dsl_dataset *ds, struct dsl_dataset *fromds,
     boolean_t saved, uint64_t *sizep);
 int dmu_send_obj(const char *pool, uint64_t tosnap, uint64_t fromsnap,
     boolean_t embedok, boolean_t large_block_ok, boolean_t compressok,
-    boolean_t rawok, boolean_t savedok, int outfd, offset_t *off,
-    struct dmu_send_outparams *dso);
+    boolean_t rawok, int outfd, struct dmu_send_outparams *dso, offset_t *off);
 
 typedef int (*dmu_send_outfunc_t)(objset_t *os, void *buf, int len, void *arg);
 typedef struct dmu_send_outparams {
