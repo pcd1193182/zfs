@@ -434,7 +434,7 @@ struct vdev {
 	uint64_t	vdev_mmp_kstat_id;	/* to find kstat entry */
 	uint64_t	vdev_expansion_time;	/* vdev's last expansion time */
 	/* used to calculate average read latency */
-	uint64_t	*vdev_prev_histo;
+	uint64_t	*vdev_prev_histo; 
 	int64_t	vdev_outlier_count;	/* read outlier amongst peers */
 	hrtime_t	vdev_read_sit_out_expire; /* end of sit out period    */
 	list_node_t	vdev_leaf_node;		/* leaf vdev list */

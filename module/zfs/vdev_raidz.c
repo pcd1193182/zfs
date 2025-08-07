@@ -2989,7 +2989,7 @@ vdev_child_slow_outlier(zio_t *zio)
 			mutex_exit(&cvd->vdev_stat_lock);
 		}
 	}
-	uint64_t max = 0;
+	uint64_t max = 0, max_count = 0;
 	vdev_t *svd = NULL; /* suspect vdev */
 	uint_t sitouts = 0;
 	boolean_t skip = B_FALSE, svd_sitting = B_FALSE;
@@ -3040,10 +3040,12 @@ vdev_child_slow_outlier(zio_t *zio)
 			max = lat_data[c];
 			svd = cvd;
 			svd_sitting = sitting;
+			max_count = count;
 		}
 	}
 
 	if (skip)
+		
 		goto out;
 
 	qsort((void *)lat_data, samples, sizeof (uint64_t), latency_compare);
@@ -3053,8 +3055,21 @@ vdev_child_slow_outlier(zio_t *zio)
 	ASSERT3U(lat_data[samples - 1], ==, max);
 	if (max > fence && !svd_sitting) {
 		uint64_t incr = MAX(1, (max - fence) / iqr);
+		if (random_in_range(100) == 0) {
+			uint_t n = samples;
+			uint64_t q1 = latency_median_value(&lat_data[0], n >> 1);
+			uint64_t q3 = latency_median_value(&lat_data[(n + 1) >> 1], n >> 1);
+
+			uint64_t iqr = MAX(q3 - q1, q1 >> 3);
+			zfs_dbgmsg("ANALYSIS: q1 %llu, q3 %llu, iqr %llu, fence %llu, count %llu", (u_longlong_t)q1, (u_longlong_t)q3, (u_longlong_t)iqr, (u_longlong_t)fence, (u_longlong_t)max_count);
+			for (int i = 0; i < n; i++) {
+				zfs_dbgmsg("ANALYSIS: lat[%u] = %llu", i,
+				    (u_longlong_t)lat_data[i]);
+			}
+		}
 		vd->vdev_outlier_count += incr;
 		if (vd->vdev_outlier_count >= samples) {
+			zfs_dbgmsg("DECAYING");
 			for (int c = 0; c < samples; c++) {
 				vdev_t *cvd = vd->vdev_child[c];
 				cvd->vdev_outlier_count -= 2;
@@ -3063,6 +3078,9 @@ vdev_child_slow_outlier(zio_t *zio)
 			}
 			vd->vdev_outlier_count = 0;
 		}
+		zfs_dbgmsg("sitout_metrics: @%llu incrementing child %d by %d "
+		    "to %d", ((u_longlong_t)now / 1000000), (int)svd->vdev_id,
+		    (int)incr, (int)svd->vdev_outlier_count + incr);
 		/*
 		 * Keep track of how many times this child has had
 		 * an outlier read. A disk that persitently has a
@@ -3075,6 +3093,8 @@ vdev_child_slow_outlier(zio_t *zio)
 			vdev_raidz_sit_child(svd);
 			(void) zfs_ereport_post(FM_EREPORT_ZFS_DELAY,
 			    zio->io_spa, svd, NULL, NULL, 0);
+			zfs_dbgmsg("sitout_metrics: @%llu sitting %d",
+			    ((u_longlong_t)now / 1000000), (int)svd->vdev_id);
 			vdev_dbgmsg(svd, "begin read sit out for %d secs",
 			    (int)vdev_read_sit_out_secs);
 
