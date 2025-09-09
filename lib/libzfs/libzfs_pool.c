@@ -47,6 +47,7 @@
 #include <sys/systeminfo.h>
 #include <sys/zfs_ioctl.h>
 #include <sys/zfs_sysfs.h>
+#include <sys/vdev_anyraid.h>
 #include <sys/vdev_disk.h>
 #include <sys/types.h>
 #include <dlfcn.h>
@@ -4632,8 +4633,17 @@ zpool_vdev_name(libzfs_handle_t *hdl, zpool_handle_t *zhp, nvlist_t *nv,
 		if (strcmp(path, VDEV_TYPE_RAIDZ) == 0 ||
 		    strcmp(path, VDEV_TYPE_ANYMIRROR) == 0) {
 			value = fnvlist_lookup_uint64(nv, ZPOOL_CONFIG_NPARITY);
-			(void) snprintf(buf, sizeof (buf), "%s%llu", path,
-			    (u_longlong_t)value);
+			if (fnvlist_lookup_uint8(nv,
+			    ZPOOL_CONFIG_ANYRAID_PARITY_TYPE) == VAP_RAIDZ) {
+				uint32_t ndata = fnvlist_lookup_uint32(nv,
+				    ZPOOL_CONFIG_ANYRAID_NDATA);
+				(void) snprintf(buf, sizeof (buf),
+				    "%sz%llu:%u", path,
+				    (u_longlong_t)value, ndata);
+			} else {
+				(void) snprintf(buf, sizeof (buf), "%s%llu",
+				    path, (u_longlong_t)value);
+			}
 			path = buf;
 		}
 

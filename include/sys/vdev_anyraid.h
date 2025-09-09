@@ -37,6 +37,7 @@ extern "C" {
 
 typedef enum vdev_anyraid_parity_type {
 	VAP_MIRROR, // includes raid0, i.e. a 0-parity mirror
+	VAP_RAIDZ,
 	VAP_TYPES,
 } vdev_anyraid_parity_type_t;
 

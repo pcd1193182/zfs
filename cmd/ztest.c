@@ -1395,8 +1395,16 @@ make_vdev_raid(const char *path, const char *aux, const char *pool, size_t size,
 		fnvlist_add_uint64(raid, ZPOOL_CONFIG_DRAID_NSPARES, nspares);
 		fnvlist_add_uint64(raid, ZPOOL_CONFIG_DRAID_NGROUPS, ngroups);
 	} else if (strcmp(ztest_opts.zo_raid_type, VDEV_TYPE_ANYMIRROR) == 0) {
+		enum vdev_anyraid_parity_type type = VAP_MIRROR;
 		fnvlist_add_uint8(raid, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE,
-		    VAP_MIRROR);
+		    type);
+	} else if (strcmp(ztest_opts.zo_raid_type, VDEV_TYPE_ANYRAIDZ)) {
+		enum vdev_anyraid_parity_type type = VAP_RAIDZ;
+		uint64_t ndata = ztest_opts.zo_draid_data;
+		fnvlist_add_uint64(raid, ZPOOL_CONFIG_ANYRAID_NDATA,
+		    ndata);
+		fnvlist_add_uint8(raid, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE,
+		    type);
 	}
 
 	for (c = 0; c < r; c++)

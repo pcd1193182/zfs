@@ -1232,8 +1232,24 @@ get_parity(const char *type)
 			char *end;
 			errno = 0;
 			parity = strtol(p, &end, 10);
-			if (errno != 0 || *end != '\0' ||
-			    parity < 0) {
+			if (errno != 0 || (*end != '\0' && *end != ':') ||
+			    parity < 0 ) {
+				return (-1);
+			}
+		}
+	} else if (strncmp(type, VDEV_TYPE_ANYRAIDZ,
+	    strlen(VDEV_TYPE_ANYRAIDZ)) == 0) {
+		p = type + strlen(VDEV_TYPE_ANYRAIDZ);
+
+		if (*p == '\0') {
+			/* when unspecified default to 1-parity mirror */
+			return (1);
+		} else {
+			char *end;
+			errno = 0;
+			parity = strtol(p, &end, 10);
+			if (errno != 0 || (*end != '\0' && *end != ':') ||
+			    parity < 0 || parity > VDEV_RAIDZ_MAXPARITY) {
 				return (-1);
 			}
 		}
@@ -1341,15 +1357,82 @@ is_grouping(const char *type, int *mindev, int *maxdev)
 }
 
 static int
+anyraidz_config_by_type(nvlist_t *nv, const char *type)
+{
+	uint64_t nparity;
+	uint64_t ndata = UINT64_MAX;
+
+	if (strncmp(type, VDEV_TYPE_ANYRAIDZ, strlen(VDEV_TYPE_ANYRAIDZ)) != 0)
+		return (EINVAL);
+
+	nparity = (uint64_t)get_parity(type);
+	if (nparity == 0 || nparity > VDEV_RAIDZ_MAXPARITY) {
+		fprintf(stderr,
+		    gettext("invalid anyraid parity level %llu; must be "
+		    "between 1 and %d\n"), (u_longlong_t)nparity,
+		    VDEV_RAIDZ_MAXPARITY);
+		return (EINVAL);
+	}
+
+	char *p = (char *)type;
+	if ((p = strchr(p, ':')) == NULL) {
+		fprintf(stderr, gettext("no anyraid data count detected\n"));
+		return (EINVAL);
+	}
+	char *end;
+
+	p = p + 1;
+	errno = 0;
+
+	if (!isdigit(p[0])) {
+		(void) fprintf(stderr, gettext("invalid anyraidz "
+		    "syntax; expected <number>:<number> not '%s'\n"),
+		    type);
+		return (EINVAL);
+	}
+
+	/* Expected non-zero value with c/d suffix */
+	ndata = strtol(p, &end, 10);
+	if (errno != 0 ) {
+		(void) fprintf(stderr, gettext("invalid anyraidz "
+		    "syntax; expected <number>:<number> not '%s'\n"),
+		    type);
+		return (EINVAL);
+	}
+
+	if (ndata + nparity > VDEV_ANYRAID_MAX_DISKS) {
+		fprintf(stderr, gettext("too many devices in anyraid group: "
+		    "%"PRIu64" data and %"PRIu64" parity"), ndata, nparity);
+		return (EINVAL);
+	}
+
+	if (ndata == 0 || nparity == 0) {
+		fprintf(stderr, gettext("invalid %s: must not be zero"),
+		    ndata == 0 ? "ndata" : "nparity");
+		return (EINVAL);
+	}
+
+	/* Store the basic anyraidz configuration. */
+	fnvlist_add_uint8(nv, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE, VAP_RAIDZ);
+	fnvlist_add_uint64(nv, ZPOOL_CONFIG_NPARITY, nparity);
+	fnvlist_add_uint32(nv, ZPOOL_CONFIG_ANYRAID_NDATA, ndata);
+
+	return (0);
+}
+
+static int
 anyraid_config_by_type(nvlist_t *nv, const char *type)
 {
 	uint64_t nparity = 0;
 
-	if (strncmp(type, VDEV_TYPE_ANYMIRROR, strlen(VDEV_TYPE_ANYMIRROR)) !=
+	if (strncmp(type, "any", 3) !=
 	    0)
 		return (EINVAL);
 
 	nparity = (uint64_t)get_parity(type);
+
+	if (strncmp(type, VDEV_TYPE_ANYRAIDZ, strlen(VDEV_TYPE_ANYRAIDZ)) == 0)
+		return (anyraidz_config_by_type(nv, type));
 
 	fnvlist_add_uint8(nv, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE, VAP_MIRROR);
 	fnvlist_add_uint64(nv, ZPOOL_CONFIG_NPARITY, nparity);
