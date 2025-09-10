@@ -2408,8 +2408,8 @@ vdev_raidz_io_verify(zio_t *zio, raidz_map_t *rm, raidz_row_t *rr, int col)
 	zfs_range_seg64_t logical_rs, physical_rs, remain_rs;
 	logical_rs.rs_start = rr->rr_offset;
 	logical_rs.rs_end = logical_rs.rs_start +
-	    vdev_raidz_psize_to_asize(zio->io_vd, rr->rr_size,
-	    BP_GET_PHYSICAL_BIRTH(zio->io_bp));
+	    vdev_psize_to_asize_txg(zio->io_vd,
+	    rr->rr_size, BP_GET_PHYSICAL_BIRTH(zio->io_bp));
 
 	raidz_col_t *rc = &rr->rr_col[col];
 	vdev_t *cvd = zio->io_vd->vdev_child[rc->rc_devidx];
