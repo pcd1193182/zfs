@@ -1168,7 +1168,7 @@ vdev_anyraid_io_start(zio_t *zio)
 			zio_execute(zio);
 			return;
 		default:
-			panic("Invalid parid type: %d", var->vd_parity_type);
+			panic("Invalid parity type: %d", var->vd_parity_type);
 	}
 
 
@@ -1208,7 +1208,7 @@ vdev_anyraid_io_done(zio_t *zio)
 			vdev_raidz_io_done(zio);
 			return;
 		default:
-			panic("Invalid parid type: %d", var->vd_parity_type);
+			panic("Invalid parity type: %d", var->vd_parity_type);
 	}
 }
 
@@ -1303,13 +1303,49 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 		return;
 	}
 
-	uint64_t child_offset = atn->atn_offset * tsize +
-	    logical_rs->rs_start % tsize;
-	child_offset += VDEV_ANYRAID_START_OFFSET(anyraidvd->vdev_ashift);
-	uint64_t size = logical_rs->rs_end - logical_rs->rs_start;
+	switch (var->vd_parity_type) {
+		case VAP_MIRROR:
+		{
+			uint64_t child_offset = atn->atn_offset * tsize +
+			    logical_rs->rs_start % tsize;
+			child_offset +=
+			    VDEV_ANYRAID_START_OFFSET(anyraidvd->vdev_ashift);
+			uint64_t size = logical_rs->rs_end -
+			    logical_rs->rs_start;
 
-	physical_rs->rs_start = child_offset;
-	physical_rs->rs_end = child_offset + size;
+			physical_rs->rs_start = child_offset;
+			physical_rs->rs_end = child_offset + size;
+			break;
+		}
+		case VAP_RAIDZ:
+		{
+			uint64_t width = var->vd_nparity + var->vd_ndata;
+			uint64_t tgt_col = cvd->vdev_id;
+			uint64_t ashift = anyraidvd->vdev_ashift;
+			uint64_t tile_start = atn->atn_offset * tsize;
+
+			uint64_t b_start =
+			    (logical_rs->rs_start % tsize) >> ashift;
+			uint64_t b_end =
+			    (logical_rs->rs_end % tsize) >> ashift;
+
+			uint64_t start_row = 0;
+			if (b_start > tgt_col) /* avoid underflow */
+				start_row = ((b_start - tgt_col - 1) / width) + 1;
+
+			uint64_t end_row = 0;
+			if (b_end > tgt_col)
+				end_row = ((b_end - tgt_col - 1) / width) + 1;
+
+			physical_rs->rs_start =
+			    tile_start + (start_row << ashift);
+			physical_rs->rs_end =
+			    tile_start + (end_row << ashift);
+			break;
+		}
+		default:
+			panic("Invalid parity type: %d", var->vd_parity_type);
+	}
 	remain_rs->rs_start = 0;
 	remain_rs->rs_end = 0;
 }
