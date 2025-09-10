@@ -2646,6 +2646,24 @@ vdev_raidz_io_start_read(zio_t *zio, raidz_map_t *rm)
 	}
 }
 
+void
+vdev_raidz_io_start_impl(zio_t *zio, raidz_map_t *rm, uint64_t logical_width,
+    uint64_t physical_width)
+{
+	if (zio->io_type == ZIO_TYPE_WRITE) {
+		for (int i = 0; i < rm->rm_nrows; i++)
+			vdev_raidz_io_start_write(zio, rm->rm_row[i]);
+
+		if (logical_width == physical_width)
+			raidz_start_skip_writes(zio);
+	} else {
+		ASSERT(zio->io_type == ZIO_TYPE_READ);
+		vdev_raidz_io_start_read(zio, rm);
+	}
+
+	zio_execute(zio);
+}
+
 /*
  * Start an IO operation on a RAIDZ VDev
  *
@@ -2725,20 +2743,8 @@ vdev_raidz_io_start(zio_t *zio)
 
 	zio->io_vsd = rm;
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
-	if (zio->io_type == ZIO_TYPE_WRITE) {
-		for (int i = 0; i < rm->rm_nrows; i++) {
-			vdev_raidz_io_start_write(zio, rm->rm_row[i]);
-		}
-
-		if (logical_width == vdrz->vd_physical_width) {
-			raidz_start_skip_writes(zio);
-		}
-	} else {
-		ASSERT(zio->io_type == ZIO_TYPE_READ);
-		vdev_raidz_io_start_read(zio, rm);
-	}
-
-	zio_execute(zio);
+	vdev_raidz_io_start_impl(zio, rm, logical_width,
+	    vdrz->vd_physical_width);
 }
 
 /*

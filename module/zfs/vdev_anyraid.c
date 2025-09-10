@@ -111,6 +111,8 @@
 #include <sys/vdev_impl.h>
 #include <sys/vdev_anyraid.h>
 #include <sys/vdev_mirror.h>
+#include <sys/vdev_raidz.h>
+#include <sys/vdev_raidz_impl.h>
 
 /*
  * The smallest allowable tile size. Shrinking this is mostly useful for
@@ -179,13 +181,20 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	if (nvlist_lookup_uint8(nv, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE,
 	    (uint8_t *)&parity_type) != 0)
 		return (SET_ERROR(EINVAL));
-	if (parity_type != VAP_MIRROR)
-		return (SET_ERROR(ENOTSUP));
-	if (children < nparity + 1)
+	uint32_t ndata = 1;
+	if (nvlist_lookup_uint32(nv, ZPOOL_CONFIG_ANYRAID_NDATA,
+	    &ndata) != 0 && parity_type == VAP_RAIDZ) {
 		return (SET_ERROR(EINVAL));
+	}
+
+	if (ndata + nparity >= children) {
+		zfs_dbgmsg("width too high when creating anyraid vdev");
+		return (SET_ERROR(EINVAL));
+	}
 
 	vdev_anyraid_t *var = kmem_zalloc(sizeof (*var), KM_SLEEP);
 	var->vd_parity_type = parity_type;
+	var->vd_ndata = ndata;
 	var->vd_nparity = nparity;
 	rw_init(&var->vd_lock, NULL, RW_DEFAULT, NULL);
 	avl_create(&var->vd_tile_map, anyraid_tile_compare,
@@ -705,7 +714,7 @@ anyraid_calculate_size(vdev_t *vd)
 	 * size, so we need a tile to hold at least enough to store a
 	 * max-size block, or we'll assert in that code.
 	 */
-	if (var->vd_tile_size < SPA_MAXBLOCKSIZE)
+	if (var->vd_tile_size * var->vd_ndata < SPA_MAXBLOCKSIZE)
 		return (SET_ERROR(ENOSPC));
 	return (0);
 }
@@ -745,7 +754,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		for (int c = 0; c < vd->vdev_children; c++) {
 			count += num_tiles[c];
 		}
-		return (count * var->vd_tile_size);
+		return (count * var->vd_ndata * var->vd_tile_size);
 	}
 
 	/*
@@ -812,7 +821,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	while ((node = avl_destroy_nodes(&t, &cookie)) != NULL)
 		kmem_free(node, sizeof (*node));
 	avl_destroy(&t);
-	return (count * var->vd_tile_size);
+	return (count * var->vd_ndata * var->vd_tile_size);
 }
 
 static int
@@ -941,7 +950,8 @@ static void
 vdev_anyraid_metaslab_size(vdev_t *vd, uint64_t *shiftp)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	*shiftp = MIN(*shiftp, highbit64(var->vd_tile_size) - 1);
+	*shiftp = MIN(*shiftp, highbit64(var->vd_tile_size * var->vd_ndata) -
+	    1);
 }
 
 static void
@@ -983,7 +993,7 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile)
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	mirror_map_t *mm = vdev_mirror_map_alloc(var->vd_nparity + 1, B_FALSE,
 	    B_FALSE);
-	uint64_t rsize = var->vd_tile_size;
+	uint64_t tsize = var->vd_tile_size;
 
 	anyraid_tile_node_t *atn = list_head(&tile->at_list);
 	for (int c = 0; c < mm->mm_children; c++) {
@@ -991,7 +1001,7 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile)
 		mirror_child_t *mc = &mm->mm_child[c];
 		mc->mc_vd = vd->vdev_child[atn->atn_disk];
 		mc->mc_offset = VDEV_ANYRAID_START_OFFSET(vd->vdev_ashift) +
-		    atn->atn_offset * rsize + zio->io_offset % rsize;
+		    arn->atn_offset * tsize + zio->io_offset % tsize;
 		ASSERT3U(mc->mc_offset, <, mc->mc_vd->vdev_psize -
 		    VDEV_LABEL_END_SIZE);
 		mm->mm_rebuilding = mc->mc_rebuilding = B_FALSE;
@@ -1005,6 +1015,62 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile)
 	vdev_mirror_io_start_impl(zio, mm);
 }
 
+/*
+ * Translate the allocated and configured raidz map to use the proper disks
+ * based on the anyraid tile mapping.
+ */
+static void
+vdev_anraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
+    anyraid_tile_t *tile)
+{
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	ASSERT3U(rm->rm_nrows, ==, 1);
+	raidz_row_t *rr = rm->rm_row[0];
+	anyraid_tile_node_t **mapping = kmem_zalloc(sizeof (*mapping) *
+	    (var->vd_ndata + var->vd_nparity), KM_SLEEP);
+	anyraid_tile_node_t *arn = list_head(&tile->at_list);
+	for (int i = 0; i < var->vd_ndata + var->vd_nparity; i++) {
+		mapping[i] = arn;
+		arn = list_next(&tile->at_list, arn);
+	}
+	uint64_t b = zio->io_offset >> vd->vdev_ashift;
+	uint64_t f = b % var->vd_ndata;
+	ASSERT3U(rr->rr_scols, <=, var->vd_ndata + var->vd_nparity);
+	for (uint64_t c = 0; c < rr->rr_scols; c++) {
+		raidz_col_t *rc = &rr->rr_col[c];
+		anyraid_tile_node_t *arn = mapping[rc->rc_devidx];
+		uint64_t coff = arn->atn_offset;
+		uint64_t col = f + c;
+		if (col >= var->vd_ndata) {
+			col -= var->vd_ndata;
+			coff += 1ULL << vd->vdev_ashift;
+		}
+		rc->rc_offset = coff;
+		rc->rc_devidx = arn->atn_disk;
+	}
+	kmem_free(mapping, sizeof (*mapping) * (var->vd_ndata +
+	    var->vd_nparity));
+}
+
+/*
+ * Configure the raidz_map and then hand the write off to the normal raidz
+ * logic.
+ */
+static void
+vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile)
+{
+	vdev_t *vd = zio->io_vd;
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	raidz_map_t *rm = vdev_raidz_map_alloc(zio, vd->vdev_ashift,
+	    var->vd_ndata, var->vd_nparity);
+	vdev_anraid_raidz_map_translate(vd, zio, rm, tile);
+	
+	zio->io_vsd = rm;
+	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
+	vdev_raidz_io_start_impl(zio, rm, var->vd_ndata,
+	    var->vd_ndata);
+}
+
 typedef struct anyraid_map {
 	abd_t *am_abd;
 } anyraid_map_t;
@@ -1012,10 +1078,10 @@ typedef struct anyraid_map {
 static void
 vdev_anyraid_map_free_vsd(zio_t *zio)
 {
-	anyraid_map_t *mm = zio->io_vsd;
-	abd_free(mm->am_abd);
-	mm->am_abd = NULL;
-	kmem_free(mm, sizeof (*mm));
+	anyraid_map_t *am = zio->io_vsd;
+	abd_free(am->am_abd);
+	am->am_abd = NULL;
+	kmem_free(am, sizeof (*am));
 }
 
 const zio_vsd_ops_t vdev_anyraid_vsd_ops = {
@@ -1034,9 +1100,9 @@ vdev_anyraid_io_start(zio_t *zio)
 {
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	uint64_t rsize = var->vd_tile_size;
+	uint64_t tsize = var->vd_tile_size * var->vd_ndata;
 
-	uint64_t start_tile_id = zio->io_offset / rsize;
+	uint64_t start_tile_id = zio->io_offset / tsize;
 	anyraid_tile_t search;
 	search.at_tile_id = start_tile_id;
 	avl_index_t where;
@@ -1064,7 +1130,7 @@ vdev_anyraid_io_start(zio_t *zio)
 		list_create(&tile->at_list, sizeof (anyraid_tile_node_t),
 		    offsetof(anyraid_tile_node_t, atn_node));
 
-		uint_t width = var->vd_nparity + 1;
+		uint_t width = var->vd_nparity + var->vd_ndata;
 		vdev_anyraid_node_t **vans = kmem_alloc(sizeof (*vans) * width,
 		    KM_SLEEP);
 		for (int i = 0; i < width; i++) {
@@ -1086,28 +1152,39 @@ vdev_anyraid_io_start(zio_t *zio)
 	}
 	rw_exit(&var->vd_lock);
 
-	ASSERT3U(zio->io_offset % rsize + zio->io_size, <=,
+	ASSERT3U(zio->io_offset % tsize + zio->io_size, <=,
 	    var->vd_tile_size);
-
-	if (var->vd_nparity > 0) {
-		vdev_anyraid_mirror_start(zio, tile);
-		zio_execute(zio);
-		return;
+	
+	switch (var->vd_parity_type) {
+		case VAP_MIRROR:
+			if (var->vd_nparity > 0) {
+				vdev_anyraid_mirror_start(zio, tile);
+				zio_execute(zio);
+				return;
+			}
+			break;
+		case VAP_RAIDZ:
+			vdev_anyraid_raidz_start(zio, tile);
+			zio_execute(zio);
+			return;
+		default:
+			panic("Invalid parid type: %d", var->vd_parity_type);
 	}
+
 
 	anyraid_tile_node_t *atn = list_head(&tile->at_list);
 	vdev_t *cvd = vd->vdev_child[atn->atn_disk];
-	uint64_t child_offset = atn->atn_offset * rsize +
-	    zio->io_offset % rsize;
+	uint64_t child_offset = atn->atn_offset * tsize +
+	    zio->io_offset % tsize;
 	child_offset += VDEV_ANYRAID_START_OFFSET(vd->vdev_ashift);
 
-	anyraid_map_t *mm = kmem_alloc(sizeof (*mm), KM_SLEEP);
-	mm->am_abd = abd_get_offset(zio->io_abd, 0);
-	zio->io_vsd = mm;
+	anyraid_map_t *am = kmem_alloc(sizeof (*am), KM_SLEEP);
+	am->am_abd = abd_get_offset(zio->io_abd, 0);
+	zio->io_vsd = am;
 	zio->io_vsd_ops = &vdev_anyraid_vsd_ops;
 
 	zio_t *cio = zio_vdev_child_io(zio, NULL, cvd, child_offset,
-	    mm->am_abd, zio->io_size, zio->io_type, zio->io_priority, 0,
+	    am->am_abd, zio->io_size, zio->io_type, zio->io_priority, 0,
 	    vdev_anyraid_child_done, zio);
 	zio_nowait(cio);
 
@@ -1120,8 +1197,19 @@ vdev_anyraid_io_done(zio_t *zio)
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
 
-	if (var->vd_nparity > 0)
-		vdev_mirror_io_done(zio);
+	switch (var->vd_parity_type) {
+		case VAP_MIRROR:
+			if (var->vd_nparity > 0) {
+				vdev_mirror_io_done(zio);
+				return;
+			}
+			break;
+		case VAP_RAIDZ:
+			vdev_raidz_io_done(zio);
+			return;
+		default:
+			panic("Invalid parid type: %d", var->vd_parity_type);
+	}
 }
 
 static void
@@ -1153,7 +1241,8 @@ vdev_anyraid_need_resilver(vdev_t *vd, const dva_t *dva, size_t psize,
 	if (!vdev_dtl_contains(vd, DTL_PARTIAL, phys_birth, 1))
 		return (B_FALSE);
 
-	uint64_t start_tile_id = DVA_GET_OFFSET(dva) / var->vd_tile_size;
+	uint64_t tsize = var->vd_tile_size * var->vd_ndata;
+	uint64_t start_tile_id = DVA_GET_OFFSET(dva) / tsize;
 	anyraid_tile_t search;
 	search.at_tile_id = start_tile_id;
 	avl_index_t where;
@@ -1188,10 +1277,10 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 	vdev_t *anyraidvd = cvd->vdev_parent;
 	ASSERT3P(anyraidvd->vdev_ops, ==, &vdev_anyraid_ops);
 	vdev_anyraid_t *var = anyraidvd->vdev_tsd;
-	uint64_t rsize = var->vd_tile_size;
+	uint64_t tsize = var->vd_tile_size * var->vd_ndata;
 
-	uint64_t start_tile_id = logical_rs->rs_start / rsize;
-	ASSERT3U(start_tile_id, ==, (logical_rs->rs_end - 1) / rsize);
+	uint64_t start_tile_id = logical_rs->rs_start / tsize;
+	ASSERT3U(start_tile_id, ==, (logical_rs->rs_end - 1) / tsize);
 	anyraid_tile_t search;
 	search.at_tile_id = start_tile_id;
 	avl_index_t where;
@@ -1214,8 +1303,8 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 		return;
 	}
 
-	uint64_t child_offset = atn->atn_offset * rsize +
-	    logical_rs->rs_start % rsize;
+	uint64_t child_offset = atn->atn_offset * tsize +
+	    logical_rs->rs_start % tsize;
 	child_offset += VDEV_ANYRAID_START_OFFSET(anyraidvd->vdev_ashift);
 	uint64_t size = logical_rs->rs_end - logical_rs->rs_start;
 
@@ -1507,6 +1596,7 @@ vdev_anyraid_mapped(vdev_t *vd, uint64_t offset)
 }
 
 /*
+ * TODO: Look into this for raidz parity
  * Return the maximum asize for a rebuild zio in the provided range
  * given the following constraints.  An anyraid chunk may not:
  *
