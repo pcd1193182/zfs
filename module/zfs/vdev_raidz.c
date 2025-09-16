@@ -2661,8 +2661,6 @@ vdev_raidz_io_start_impl(zio_t *zio, raidz_map_t *rm, uint64_t logical_width,
 		ASSERT(zio->io_type == ZIO_TYPE_READ);
 		vdev_raidz_io_start_read(zio, rm);
 	}
-
-	zio_execute(zio);
 }
 
 /*
@@ -2746,6 +2744,8 @@ vdev_raidz_io_start(zio_t *zio)
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
 	vdev_raidz_io_start_impl(zio, rm, logical_width,
 	    vdrz->vd_physical_width);
+
+	zio_execute(zio);
 }
 
 /*
