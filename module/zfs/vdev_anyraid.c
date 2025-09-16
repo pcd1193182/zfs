@@ -1039,7 +1039,7 @@ vdev_anraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 	for (uint64_t c = 0; c < rr->rr_scols; c++) {
 		raidz_col_t *rc = &rr->rr_col[c];
 		anyraid_tile_node_t *arn = mapping[rc->rc_devidx];
-		uint64_t coff = arn->atn_offset;
+		uint64_t coff = arn->atn_offset * var->vd_tile_size;
 		uint64_t col = f + c;
 		if (col >= var->vd_ndata) {
 			col -= var->vd_ndata;
