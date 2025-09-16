@@ -1033,13 +1033,14 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 		mapping[i] = arn;
 		arn = list_next(&tile->at_list, arn);
 	}
-	uint64_t b = zio->io_offset >> vd->vdev_ashift;
+	uint64_t b = (zio->io_offset % var->vd_tile_size) >> vd->vdev_ashift;
 	uint64_t f = b % var->vd_ndata;
 	ASSERT3U(rr->rr_scols, <=, var->vd_ndata + var->vd_nparity);
 	for (uint64_t c = 0; c < rr->rr_scols; c++) {
 		raidz_col_t *rc = &rr->rr_col[c];
 		anyraid_tile_node_t *arn = mapping[rc->rc_devidx];
-		uint64_t coff = arn->atn_offset * var->vd_tile_size;
+		uint64_t coff = arn->atn_offset * var->vd_tile_size +
+		    ((b / var->vd_ndata) << vd->vdev_ashift);
 		uint64_t col = f + c;
 		if (col >= var->vd_ndata) {
 			col -= var->vd_ndata;
