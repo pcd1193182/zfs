@@ -1020,7 +1020,7 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile)
  * based on the anyraid tile mapping.
  */
 static void
-vdev_anraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
+vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
     anyraid_tile_t *tile)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
@@ -1047,7 +1047,7 @@ vdev_anraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 		}
 		rc->rc_offset = coff;
 		rc->rc_devidx = arn->atn_disk;
-		zfs_dbgmsg("For zio %px setting col %d to %u / %llu", zio, (int)c, arn->atn_disk, (u_longlong_t)coff);
+		zfs_dbgmsg("For zio %px (%llu %llu) setting col %d to %u / %llu: %u %llu", zio, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, arn->atn_disk, (u_longlong_t)coff, arn->atn_offset, (u_longlong_t)(arn->atn_offset * var->vd_tile_size));
 	}
 	kmem_free(mapping, sizeof (*mapping) * (var->vd_ndata +
 	    var->vd_nparity));
@@ -1064,7 +1064,7 @@ vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile)
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	raidz_map_t *rm = vdev_raidz_map_alloc(zio, vd->vdev_ashift,
 	    var->vd_ndata, var->vd_nparity);
-	vdev_anraid_raidz_map_translate(vd, zio, rm, tile);
+	vdev_anyraid_raidz_map_translate(vd, zio, rm, tile);
 	
 	zio->io_vsd = rm;
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
@@ -1144,6 +1144,7 @@ vdev_anyraid_io_start(zio_t *zio)
 			atn->atn_offset =
 			    vans[i]->van_next_offset++;
 			list_insert_tail(&tile->at_list, atn);
+			zfs_dbgmsg("Entry %d: %u %u", i, atn->atn_disk, atn->atn_offset);
 		}
 		for (int i = 0; i < width; i++)
 			avl_add(&var->vd_children_tree, vans[i]);
