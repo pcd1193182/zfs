@@ -1047,6 +1047,7 @@ vdev_anraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 		}
 		rc->rc_offset = coff;
 		rc->rc_devidx = arn->atn_disk;
+		zfs_dbgmsg("For zio %px setting col %d to %u / %llu", zio, (int)c, arn->atn_disk, (u_longlong_t)coff);
 	}
 	kmem_free(mapping, sizeof (*mapping) * (var->vd_ndata +
 	    var->vd_nparity));
@@ -1341,6 +1342,7 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			    tile_start + (start_row << ashift);
 			physical_rs->rs_end =
 			    tile_start + (end_row << ashift);
+			zfs_dbgmsg("xlate %llu %llu -> %llu %llu -> %llu %llu -> %llu %llu", (u_longlong_t)logical_rs->rs_start, (u_longlong_t)logical_rs->rs_end, (u_longlong_t)b_start, (u_longlong_t)b_end, (u_longlong_t)start_row, (u_longlong_t)end_row, (u_longlong_t)physical_rs->rs_start, (u_longlong_t)physical_rs->rs_end);
 			break;
 		}
 		default:

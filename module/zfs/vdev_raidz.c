@@ -2424,6 +2424,7 @@ vdev_raidz_io_verify(zio_t *zio, raidz_map_t *rm, raidz_row_t *rr, int col)
 		 */
 		return;
 	}
+	zfs_dbgmsg("raidz io verify for %px: %llu %llu -> %llu %llu, %llu", zio, (u_longlong_t)logical_rs.rs_start, (u_longlong_t)logical_rs.rs_end, (u_longlong_t)physical_rs.rs_start, (u_longlong_t)physical_rs.rs_end, (u_longlong_t)rc->rc_offset);
 	ASSERT3U(rc->rc_offset, ==, physical_rs.rs_start);
 	ASSERT3U(rc->rc_offset, <, physical_rs.rs_end);
 	/*
