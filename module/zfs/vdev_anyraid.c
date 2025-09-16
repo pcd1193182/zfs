@@ -1323,6 +1323,7 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 		}
 		case VAP_RAIDZ:
 		{
+			// The problem here is that the tgt_col shouldn't just be the vdev_id, we need to get the idx of this specific atn in the tile? Or something like that
 			uint64_t width = var->vd_nparity + var->vd_ndata;
 			uint64_t tgt_col = cvd->vdev_id;
 			uint64_t ashift = anyraidvd->vdev_ashift;
@@ -1669,7 +1670,7 @@ vdev_ops_t vdev_anyraid_ops = {
 	.vdev_op_open = vdev_anyraid_open,
 	.vdev_op_close = vdev_anyraid_close,
 	.vdev_op_psize_to_asize = vdev_default_asize,
-	.vdev_op_asize_to_psize = vdev_default_asize,
+	.vdev_op_asize_to_psize = vdev_default_asize, // TODO
 	.vdev_op_min_asize = vdev_anyraid_min_asize,
 	.vdev_op_min_attach_size = vdev_anyraid_min_attach_size,
 	.vdev_op_min_alloc = NULL,
