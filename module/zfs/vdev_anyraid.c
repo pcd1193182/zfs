@@ -1279,10 +1279,11 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 	vdev_t *anyraidvd = cvd->vdev_parent;
 	ASSERT3P(anyraidvd->vdev_ops, ==, &vdev_anyraid_ops);
 	vdev_anyraid_t *var = anyraidvd->vdev_tsd;
-	uint64_t tsize = var->vd_tile_size * var->vd_ndata;
+	uint64_t ptsize = var->vd_tile_size;
+	uint64_t ltsize = ptsize * var->vd_ndata;
 
-	uint64_t start_tile_id = logical_rs->rs_start / tsize;
-	ASSERT3U(start_tile_id, ==, (logical_rs->rs_end - 1) / tsize);
+	uint64_t start_tile_id = logical_rs->rs_start / ltsize;
+	ASSERT3U(start_tile_id, ==, (logical_rs->rs_end - 1) / ltsize);
 	anyraid_tile_t search;
 	search.at_tile_id = start_tile_id;
 	avl_index_t where;
@@ -1308,8 +1309,8 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 	switch (var->vd_parity_type) {
 		case VAP_MIRROR:
 		{
-			uint64_t child_offset = atn->atn_offset * tsize +
-			    logical_rs->rs_start % tsize;
+			uint64_t child_offset = atn->atn_offset * ptsize +
+			    logical_rs->rs_start % ptsize;
 			child_offset +=
 			    VDEV_ANYRAID_START_OFFSET(anyraidvd->vdev_ashift);
 			uint64_t size = logical_rs->rs_end -
@@ -1324,12 +1325,13 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			uint64_t width = var->vd_nparity + var->vd_ndata;
 			uint64_t tgt_col = cvd->vdev_id;
 			uint64_t ashift = anyraidvd->vdev_ashift;
-			uint64_t tile_start = atn->atn_offset * tsize;
+			uint64_t tile_start = atn->atn_offset *
+			    ptsize;
 
 			uint64_t b_start =
-			    (logical_rs->rs_start % tsize) >> ashift;
+			    (logical_rs->rs_start % ptsize) >> ashift;
 			uint64_t b_end =
-			    (logical_rs->rs_end % tsize) >> ashift;
+			    (logical_rs->rs_end % ptsize) >> ashift;
 
 			uint64_t start_row = 0;
 			if (b_start > tgt_col) /* avoid underflow */
