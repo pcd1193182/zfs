@@ -1151,6 +1151,7 @@ extern uint64_t bp_get_dsize(spa_t *spa, const blkptr_t *bp);
 extern boolean_t spa_has_dedup(spa_t *spa);
 extern boolean_t spa_has_slogs(spa_t *spa);
 extern boolean_t spa_has_special(spa_t *spa);
+extern boolean_t spa_vdevs_have_special(spa_t *spa);
 extern boolean_t spa_has_embedded_special(spa_t *spa);
 extern boolean_t spa_is_root(spa_t *spa);
 extern boolean_t spa_writeable(spa_t *spa);

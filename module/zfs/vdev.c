@@ -1755,7 +1755,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	}
 	if (vd->vdev_mg->mg_class == spa_normal_class(spa) &&
 	    vd->vdev_ms_count > zfs_embedded_slog_min_ms &&
-	    zfs_embedded_special_enabled) {
+	    zfs_embedded_special_enabled && !spa_vdevs_have_special(spa)) {
 		create_embedded_group(vd, txg, vd->vdev_special_mg, oldc, 1);
 	}
 

@@ -2687,6 +2687,27 @@ spa_has_slogs(spa_t *spa)
 	return (spa->spa_log_class->mc_groups != 0);
 }
 
+/*
+ * This is a pretty gross hack. When deciding whether to create embedded
+ * special groups, we want to know if there is a regular special group, since
+ * the embedded special group takes 1% of your metaslabs. However, when this
+ * happens, we don't have the classes fully set up yet, so we can't use the
+ * usual spa_has_special. Instead, we have to go through the vdevs manually and
+ * check the alloc_bias. That property is set back when the vdev is created, so
+ * it should always be around by the time we're creating metaslab groups.
+ */
+boolean_t
+spa_vdevs_have_special(spa_t *spa)
+{
+	vdev_t *rvd = spa->spa_root_vdev;
+	for (uint64_t i = 0; i < rvd->vdev_children; i++) {
+		vdev_t *vd = rvd->vdev_child[i];
+		if (vd->vdev_alloc_bias == VDEV_BIAS_SPECIAL)
+			return (B_TRUE);
+	}
+	return (B_FALSE);
+}
+
 boolean_t
 spa_has_special(spa_t *spa)
 {
