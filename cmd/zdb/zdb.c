@@ -1768,7 +1768,7 @@ print_vdev_metaslab_header(vdev_t *vd)
 		}
 	}
 
-	(void) printf("\tvdev %10llu\t%s  metaslab shift %4llu",
+	(void) printf("\tvdev %10llu\t  %s metaslab shift %4llu",
 	    (u_longlong_t)vd->vdev_id, bias_str,
 	    (u_longlong_t)vd->vdev_ms_shift);
 
@@ -1786,12 +1786,57 @@ print_vdev_metaslab_header(vdev_t *vd)
 }
 
 static void
-dump_metaslab_groups(spa_t *spa, boolean_t show_special)
+dump_metaslab_class(metaslab_class_t *mc, boolean_t show_id)
+{
+	spa_t *spa = mc->mc_spa;
+	char id[ZFS_MAX_DATASET_NAME_LEN + 16];
+	(void) snprintf(id, ZFS_MAX_DATASET_NAME_LEN + 16, "pool %s",
+	    spa_name(spa));
+	if (!show_id) {
+		size_t len = strlen(id);
+		memset(id, ' ', len);
+	}
+	(void) printf("\t%s\tclass %20s\tfragmentation", id,
+	    metaslab_class_get_name(mc));
+	uint64_t fragmentation = metaslab_class_fragmentation(mc);
+	if (fragmentation == ZFS_FRAG_INVALID)
+		(void) printf("\t%3s\n", "-");
+	else
+		(void) printf("\t%3llu%%\n", (u_longlong_t)fragmentation);
+	dump_histogram(mc->mc_histogram, ZFS_RANGE_TREE_HISTOGRAM_SIZE, 0);
+}
+
+static void
+dump_metaslab_group(metaslab_group_t *mg, boolean_t show_id)
+{
+	vdev_t *vd = mg->mg_vd;
+	metaslab_group_histogram_verify(mg);
+	mg->mg_fragmentation = metaslab_group_fragmentation(mg);
+	char id[32];
+	(void) snprintf(id, 32, "vdev %10llu", (u_longlong_t)vd->vdev_id);
+	if (!show_id) {
+		size_t len = strlen(id);
+		memset(id, ' ', len);
+	}
+	(void) printf("\t%s\tgroup %20s\tmetaslabs%5lu\tfragmentation", id,
+	    metaslab_class_get_name(mg->mg_class),
+	    avl_numnodes(&mg->mg_metaslab_tree));
+	if (mg->mg_fragmentation == ZFS_FRAG_INVALID) {
+		(void) printf("%3s\n", "-");
+	} else {
+		(void) printf("%3llu%%\n", (u_longlong_t)mg->mg_fragmentation);
+	}
+	dump_histogram(mg->mg_histogram, ZFS_RANGE_TREE_HISTOGRAM_SIZE, 0);
+}
+
+static void
+dump_metaslab_groups(spa_t *spa, boolean_t show_special, boolean_t show_log,
+    boolean_t show_embedded)
 {
 	vdev_t *rvd = spa->spa_root_vdev;
 	metaslab_class_t *mc = spa_normal_class(spa);
 	metaslab_class_t *smc = spa_special_class(spa);
-	uint64_t fragmentation;
+	metaslab_class_t *lmc = spa_log_class(spa);
 
 	metaslab_class_histogram_verify(mc);
 
@@ -1799,34 +1844,31 @@ dump_metaslab_groups(spa_t *spa, boolean_t show_special)
 		vdev_t *tvd = rvd->vdev_child[c];
 		metaslab_group_t *mg = tvd->vdev_mg;
 
-		if (mg == NULL || (mg->mg_class != mc &&
-		    (!show_special || mg->mg_class != smc)))
+		if (mg == NULL || !(mg->mg_class == mc ||
+		    (show_special && mg->mg_class == smc) ||
+		    (show_log && mg->mg_class == lmc)))
 			continue;
 
-		metaslab_group_histogram_verify(mg);
-		mg->mg_fragmentation = metaslab_group_fragmentation(mg);
-
-		(void) printf("\tvdev %10llu\t\tmetaslabs%5llu\t\t"
-		    "fragmentation",
-		    (u_longlong_t)tvd->vdev_id,
-		    (u_longlong_t)tvd->vdev_ms_count);
-		if (mg->mg_fragmentation == ZFS_FRAG_INVALID) {
-			(void) printf("%3s\n", "-");
-		} else {
-			(void) printf("%3llu%%\n",
-			    (u_longlong_t)mg->mg_fragmentation);
-		}
-		dump_histogram(mg->mg_histogram,
-		    ZFS_RANGE_TREE_HISTOGRAM_SIZE, 0);
+		dump_metaslab_group(mg, B_TRUE);
+		metaslab_group_t *emg = tvd->vdev_log_mg;
+		if (show_embedded && emg != NULL &&
+		    avl_numnodes(&emg->mg_metaslab_tree))
+			dump_metaslab_group(emg, B_FALSE);
 	}
 
-	(void) printf("\tpool %s\tfragmentation", spa_name(spa));
-	fragmentation = metaslab_class_fragmentation(mc);
-	if (fragmentation == ZFS_FRAG_INVALID)
-		(void) printf("\t%3s\n", "-");
-	else
-		(void) printf("\t%3llu%%\n", (u_longlong_t)fragmentation);
-	dump_histogram(mc->mc_histogram, ZFS_RANGE_TREE_HISTOGRAM_SIZE, 0);
+	dump_metaslab_class(mc, B_TRUE);
+	if (show_log && lmc->mc_groups != 0)
+		dump_metaslab_class(lmc, B_FALSE);
+	if (show_special && smc->mc_groups != 0)
+		dump_metaslab_class(smc, B_FALSE);
+	if (show_embedded) {
+		metaslab_class_t *elmc = spa_embedded_log_class(spa);
+		if (elmc->mc_groups != 0)
+			dump_metaslab_class(elmc, B_FALSE);
+		metaslab_class_t *semc = spa_special_embedded_log_class(spa);
+		if (semc->mc_groups != 0)
+			dump_metaslab_class(semc, B_FALSE);
+	}
 }
 
 static void
@@ -8536,7 +8578,8 @@ dump_zpool(spa_t *spa)
 	if (dump_opt['d'] > 2 || dump_opt['m'])
 		dump_metaslabs(spa);
 	if (dump_opt['M'])
-		dump_metaslab_groups(spa, dump_opt['M'] > 1);
+		dump_metaslab_groups(spa, dump_opt['M'] > 1, dump_opt['M'] > 2,
+		    dump_opt['M'] > 3);
 	if (dump_opt['d'] > 2 || dump_opt['m']) {
 		dump_log_spacemaps(spa);
 		dump_log_spacemap_obsolete_stats(spa);
