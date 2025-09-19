@@ -1177,7 +1177,7 @@ vdev_anyraid_io_start(zio_t *zio)
 			zio_execute(zio);
 			return;
 		default:
-			panic("Invalid parity type: %d", var->vd_parity_type);
+			PANIC("Invalid parity type: %d", var->vd_parity_type);
 	}
 
 
