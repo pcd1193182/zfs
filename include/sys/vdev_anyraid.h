@@ -57,6 +57,7 @@ typedef struct vdev_anyraid {
 	 */
 	uint_t		vd_nparity;
 	uint_t		vd_ndata;
+	uint_t		vd_width;
 	uint64_t	vd_tile_size;
 
 	krwlock_t	vd_lock;

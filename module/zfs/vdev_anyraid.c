@@ -196,6 +196,16 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	var->vd_parity_type = parity_type;
 	var->vd_ndata = ndata;
 	var->vd_nparity = nparity;
+	switch (parity_type) {
+		case VAP_MIRROR:
+			var->vd_width = ndata;
+			break;
+		case VAP_RAIDZ:
+			var->vd_width = ndata + nparity;
+			break;
+		default:
+			PANIC("Invalid parity type %d", parity_type);
+	}
 	rw_init(&var->vd_lock, NULL, RW_DEFAULT, NULL);
 	avl_create(&var->vd_tile_map, anyraid_tile_compare,
 	    sizeof (anyraid_tile_t), offsetof(anyraid_tile_t, at_node));
@@ -754,7 +764,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		for (int c = 0; c < vd->vdev_children; c++) {
 			count += num_tiles[c];
 		}
-		return (count * var->vd_ndata * var->vd_tile_size);
+		return (count * var->vd_width * var->vd_tile_size);
 	}
 
 	/*
@@ -821,7 +831,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	while ((node = avl_destroy_nodes(&t, &cookie)) != NULL)
 		kmem_free(node, sizeof (*node));
 	avl_destroy(&t);
-	return (count * var->vd_ndata * var->vd_tile_size);
+	return (count * var->vd_width * var->vd_tile_size);
 }
 
 static int
@@ -950,7 +960,7 @@ static void
 vdev_anyraid_metaslab_size(vdev_t *vd, uint64_t *shiftp)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	*shiftp = MIN(*shiftp, highbit64(var->vd_tile_size * var->vd_ndata) -
+	*shiftp = MIN(*shiftp, highbit64(var->vd_tile_size * var->vd_width) -
 	    1);
 }
 
@@ -1027,31 +1037,30 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 	ASSERT3U(rm->rm_nrows, ==, 1);
 	raidz_row_t *rr = rm->rm_row[0];
 	anyraid_tile_node_t **mapping = kmem_zalloc(sizeof (*mapping) *
-	    (var->vd_ndata + var->vd_nparity), KM_SLEEP);
+	    var->vd_width, KM_SLEEP);
 	anyraid_tile_node_t *arn = list_head(&tile->at_list);
-	for (int i = 0; i < var->vd_ndata + var->vd_nparity; i++) {
+	for (int i = 0; i < var->vd_width; i++) {
 		mapping[i] = arn;
 		arn = list_next(&tile->at_list, arn);
 	}
 	uint64_t b = (zio->io_offset % var->vd_tile_size) >> vd->vdev_ashift;
-	uint64_t f = b % var->vd_ndata;
-	ASSERT3U(rr->rr_scols, <=, var->vd_ndata + var->vd_nparity);
+	uint64_t f = b % var->vd_width;
+	ASSERT3U(rr->rr_scols, <=, var->vd_width);
 	for (uint64_t c = 0; c < rr->rr_scols; c++) {
 		raidz_col_t *rc = &rr->rr_col[c];
 		anyraid_tile_node_t *arn = mapping[rc->rc_devidx];
 		uint64_t coff = arn->atn_offset * var->vd_tile_size +
-		    ((b / var->vd_ndata) << vd->vdev_ashift);
+		    ((b / var->vd_width) << vd->vdev_ashift);
 		uint64_t col = f + c;
-		if (col >= var->vd_ndata) {
-			col -= var->vd_ndata;
+		if (col >= var->vd_width) {
+			col -= var->vd_width;
 			coff += 1ULL << vd->vdev_ashift;
 		}
 		rc->rc_offset = coff;
 		rc->rc_devidx = arn->atn_disk;
 		zfs_dbgmsg("For zio %px (%llu %llu) setting col %d to %u / %llu: %u %llu", zio, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, arn->atn_disk, (u_longlong_t)coff, arn->atn_offset, (u_longlong_t)(arn->atn_offset * var->vd_tile_size));
 	}
-	kmem_free(mapping, sizeof (*mapping) * (var->vd_ndata +
-	    var->vd_nparity));
+	kmem_free(mapping, sizeof (*mapping) * var->vd_width);
 }
 
 /*
@@ -1064,13 +1073,12 @@ vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile)
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	raidz_map_t *rm = vdev_raidz_map_alloc(zio, vd->vdev_ashift,
-	    var->vd_ndata, var->vd_nparity);
+	    var->vd_width, var->vd_nparity);
 	vdev_anyraid_raidz_map_translate(vd, zio, rm, tile);
 	
 	zio->io_vsd = rm;
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
-	vdev_raidz_io_start_impl(zio, rm, var->vd_ndata,
-	    var->vd_ndata);
+	vdev_raidz_io_start_impl(zio, rm, var->vd_width, var->vd_width);
 }
 
 typedef struct anyraid_map {
@@ -1102,7 +1110,7 @@ vdev_anyraid_io_start(zio_t *zio)
 {
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	uint64_t tsize = var->vd_tile_size * var->vd_ndata;
+	uint64_t tsize = var->vd_tile_size * var->vd_width;
 
 	uint64_t start_tile_id = zio->io_offset / tsize;
 	anyraid_tile_t search;
@@ -1244,7 +1252,7 @@ vdev_anyraid_need_resilver(vdev_t *vd, const dva_t *dva, size_t psize,
 	if (!vdev_dtl_contains(vd, DTL_PARTIAL, phys_birth, 1))
 		return (B_FALSE);
 
-	uint64_t tsize = var->vd_tile_size * var->vd_ndata;
+	uint64_t tsize = var->vd_tile_size * var->vd_width;
 	uint64_t start_tile_id = DVA_GET_OFFSET(dva) / tsize;
 	anyraid_tile_t search;
 	search.at_tile_id = start_tile_id;
@@ -1281,7 +1289,7 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 	ASSERT3P(anyraidvd->vdev_ops, ==, &vdev_anyraid_ops);
 	vdev_anyraid_t *var = anyraidvd->vdev_tsd;
 	uint64_t ptsize = var->vd_tile_size;
-	uint64_t ltsize = ptsize * var->vd_ndata;
+	uint64_t ltsize = ptsize * var->vd_width;
 
 	uint64_t start_tile_id = logical_rs->rs_start / ltsize;
 	ASSERT3U(start_tile_id, ==, (logical_rs->rs_end - 1) / ltsize);
@@ -1297,8 +1305,9 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 		physical_rs->rs_start = physical_rs->rs_end = 0;
 		return;
 	}
+	uint64_t idx = 0;
 	anyraid_tile_node_t *atn = list_head(&tile->at_list);
-	for (; atn != NULL; atn = list_next(&tile->at_list, atn))
+	for (; atn != NULL; atn = list_next(&tile->at_list, atn), idx++)
 		if (anyraidvd->vdev_child[atn->atn_disk] == cvd)
 			break;
 	// The tile exists, but isn't stored on this child
@@ -1324,16 +1333,16 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 		case VAP_RAIDZ:
 		{
 			// The problem here is that the tgt_col shouldn't just be the vdev_id, we need to get the idx of this specific atn in the tile? Or something like that
-			uint64_t width = var->vd_nparity + var->vd_ndata;
-			uint64_t tgt_col = cvd->vdev_id;
+			uint64_t width = var->vd_width;
+			uint64_t tgt_col = idx;
 			uint64_t ashift = anyraidvd->vdev_ashift;
 			uint64_t tile_start = atn->atn_offset *
 			    ptsize;
 
 			uint64_t b_start =
-			    (logical_rs->rs_start % ptsize) >> ashift;
+			    (logical_rs->rs_start % ltsize) >> ashift;
 			uint64_t b_end =
-			    (logical_rs->rs_end % ptsize) >> ashift;
+			    (logical_rs->rs_end % ltsize) >> ashift;
 
 			uint64_t start_row = 0;
 			if (b_start > tgt_col) /* avoid underflow */
@@ -1664,13 +1673,72 @@ vdev_anyraid_rebuild_asize(vdev_t *vd, uint64_t start, uint64_t asize,
 	return (MIN(asize, vdev_psize_to_asize(vd, psize)));
 }
 
+static uint64_t
+vdev_anyraid_asize(vdev_t *vd, uint64_t psize, uint64_t txg)
+{
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	ASSERT3P(vd->vdev_ops, ==, &vdev_anyraid_ops);
+	if (var->vd_parity_type == VAP_MIRROR)
+		return (vdev_default_asize(vd, psize, txg));
+
+	uint64_t ashift = vd->vdev_top->vdev_ashift;
+	uint64_t nparity = var->vd_nparity;
+	uint64_t cols = var->vd_width;
+
+	uint64_t asize = ((psize - 1) >> ashift) + 1;
+	asize += nparity * ((asize + cols - nparity - 1) / (cols - nparity));
+	asize = roundup(asize, nparity + 1) << ashift;
+
+#ifdef ZFS_DEBUG
+	uint64_t asize_new = ((psize - 1) >> ashift) + 1;
+	uint64_t ncols_new = cols;
+	asize_new += nparity * ((asize_new + ncols_new - nparity - 1) /
+	    (ncols_new - nparity));
+	asize_new = roundup(asize_new, nparity + 1) << ashift;
+	VERIFY3U(asize_new, <=, asize);
+#endif
+
+	return (asize);
+
+
+}
+
+static uint64_t
+vdev_anyraid_psize(vdev_t *vd, uint64_t asize, uint64_t txg)
+{
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	ASSERT3P(vd->vdev_ops, ==, &vdev_anyraid_ops);
+	if (var->vd_parity_type == VAP_MIRROR)
+		return (vdev_default_psize(vd, asize, txg));
+
+	uint64_t ashift = vd->vdev_top->vdev_ashift;
+	uint64_t nparity = var->vd_nparity;
+	uint64_t cols = var->vd_width;
+
+	ASSERT0(asize % (1 << ashift));
+
+	uint64_t psize = (asize >> ashift);
+	/*
+	 * If the roundup to nparity + 1 caused us to spill into a new row, we
+	 * need to ignore that row entirely (since it can't store data or
+	 * parity).
+	 */
+	uint64_t rows = psize / cols;
+	psize = psize - (rows * cols) <= nparity ? rows * cols : psize;
+	/*  Subtract out parity sectors for each row storing data. */
+	psize -= nparity * DIV_ROUND_UP(psize, cols);
+	psize <<= ashift;
+
+	return (psize);
+}
+
 vdev_ops_t vdev_anyraid_ops = {
 	.vdev_op_init = vdev_anyraid_init,
 	.vdev_op_fini = vdev_anyraid_fini,
 	.vdev_op_open = vdev_anyraid_open,
 	.vdev_op_close = vdev_anyraid_close,
-	.vdev_op_psize_to_asize = vdev_default_asize,
-	.vdev_op_asize_to_psize = vdev_default_asize, // TODO
+	.vdev_op_psize_to_asize = vdev_anyraid_asize,
+	.vdev_op_asize_to_psize = vdev_anyraid_psize, // TODO
 	.vdev_op_min_asize = vdev_anyraid_min_asize,
 	.vdev_op_min_attach_size = vdev_anyraid_min_attach_size,
 	.vdev_op_min_alloc = NULL,
