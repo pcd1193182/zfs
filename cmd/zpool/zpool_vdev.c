@@ -1415,7 +1415,7 @@ anyraidz_config_by_type(nvlist_t *nv, const char *type)
 	/* Store the basic anyraidz configuration. */
 	fnvlist_add_uint8(nv, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE, VAP_RAIDZ);
 	fnvlist_add_uint64(nv, ZPOOL_CONFIG_NPARITY, nparity);
-	fnvlist_add_uint32(nv, ZPOOL_CONFIG_ANYRAID_NDATA, ndata);
+	fnvlist_add_uint8(nv, ZPOOL_CONFIG_ANYRAID_NDATA, (uint8_t)ndata);
 
 	return (0);
 }

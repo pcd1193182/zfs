@@ -4635,7 +4635,7 @@ zpool_vdev_name(libzfs_handle_t *hdl, zpool_handle_t *zhp, nvlist_t *nv,
 			value = fnvlist_lookup_uint64(nv, ZPOOL_CONFIG_NPARITY);
 			if (fnvlist_lookup_uint8(nv,
 			    ZPOOL_CONFIG_ANYRAID_PARITY_TYPE) == VAP_RAIDZ) {
-				uint32_t ndata = fnvlist_lookup_uint32(nv,
+				uint8_t ndata = fnvlist_lookup_uint8(nv,
 				    ZPOOL_CONFIG_ANYRAID_NDATA);
 				(void) snprintf(buf, sizeof (buf),
 				    "%sz%llu:%u", path,

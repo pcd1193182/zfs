@@ -181,8 +181,8 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	if (nvlist_lookup_uint8(nv, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE,
 	    (uint8_t *)&parity_type) != 0)
 		return (SET_ERROR(EINVAL));
-	uint32_t ndata = 1;
-	if (nvlist_lookup_uint32(nv, ZPOOL_CONFIG_ANYRAID_NDATA,
+	uint8_t ndata = 1;
+	if (nvlist_lookup_uint8(nv, ZPOOL_CONFIG_ANYRAID_NDATA,
 	    &ndata) != 0 && parity_type == VAP_RAIDZ) {
 		return (SET_ERROR(EINVAL));
 	}
@@ -257,6 +257,8 @@ vdev_anyraid_config_generate(vdev_t *vd, nvlist_t *nv)
 	fnvlist_add_uint64(nv, ZPOOL_CONFIG_NPARITY, var->vd_nparity);
 	fnvlist_add_uint8(nv, ZPOOL_CONFIG_ANYRAID_PARITY_TYPE,
 	    (uint8_t)var->vd_parity_type);
+	fnvlist_add_uint8(nv, ZPOOL_CONFIG_ANYRAID_NDATA,
+	    (uint8_t)var->vd_ndata);
 }
 
 /*
