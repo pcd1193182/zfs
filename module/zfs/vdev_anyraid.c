@@ -1161,8 +1161,8 @@ vdev_anyraid_io_start(zio_t *zio)
 	}
 	rw_exit(&var->vd_lock);
 
-	ASSERT3U(zio->io_offset % tsize + zio->io_size, <=,
-	    var->vd_tile_size);
+	uint64_t end = zio->io_offset % tsize + zio->io_size;
+	ASSERT3U(end, <=, var->vd_tile_size);
 	
 	switch (var->vd_parity_type) {
 		case VAP_MIRROR:
@@ -1177,6 +1177,7 @@ vdev_anyraid_io_start(zio_t *zio)
 			zio_execute(zio);
 			return;
 		default:
+			ASSERT0(1);
 			PANIC("Invalid parity type: %d", var->vd_parity_type);
 	}
 
