@@ -291,7 +291,7 @@ create_tile_entry(vdev_anyraid_t *var, anyraid_map_loc_entry_t *amle,
 	atn->atn_disk = disk;
 	atn->atn_offset = offset;
 	list_insert_tail(&at->at_list, atn);
-	*pat_cnt = (*pat_cnt + 1) % (var->vd_nparity + 1);
+	*pat_cnt = (*pat_cnt + 1) % (var->vd_nparity + var->vd_ndata);
 
 	vdev_anyraid_node_t *van = var->vd_children[disk];
 	avl_remove(&var->vd_children_tree, van);
