@@ -766,7 +766,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		for (int c = 0; c < vd->vdev_children; c++) {
 			count += num_tiles[c];
 		}
-		return (count * var->vd_width * var->vd_tile_size);
+		return (count * var->vd_tile_size);
 	}
 
 	/*
@@ -787,7 +787,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		avl_add(&t, rc);
 	}
 
-	uint32_t map_width = var->vd_nparity + 1;
+	uint32_t map_width = var->vd_nparity + var->vd_ndata;
 	uint64_t count = avl_numnodes(&var->vd_tile_map);
 	struct tile_count **cur = kmem_alloc(sizeof (*cur) * map_width,
 	    KM_SLEEP);
