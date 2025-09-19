@@ -1040,8 +1040,10 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 	raidz_row_t *rr = rm->rm_row[0];
 	anyraid_tile_node_t **mapping = kmem_zalloc(sizeof (*mapping) *
 	    var->vd_width, KM_SLEEP);
+	ASSERT(tile);
 	anyraid_tile_node_t *arn = list_head(&tile->at_list);
 	for (int i = 0; i < var->vd_width; i++) {
+		ASSERT(arn);
 		mapping[i] = arn;
 		arn = list_next(&tile->at_list, arn);
 	}
