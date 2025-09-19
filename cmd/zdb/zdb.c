@@ -1850,10 +1850,14 @@ dump_metaslab_groups(spa_t *spa, boolean_t show_special, boolean_t show_log,
 			continue;
 
 		dump_metaslab_group(mg, B_TRUE);
-		metaslab_group_t *emg = tvd->vdev_log_mg;
-		if (show_embedded && emg != NULL &&
-		    avl_numnodes(&emg->mg_metaslab_tree))
-			dump_metaslab_group(emg, B_FALSE);
+		metaslab_group_t *lmg = tvd->vdev_log_mg;
+		if (show_embedded && lmg != NULL &&
+		    avl_numnodes(&lmg->mg_metaslab_tree))
+			dump_metaslab_group(lmg, B_FALSE);
+		metaslab_group_t *smg = tvd->vdev_special_mg;
+		if (show_embedded && smg != NULL &&
+		    avl_numnodes(&smg->mg_metaslab_tree))
+			dump_metaslab_group(smg, B_FALSE);
 	}
 
 	dump_metaslab_class(mc, B_TRUE);
@@ -1868,6 +1872,9 @@ dump_metaslab_groups(spa_t *spa, boolean_t show_special, boolean_t show_log,
 		metaslab_class_t *semc = spa_special_embedded_log_class(spa);
 		if (semc->mc_groups != 0)
 			dump_metaslab_class(semc, B_FALSE);
+		metaslab_class_t *esmc = spa_embedded_special_class(spa);
+		if (esmc->mc_groups != 0)
+			dump_metaslab_class(esmc, B_FALSE);
 	}
 }
 
