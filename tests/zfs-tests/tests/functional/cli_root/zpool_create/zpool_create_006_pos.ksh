@@ -141,6 +141,7 @@ set -A forced_args \
 		draid2 $vdev5 $vdev6 $vdev7 $vdev8 spare $vdev9" \
 	"anymirror0 $vdev0 anymirror $vdev1 $vdev2" \
 	"anymirror1 $vdev0 $vdev1 anymirror2 $vdev2 $vdev3 $vdev4" \
+	"anymirror2 $vdev0 $vdev1 $vdev2 $vdev3 anymirror2 $vdev4 $vdev5 $vdev6" \
 	"anymirror3 $vdev0 $vdev1 $vdev2 $vdev3 anymirror0 $vdev4" \
 	"draid $vdev0 $vdev1 $vdev2 $vdev3 \
 		draid2 $vdev4 $vdev5 $vdev6 $vdev7 $vdev8" \
