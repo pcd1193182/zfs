@@ -1054,7 +1054,8 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 		uint64_t tile_off = rc->rc_offset % var->vd_tile_size;
 		uint64_t disk_off = tile_off +
 		    arn->atn_offset * var->vd_tile_size;
-		rc->rc_offset = disk_off;
+		rc->rc_offset = VDEV_ANYRAID_TOTAL_MAP_SIZE(vd->vdev_ashift) +
+		    disk_off;
 		rc->rc_devidx = arn->atn_disk;
 		zfs_dbgmsg("For zio %px (%d %llu %llu) setting col %d (%d) to %u / %llu: %u %llu", zio, zio->io_type, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, rc->rc_devidx, arn->atn_disk, (u_longlong_t)disk_off, arn->atn_offset, (u_longlong_t)(arn->atn_offset * var->vd_tile_size));
 	}
@@ -1335,8 +1336,8 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			uint64_t width = var->vd_width;
 			uint64_t tgt_col = idx;
 			uint64_t ashift = anyraidvd->vdev_ashift;
-			uint64_t tile_start = atn->atn_offset *
-			    ptsize;
+			uint64_t tile_start = VDEV_ANYRAID_TOTAL_MAP_SIZE(
+			    anyraidvd->vdev_ashift) + atn->atn_offset * ptsize;
 
 			uint64_t b_start =
 			    (logical_rs->rs_start % ltsize) >> ashift;
