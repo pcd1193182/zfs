@@ -1056,7 +1056,7 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 		    arn->atn_offset * var->vd_tile_size;
 		rc->rc_offset = disk_off;
 		rc->rc_devidx = arn->atn_disk;
-		zfs_dbgmsg("For zio %px (%llu %llu) setting col %d (%d) to %u / %llu: %u %llu", zio, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, rc->rc_devidx, arn->atn_disk, (u_longlong_t)disk_off, arn->atn_offset, (u_longlong_t)(arn->atn_offset * var->vd_tile_size));
+		zfs_dbgmsg("For zio %px (%d %llu %llu) setting col %d (%d) to %u / %llu: %u %llu", zio, zio->io_type, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, rc->rc_devidx, arn->atn_disk, (u_longlong_t)disk_off, arn->atn_offset, (u_longlong_t)(arn->atn_offset * var->vd_tile_size));
 	}
 	kmem_free(mapping, sizeof (*mapping) * var->vd_width);
 }
