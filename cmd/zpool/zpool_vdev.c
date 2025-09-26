@@ -530,7 +530,8 @@ get_replication(nvlist_t *nvroot, boolean_t fatal)
 
 			if (strcmp(type, VDEV_TYPE_RAIDZ) == 0 ||
 			    strcmp(type, VDEV_TYPE_DRAID) == 0 ||
-			    strcmp(type, VDEV_TYPE_ANYMIRROR) == 0) {
+			    strcmp(type, VDEV_TYPE_ANYMIRROR) == 0 ||
+			    strcmp(type, VDEV_TYPE_ANYRAIDZ) == 0) {
 				verify(nvlist_lookup_uint64(nv,
 				    ZPOOL_CONFIG_NPARITY,
 				    &rep.zprl_parity) == 0);
