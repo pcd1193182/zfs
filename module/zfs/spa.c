@@ -7306,7 +7306,7 @@ spa_create(const char *pool, nvlist_t *nvroot, nvlist_t *props,
 		spa_feature_incr(spa, SPA_FEATURE_DRAID, tx);
 
 	for (uint64_t i = 0; i < rvd->vdev_children; i++)
-		if (rvd->vdev_child[i]->vdev_ops == &vdev_anyraid_ops)
+		if (rvd->vdev_child[i]->vdev_ops == &vdev_anymirror_ops)
 			spa_feature_incr(spa, SPA_FEATURE_ANYRAID, tx);
 
 	dmu_tx_commit(tx);
@@ -8059,7 +8059,7 @@ spa_vdev_add(spa_t *spa, nvlist_t *nvroot, boolean_t check_ashift)
 	}
 
 	for (uint64_t i = 0; i < vd->vdev_children; i++)
-		if (vd->vdev_child[i]->vdev_ops == &vdev_anyraid_ops)
+		if (vd->vdev_child[i]->vdev_ops == &vdev_anymirror_ops)
 			nanyraid++;
 	if (nanyraid > 0) {
 		dmu_tx_t *tx;
@@ -8237,7 +8237,7 @@ spa_vdev_attach(spa_t *spa, uint64_t guid, nvlist_t *nvroot, int replacing,
 		return (spa_vdev_exit(spa, NULL, txg, ENODEV));
 
 	boolean_t raidz = oldvd->vdev_ops == &vdev_raidz_ops;
-	boolean_t anyraid = oldvd->vdev_ops == &vdev_anyraid_ops;
+	boolean_t anyraid = oldvd->vdev_ops == &vdev_anymirror_ops;
 
 	if (raidz) {
 		if (!spa_feature_is_enabled(spa, SPA_FEATURE_RAIDZ_EXPANSION))
@@ -8302,7 +8302,7 @@ spa_vdev_attach(spa_t *spa, uint64_t guid, nvlist_t *nvroot, int replacing,
 
 		if (tvd->vdev_ops != &vdev_mirror_ops &&
 		    tvd->vdev_ops != &vdev_root_ops &&
-		    tvd->vdev_ops != &vdev_anyraid_ops &&
+		    tvd->vdev_ops != &vdev_anymirror_ops &&
 		    tvd->vdev_ops != &vdev_draid_ops) {
 			return (spa_vdev_exit(spa, newrootvd, txg, ENOTSUP));
 		}
@@ -8320,7 +8320,7 @@ spa_vdev_attach(spa_t *spa, uint64_t guid, nvlist_t *nvroot, int replacing,
 			return (spa_vdev_exit(spa, newrootvd, txg, ENOTSUP));
 
 		if (anyraid)
-			pvops = &vdev_anyraid_ops;
+			pvops = &vdev_anymirror_ops;
 		else
 			pvops = &vdev_mirror_ops;
 	} else {

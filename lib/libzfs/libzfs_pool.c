@@ -3238,6 +3238,8 @@ zpool_vdev_is_interior(const char *name)
 	    strncmp(name, VDEV_TYPE_ROOT, strlen(VDEV_TYPE_ROOT)) == 0 ||
 	    strncmp(name, VDEV_TYPE_MIRROR, strlen(VDEV_TYPE_MIRROR)) == 0 ||
 	    strncmp(name, VDEV_TYPE_ANYMIRROR, strlen(VDEV_TYPE_ANYMIRROR)) ==
+	    0 ||
+	    strncmp(name, VDEV_TYPE_ANYRAIDZ, strlen(VDEV_TYPE_ANYRAIDZ)) ==
 	    0)
 		return (B_TRUE);
 

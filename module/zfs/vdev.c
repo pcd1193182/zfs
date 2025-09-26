@@ -279,7 +279,7 @@ static vdev_ops_t *const vdev_ops_table[] = {
 	&vdev_missing_ops,
 	&vdev_hole_ops,
 	&vdev_indirect_ops,
-	&vdev_anyraid_ops,
+	&vdev_anymirror_ops,
 	NULL
 };
 
@@ -924,7 +924,7 @@ vdev_alloc(spa_t *spa, vdev_t **vdp, nvlist_t *nv, vdev_t *parent, uint_t id,
 		}
 
 		/* spa_vdev_add() expects feature to be enabled */
-		if (ops == &vdev_anyraid_ops &&
+		if (ops == &vdev_anymirror_ops &&
 		    spa->spa_load_state != SPA_LOAD_CREATE &&
 		    !spa_feature_is_enabled(spa, SPA_FEATURE_ANYRAID)) {
 			return (SET_ERROR(ENOTSUP));
@@ -6758,7 +6758,7 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 			{
 				vdev_t *pvd = vd->vdev_parent;
 				uint64_t total = 0;
-				if (vd->vdev_ops == &vdev_anyraid_ops) {
+				if (vd->vdev_ops == &vdev_anymirror_ops) {
 					vdev_anyraid_t *var = vd->vdev_tsd;
 					for (int i = 0; i < vd->vdev_children;
 					    i++) {
@@ -6766,7 +6766,7 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 						    ->van_capacity + 1;
 					}
 				} else if (pvd && pvd->vdev_ops ==
-				    &vdev_anyraid_ops) {
+				    &vdev_anymirror_ops) {
 					vdev_anyraid_t *var = pvd->vdev_tsd;
 					total = var->vd_children[vd->vdev_id]
 					    ->van_capacity + 1;
@@ -6781,7 +6781,7 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 			{
 				vdev_t *pvd = vd->vdev_parent;
 				uint64_t total = 0;
-				if (vd->vdev_ops == &vdev_anyraid_ops) {
+				if (vd->vdev_ops == &vdev_anymirror_ops) {
 					vdev_anyraid_t *var = vd->vdev_tsd;
 					for (int i = 0; i < vd->vdev_children;
 					    i++) {
@@ -6789,7 +6789,7 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 						    ->van_next_offset;
 					}
 				} else if (pvd && pvd->vdev_ops ==
-				    &vdev_anyraid_ops) {
+				    &vdev_anymirror_ops) {
 					vdev_anyraid_t *var = pvd->vdev_tsd;
 					total = var->vd_children[vd->vdev_id]
 					    ->van_next_offset;
@@ -6804,10 +6804,10 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 			{
 				vdev_t *pvd = vd->vdev_parent;
 				vdev_anyraid_t *var = NULL;
-				if (vd->vdev_ops == &vdev_anyraid_ops) {
+				if (vd->vdev_ops == &vdev_anymirror_ops) {
 					var = vd->vdev_tsd;
 				} else if (pvd && pvd->vdev_ops ==
-				    &vdev_anyraid_ops) {
+				    &vdev_anymirror_ops) {
 					var = pvd->vdev_tsd;
 				} else {
 					continue;
