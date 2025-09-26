@@ -9523,7 +9523,6 @@ print_separator_line(int cols, int colwidth, boolean_t *print, boolean_t *final)
 static void
 zdb_print_anyraid_tile_layout(vdev_t *vd)
 {
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	int cols = vd->vdev_children;
 	int textwidth = MAX(8, numlen(avl_numnodes(&var->vd_tile_map)) +
@@ -9858,7 +9857,6 @@ zdb_print_anyraid_ondisk_maps(vdev_t *vd, int verbosity)
 static void
 zdb_dump_anyraid_map_vdev(vdev_t *vd, int verbosity)
 {
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
 	vdev_anyraid_t *var = vd->vdev_tsd;
 
 	(void) printf("\t%-5s%11llu   %s %#16llx\n",
@@ -9911,9 +9909,8 @@ zdb_dump_anyraid_map(char *vdev_str, spa_t *spa, int verbosity)
 			(void) printf("Invalid vdev: %s\n", vdev_str);
 			return (EINVAL);
 		}
-		if (vd->vdev_ops != &vdev_anymirror_ops &&
-		    (vd->vdev_parent == NULL ||
-		    (vd = vd->vdev_parent)->vdev_ops != &vdev_anymirror_ops)) {
+		if (!vdev_is_anyraid(vd) && (vd->vdev_parent == NULL ||
+		    !vdev_is_anyraid(vd = vd->vdev_parent))) {
 			(void) printf("Not an anyraid vdev: %s\n", vdev_str);
 			return (EINVAL);
 		}
@@ -9928,7 +9925,8 @@ zdb_dump_anyraid_map(char *vdev_str, spa_t *spa, int verbosity)
 	rvd = spa->spa_root_vdev;
 	for (uint64_t c = 0; c < rvd->vdev_children; c++) {
 		vd = rvd->vdev_child[c];
-		if (vd->vdev_ops == &vdev_anymirror_ops)
+		if (vd->vdev_ops == &vdev_anymirror_ops ||
+		    vd->vdev_ops == &vdev_anyraidz_ops)
 			zdb_dump_anyraid_map_vdev(vd, verbosity);
 	}
 	return (0);

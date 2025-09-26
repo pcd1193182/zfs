@@ -3273,7 +3273,7 @@ metaslab_space_weight(metaslab_t *msp)
 	 * free bandwidth rather than simply the one with the most free space.
 	 */
 	if ((!vd->vdev_nonrot && metaslab_lba_weighting_enabled) ||
-	    vd->vdev_ops == &vdev_anymirror_ops) {
+	    vdev_is_anyraid(vd)) {
 		weight = 2 * weight - (msp->ms_id * weight) / vd->vdev_ms_count;
 		ASSERT(weight >= space && weight <= 2 * space);
 	}
@@ -3440,8 +3440,7 @@ metaslab_segment_weight(metaslab_t *msp)
 	 * that case specifically.
 	 */
 	vdev_t *vd = mg->mg_vd;
-	if ((vd->vdev_ops == &vdev_anymirror_ops ||
-	    metaslab_lba_weighting_enabled) &&
+	if ((vdev_is_anyraid(vd) || metaslab_lba_weighting_enabled) &&
 	    WEIGHT_GET_INDEX(weight) > SPA_MAXBLOCKSHIFT) {
 		uint64_t id = msp->ms_id;
 		uint64_t count = vd->vdev_ms_count;
@@ -3488,7 +3487,7 @@ metaslab_should_allocate(metaslab_t *msp, uint64_t asize, boolean_t try_hard,
 	 * case, if we're using an anyraid vdev, we can't use a tile that isn't\
 	 * mapped yet.
 	 */
-	if (mapped && msp->ms_group->mg_vd->vdev_ops == &vdev_anymirror_ops) {
+	if (mapped && vdev_is_anyraid(msp->ms_group->mg_vd)) {
 		return (vdev_anyraid_mapped(msp->ms_group->mg_vd,
 		    msp->ms_start));
 	}
