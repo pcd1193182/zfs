@@ -187,7 +187,7 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 		return (SET_ERROR(EINVAL));
 	}
 
-	if (ndata + nparity >= children) {
+	if (ndata + nparity > children) {
 		zfs_dbgmsg("width too high when creating anyraid vdev");
 		return (SET_ERROR(EINVAL));
 	}
