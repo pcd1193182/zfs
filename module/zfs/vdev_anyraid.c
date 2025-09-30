@@ -1013,7 +1013,7 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile)
 		mirror_child_t *mc = &mm->mm_child[c];
 		mc->mc_vd = vd->vdev_child[atn->atn_disk];
 		mc->mc_offset = VDEV_ANYRAID_START_OFFSET(vd->vdev_ashift) +
-		    arn->atn_offset * tsize + zio->io_offset % tsize;
+		    atn->atn_offset * tsize + zio->io_offset % tsize;
 		ASSERT3U(mc->mc_offset, <, mc->mc_vd->vdev_psize -
 		    VDEV_LABEL_END_SIZE);
 		mm->mm_rebuilding = mc->mc_rebuilding = B_FALSE;
@@ -1041,23 +1041,23 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 	anyraid_tile_node_t **mapping = kmem_zalloc(sizeof (*mapping) *
 	    var->vd_width, KM_SLEEP);
 	ASSERT(tile);
-	anyraid_tile_node_t *arn = list_head(&tile->at_list);
+	anyraid_tile_node_t *atn = list_head(&tile->at_list);
 	for (int i = 0; i < var->vd_width; i++) {
-		ASSERT(arn);
-		mapping[i] = arn;
-		arn = list_next(&tile->at_list, arn);
+		ASSERT(atn);
+		mapping[i] = atn;
+		atn = list_next(&tile->at_list, atn);
 	}
 	ASSERT3U(rr->rr_scols, <=, var->vd_width);
 	for (uint64_t c = 0; c < rr->rr_scols; c++) {
 		raidz_col_t *rc = &rr->rr_col[c];
-		anyraid_tile_node_t *arn = mapping[rc->rc_devidx];
+		atn = mapping[rc->rc_devidx];
 		uint64_t tile_off = rc->rc_offset % var->vd_tile_size;
 		uint64_t disk_off = tile_off +
-		    arn->atn_offset * var->vd_tile_size;
+		    atn->atn_offset * var->vd_tile_size;
 		rc->rc_offset = VDEV_ANYRAID_TOTAL_MAP_SIZE(vd->vdev_ashift) +
 		    disk_off;
-		rc->rc_devidx = arn->atn_disk;
-		zfs_dbgmsg("For zio %px (%d %llu %llu) setting col %d (%d) to %u / %llu: %u %llu", zio, zio->io_type, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, rc->rc_devidx, arn->atn_disk, (u_longlong_t)disk_off, arn->atn_offset, (u_longlong_t)(arn->atn_offset * var->vd_tile_size));
+		rc->rc_devidx = atn->atn_disk;
+		zfs_dbgmsg("For zio %px (%d %llu %llu) setting col %d (%d) to %u / %llu: %u %llu", zio, zio->io_type, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, rc->rc_devidx, atn->atn_disk, (u_longlong_t)disk_off, atn->atn_offset, (u_longlong_t)(atn->atn_offset * var->vd_tile_size));
 	}
 	kmem_free(mapping, sizeof (*mapping) * var->vd_width);
 }

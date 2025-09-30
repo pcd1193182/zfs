@@ -3844,9 +3844,7 @@ ztest_vdev_attach_detach(ztest_ds_t *zd, uint64_t id)
 		oldvd = oldvd->vdev_child[leaf % raidz_children];
 	}
 
-	boolean_t anyraid =
-	    oldvd->vdev_parent->vdev_ops == &vdev_anymirror_ops ||
-	    oldvd->vdev_parent->vdev_ops == &vdev_anyraidz_ops;
+	boolean_t anyraid = vdev_is_anyraid(oldvd->vdev_parent);
 
 	if (!replacing && anyraid) {
 		oldvd = oldvd->vdev_parent;
@@ -3870,7 +3868,7 @@ ztest_vdev_attach_detach(ztest_ds_t *zd, uint64_t id)
 	    oldvd->vdev_top->vdev_alloc_bias == VDEV_BIAS_SPECIAL ||
 	    oldvd->vdev_top->vdev_alloc_bias == VDEV_BIAS_DEDUP;
 	if (oldvd->vdev_path == NULL) {
-		ASSERT3P(anyraid);
+		ASSERT(vdev_is_anyraid(oldvd));
 		snprintf(oldpath, MAXPATHLEN, "%s-%llu",
 		    oldvd->vdev_ops->vdev_op_type,
 		    (u_longlong_t)oldvd->vdev_id);
@@ -3964,8 +3962,7 @@ ztest_vdev_attach_detach(ztest_ds_t *zd, uint64_t id)
 	else if (vdev_lookup_by_path(rvd, newpath) != NULL)
 		expected_error = EBUSY;
 	else if (newsize < oldsize && !(newvd_is_dspare ||
-	    ((pvd->vdev_ops == &vdev_anymirror_ops ||
-	    pvd->vdev_ops == &vdev_anyraidz_ops) &&
+	    (vdev_is_anyraid(pvd) &&
 	    newsize < pvd->vdev_ops->vdev_op_min_asize(pvd, oldvd))))
 		expected_error = EOVERFLOW;
 	else if (ashift > oldvd->vdev_top->vdev_ashift)
