@@ -1163,7 +1163,7 @@ vdev_anyraid_io_start(zio_t *zio)
 	rw_exit(&var->vd_lock);
 
 	uint64_t end = zio->io_offset % tsize + zio->io_size;
-	ASSERT3U(end, <=, var->vd_tile_size);
+	ASSERT3U(end, <=, tsize);
 	
 	switch (var->vd_parity_type) {
 		case VAP_MIRROR:
