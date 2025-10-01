@@ -919,11 +919,6 @@ vdev_disk_io_rw(zio_t *zio)
 	struct block_device *bdev = BDH_BDEV(vd->vd_bdh);
 	int flags = 0;
 
-	if (zio->io_type == ZIO_TYPE_WRITE) {
-		zfs_dbgmsg("PHYSWRITE %llu %llu", (u_longlong_t)zio->io_offset,
-		    (u_longlong_t)zio->io_size);
-	}
-
 	/*
 	 * Accessing outside the block device is never allowed.
 	 */
