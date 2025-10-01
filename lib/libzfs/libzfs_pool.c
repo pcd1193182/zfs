@@ -4633,7 +4633,8 @@ zpool_vdev_name(libzfs_handle_t *hdl, zpool_handle_t *zhp, nvlist_t *nv,
 		 * parity level.
 		 */
 		if (strcmp(path, VDEV_TYPE_RAIDZ) == 0 ||
-		    strcmp(path, VDEV_TYPE_ANYMIRROR) == 0) {
+		    strcmp(path, VDEV_TYPE_ANYMIRROR) == 0 ||
+		    strcmp(path, VDEV_TYPE_ANYRAIDZ) == 0) {
 			value = fnvlist_lookup_uint64(nv, ZPOOL_CONFIG_NPARITY);
 			uint8_t type;
 			if (nvlist_lookup_uint8(nv,
