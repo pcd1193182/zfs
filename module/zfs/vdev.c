@@ -280,6 +280,7 @@ static vdev_ops_t *const vdev_ops_table[] = {
 	&vdev_hole_ops,
 	&vdev_indirect_ops,
 	&vdev_anymirror_ops,
+	&vdev_anyraidz_ops,
 	NULL
 };
 
