@@ -251,7 +251,7 @@ vdev_anyraid_fini(vdev_t *vd)
 static void
 vdev_anyraid_config_generate(vdev_t *vd, nvlist_t *nv)
 {
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(vd));
 	vdev_anyraid_t *var = vd->vdev_tsd;
 
 	fnvlist_add_uint64(nv, ZPOOL_CONFIG_NPARITY, var->vd_nparity);
@@ -1286,7 +1286,7 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
     zfs_range_seg64_t *physical_rs, zfs_range_seg64_t *remain_rs)
 {
 	vdev_t *anyraidvd = cvd->vdev_parent;
-	ASSERT3P(anyraidvd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(anyraidvd));
 	vdev_anyraid_t *var = anyraidvd->vdev_tsd;
 	uint64_t ptsize = var->vd_tile_size;
 	uint64_t ltsize = ptsize * var->vd_width;
@@ -1444,7 +1444,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
     uint64_t *good_writes, int flags, vdev_config_sync_status_t status)
 {
 	vdev_t *anyraidvd = vd->vdev_parent;
-	ASSERT3P(anyraidvd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(anyraidvd));
 	spa_t *spa = vd->vdev_spa;
 	vdev_anyraid_t *var = anyraidvd->vdev_tsd;
 	uint32_t header_size = VDEV_ANYRAID_MAP_HEADER_SIZE(vd->vdev_ashift);
@@ -1580,7 +1580,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 static uint64_t
 vdev_anyraid_min_attach_size(vdev_t *vd)
 {
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(vd));
 	ASSERT3U(spa_config_held(vd->vdev_spa, SCL_ALL, RW_READER), !=, 0);
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	ASSERT(var->vd_tile_size);
@@ -1591,7 +1591,7 @@ vdev_anyraid_min_attach_size(vdev_t *vd)
 static uint64_t
 vdev_anyraid_min_asize(vdev_t *pvd, vdev_t *cvd)
 {
-	ASSERT3P(pvd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(pvd));
 	ASSERT3U(spa_config_held(pvd->vdev_spa, SCL_ALL, RW_READER), !=, 0);
 	vdev_anyraid_t *var = pvd->vdev_tsd;
 	if (var->vd_tile_size == 0)
@@ -1660,7 +1660,7 @@ vdev_anyraid_rebuild_asize(vdev_t *vd, uint64_t start, uint64_t asize,
     uint64_t max_segment)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(vd));
 
 	uint64_t psize = MIN(P2ROUNDUP(max_segment, 1 << vd->vdev_ashift),
 	    SPA_MAXBLOCKSIZE);
@@ -1677,7 +1677,7 @@ static uint64_t
 vdev_anyraid_asize(vdev_t *vd, uint64_t psize, uint64_t txg)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(vd));
 	if (var->vd_parity_type == VAP_MIRROR)
 		return (vdev_default_asize(vd, psize, txg));
 
@@ -1707,7 +1707,7 @@ static uint64_t
 vdev_anyraid_psize(vdev_t *vd, uint64_t asize, uint64_t txg)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
-	ASSERT3P(vd->vdev_ops, ==, &vdev_anymirror_ops);
+	ASSERT(vdev_is_anyraid(vd));
 	if (var->vd_parity_type == VAP_MIRROR)
 		return (vdev_default_psize(vd, asize, txg));
 
