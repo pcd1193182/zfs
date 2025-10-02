@@ -76,6 +76,6 @@ cap=$(zpool get -Hp -o value size $TESTPOOL2)
 # reserved slop space. If the space isn't being selected intelligently, we
 # would hit ENOSPC 64MiB early.
 #
-log_must dd if=/dev/urandom of=/$TESTPOOL2/f1 bs=1M count=$((64 * 7 - 1))
+log_must dd if=/dev/urandom of=/$TESTPOOL2/f1 bs=1M count=$((64 * 10 - 1))
 
 log_pass "Anyraid disks intelligently select which tiles to use"

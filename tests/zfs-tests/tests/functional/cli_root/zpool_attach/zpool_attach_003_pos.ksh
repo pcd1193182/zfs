@@ -100,14 +100,14 @@ log_must zpool destroy $TESTPOOL2
 log_must create_pool $TESTPOOL2 anyraidz1:2 /$TESTPOOL/vdev_file.{0,1,2,3}
 
 cap=$(zpool get -Hp -o value size $TESTPOOL2)
-log_must zpool attach $TESTPOOL2 anyraidz1-0 /$TESTPOOL/vdev_file.4
+log_must zpool attach $TESTPOOL2 anyraidz1:2-0 /$TESTPOOL/vdev_file.4
 new_cap=$(zpool get -Hp -o value size $TESTPOOL2)
 new_cap=$((new_cap - cap))
 
 [[ "$new_cap" -eq $((64 * 1024 * 1024)) ]] || \
 	log_fail "Incorrect space added on attach: $new_cap"
 
-log_must zpool attach $TESTPOOL2 anyraidz1-0 /$TESTPOOL/vdev_file.5
+log_must zpool attach $TESTPOOL2 anyraidz1:2-0 /$TESTPOOL/vdev_file.5
 new_cap=$(zpool get -Hp -o value size $TESTPOOL2)
 new_cap=$((new_cap - cap))
 [[ "$new_cap" -eq $((256 * 1024 * 1024)) ]] || \
