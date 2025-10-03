@@ -9526,7 +9526,7 @@ zdb_print_anyraid_tile_layout(vdev_t *vd)
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	int cols = vd->vdev_children;
 	int textwidth = MAX(8, numlen(avl_numnodes(&var->vd_tile_map)) +
-	    var->vd_nparity > 0 ? numlen(var->vd_nparity + 1) + 1 : 0);
+	    var->vd_nparity > 0 ? numlen(var->vd_width) + 1 : 0);
 	int colwidth = textwidth + 2;
 
 	// Create and populate table with all the values we need to print.
