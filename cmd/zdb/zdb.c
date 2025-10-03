@@ -9553,7 +9553,7 @@ zdb_print_anyraid_tile_layout(vdev_t *vd)
 			}
 			p++;
 		}
-		ASSERT3U(p, ==, var->vd_nparity + 1);
+		ASSERT3U(p, ==, var->vd_nparity + var->vd_ndata);
 		cur = AVL_NEXT(&var->vd_tile_map, cur);
 	}
 
