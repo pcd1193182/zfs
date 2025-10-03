@@ -1032,7 +1032,7 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile)
  * based on the anyraid tile mapping.
  */
 static void
-vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
+vdev_anyraid_raidz_map_translate(vdev_t *vd, raidz_map_t *rm,
     anyraid_tile_t *tile)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
@@ -1057,7 +1057,6 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, zio_t *zio, raidz_map_t *rm,
 		rc->rc_offset = VDEV_ANYRAID_TOTAL_MAP_SIZE(vd->vdev_ashift) +
 		    disk_off;
 		rc->rc_devidx = atn->atn_disk;
-		zfs_dbgmsg("For zio %px (%d %llu %llu) setting col %d (%d) to %u / %llu: %u %llu", zio, zio->io_type, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, (int)c, rc->rc_devidx, atn->atn_disk, (u_longlong_t)disk_off, atn->atn_offset, (u_longlong_t)(atn->atn_offset * var->vd_tile_size));
 	}
 	kmem_free(mapping, sizeof (*mapping) * var->vd_width);
 }
@@ -1073,7 +1072,7 @@ vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile)
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	raidz_map_t *rm = vdev_raidz_map_alloc(zio, vd->vdev_ashift,
 	    var->vd_width, var->vd_nparity);
-	vdev_anyraid_raidz_map_translate(vd, zio, rm, tile);
+	vdev_anyraid_raidz_map_translate(vd, rm, tile);
 	
 	zio->io_vsd = rm;
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
@@ -1356,7 +1355,6 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			    tile_start + (start_row << ashift);
 			physical_rs->rs_end =
 			    tile_start + (end_row << ashift);
-			zfs_dbgmsg("xlate %llu %llu -> %llu %llu -> %llu %llu -> %llu %llu", (u_longlong_t)logical_rs->rs_start, (u_longlong_t)logical_rs->rs_end, (u_longlong_t)b_start, (u_longlong_t)b_end, (u_longlong_t)start_row, (u_longlong_t)end_row, (u_longlong_t)physical_rs->rs_start, (u_longlong_t)physical_rs->rs_end);
 			break;
 		}
 		default:
