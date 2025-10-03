@@ -72,10 +72,10 @@ cap=$(zpool get -Hp -o value size $TESTPOOL2)
 	log_fail "Incorrect space for anyraid vdev: $cap"
 
 #
-# This should just about fill the pool, when you account for the 128MiB of
+# This should just about fill the pool, when you account for the 192MiB of
 # reserved slop space. If the space isn't being selected intelligently, we
 # would hit ENOSPC 64MiB early.
 #
-log_must dd if=/dev/urandom of=/$TESTPOOL2/f1 bs=1M count=$((64 * 10 - 1))
+log_must dd if=/dev/urandom of=/$TESTPOOL2/f1 bs=1M count=$((64 * 6 - 1))
 
 log_pass "Anyraid disks intelligently select which tiles to use"

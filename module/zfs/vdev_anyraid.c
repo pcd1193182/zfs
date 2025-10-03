@@ -1697,8 +1697,6 @@ vdev_anyraid_asize(vdev_t *vd, uint64_t psize, uint64_t txg)
 #endif
 
 	return (asize);
-
-
 }
 
 static uint64_t
