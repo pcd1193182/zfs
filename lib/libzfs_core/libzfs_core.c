@@ -1994,3 +1994,22 @@ lzc_ddt_prune(const char *pool, zpool_ddt_prune_unit_t unit, uint64_t amount)
 
 	return (error);
 }
+
+int
+lzc_pool_rebalance(const char *zpool, const uint64_t *guids, int count)
+{
+	int error;
+
+	nvlist_t *result = NULL;
+	nvlist_t *args = fnvlist_alloc();
+
+	if (guids)
+		fnvlist_add_uint64_array(args, "vdevs", guids, count);
+
+	error = lzc_ioctl(ZFS_IOC_POOL_REBALANCE, zpool, args, &result);
+
+	fnvlist_free(args);
+	fnvlist_free(result);
+
+	return (error);
+}

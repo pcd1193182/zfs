@@ -1073,7 +1073,7 @@ vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile)
 	raidz_map_t *rm = vdev_raidz_map_alloc(zio, vd->vdev_ashift,
 	    var->vd_width, var->vd_nparity);
 	vdev_anyraid_raidz_map_translate(vd, rm, tile);
-	
+
 	zio->io_vsd = rm;
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
 	vdev_raidz_io_start_impl(zio, rm, var->vd_width, var->vd_width);
@@ -1151,7 +1151,8 @@ vdev_anyraid_io_start(zio_t *zio)
 			atn->atn_offset =
 			    vans[i]->van_next_offset++;
 			list_insert_tail(&tile->at_list, atn);
-			zfs_dbgmsg("Entry %d: %u %u", i, atn->atn_disk, atn->atn_offset);
+			zfs_dbgmsg("Entry %d: %u %u", i, atn->atn_disk,
+			    atn->atn_offset);
 		}
 		for (int i = 0; i < width; i++)
 			avl_add(&var->vd_children_tree, vans[i]);
@@ -1163,7 +1164,7 @@ vdev_anyraid_io_start(zio_t *zio)
 
 	uint64_t end = zio->io_offset % tsize + zio->io_size;
 	ASSERT3U(end, <=, tsize);
-	
+
 	switch (var->vd_parity_type) {
 		case VAP_MIRROR:
 			if (var->vd_nparity > 0) {
@@ -1331,7 +1332,11 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 		}
 		case VAP_RAIDZ:
 		{
-			// The problem here is that the tgt_col shouldn't just be the vdev_id, we need to get the idx of this specific atn in the tile? Or something like that
+			/*
+			 * The problem here is that the tgt_col shouldn't just
+			 * be the vdev_id, we need to get the idx of this
+			 * specific atn in the tile? Or something like that.
+			 */
 			uint64_t width = var->vd_width;
 			uint64_t tgt_col = idx;
 			uint64_t ashift = anyraidvd->vdev_ashift;
@@ -1345,7 +1350,8 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 
 			uint64_t start_row = 0;
 			if (b_start > tgt_col) /* avoid underflow */
-				start_row = ((b_start - tgt_col - 1) / width) + 1;
+				start_row = ((b_start - tgt_col - 1) / width) +
+				    1;
 
 			uint64_t end_row = 0;
 			if (b_end > tgt_col)
@@ -1783,6 +1789,124 @@ vdev_ops_t vdev_anyraidz_ops = {
 	.vdev_op_type = VDEV_TYPE_ANYRAIDZ,	/* name of this vdev type */
 	.vdev_op_leaf = B_FALSE			/* not a leaf vdev */
 };
+
+
+/*
+ * ==========================================================================
+ * TILE MOTION & REBALANCE LOGIC 
+ * ==========================================================================
+ */
+
+vdev_anyraid_rebalance_t *
+vdev_anyraid_rebalance_status(vdev_t *vd)
+{
+	ASSERT(vdev_is_anyraid(vd));
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	return (var->vd_rebalance);
+}
+
+struct rebal_node {
+	avl_node_t node;
+	int cvd;
+	int64_t diff; // positive: wants more tiles, negative: wants fewer
+	int64_t *arr;
+};
+
+static int
+rebal_cmp(const void *a, const void *b)
+{
+	struct rebal_node *ra = a;
+	struct rebal_node *rb = b;
+	int cmp = TREE_CMP(rb->diff, ra->diff);
+	if (likely(cmp != 0))
+		return (cmp);
+	return (TREE_CMP(rb->cvd->vdev_id, ra->cvd->vdev_id));
+}
+
+static void
+populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr)
+{
+	for (anyraid_tile_t *tile = avl_first(&var->vd_tile_map);
+	    tile; tile = AVL_NEXT(&var->vd_tile_map, tile)) {
+		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);
+		    atn; atn = list_next(&tile->at_list, atn)) {
+			if (atn->atn_disk == child)
+				arr[atn->atn_offset] = tile->at_tile_id;
+		}
+	}
+}
+
+void
+vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
+{
+	ASSERT(vdev_is_anyraid(vd));
+	vdev_anyraid_t *var = vd->vdev_tsd;
+
+	vdev_config_dirty(vd);
+
+	var->vd_rebalance = kmem_alloc(sizeof (*var->vd_rebalance), KM_SLEEP);
+	var->vd_rebalance->var_start_time = gethrestime_sec();
+	var->vd_rebalance->var_end_time = 0;
+	var->vd_rebalance->var_state = DSS_SCANNING;
+	var->vd_rebalance->var_bytes_copied = 0;
+	list_create(&var->vd_rebalance->var_list,
+	    sizeof (vdev_anyraid_rebalance_task_t),
+	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
+
+	rw_enter(&var->vd_lock, RW_READER);
+	uint64_t cap = vd->vdev_asize / var->vd_tile_size;
+	uint64_t avg = (var->vd_width * avl_numnodes(&var->vd_tile_map)) *
+	    100000 / cap;
+	avl_tree_t t;
+	avl_create(&t, rebal_cmp, sizeof (struct rebal_node), offsetof (struct rebal_node, node));
+	for (int i = 0; i < vd->vdev_children; i++) {
+		struct rebal_node *rn = kmem_zalloc(sizeof (*rn), KM_SLEEP);
+		rn->cvd = i;
+		rn->diff = (avg * var->vd_children[i]->van_capacity) / 100000 -
+		    var->vd_children[i]->van_next_offset;
+		int64_t *arr = kmem_alloc(sizeof (*arr) *
+		    var->vd_children[i]->van_capacity, KM_SLEEP);
+		    memset(arr, -1, sizeof (*arr) *
+		        var->vd_children[i]->van_capacity);
+		populate_child_array(var, i, rn->arr);
+		avl_add(&t, rn);
+	}
+	for (;;) {
+		struct rebal_node *receiver = avl_last(&t);
+		struct rebal_node *donor = avl_first(&t);
+		if (receiver->diff <= 0 || donor->diff >=0)
+			break;
+		avl_remove(&t, receiver);
+		avl_remove(&t, donor);
+
+		vdev_anyraid_node_t *dvan = var->vd_children[donor->cvd];
+		vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
+
+		boolean_t stop = B_FALSE:
+		for (uint16_t tile = 0; tile < dvan->van_next_offset; tile++) {
+			for (uint16_t tile2 = 0;
+			    !found && tile < rvan->van_next_offset;
+			    tile++) {
+				if (receiver->arr[tile2] == donor->arr[tile])
+					B_TRUE;
+				break;
+			}
+			if (found)
+				continue;
+			vdev_anyraid_rebalance_task_t *task =
+			    kmem_zalloc(sizeof(*task), KM_SLEEP);
+			task->vart_source_disk = donor->cvd;
+			task->vart_dest_disk = receiver->cvd;
+			task->vart_source_off = tile;
+			task->vart_dest_off = rvan->van_next_offset;
+			list_insert_tail(&var->vd_rebalance->var_list, task);
+			receiver->arr[rvan->van_next_offset] = donor->arr[tile];
+			donor->arr[tile] = -1;
+			break;
+		}
+	}
+	rw_exit(&var->vd_lock);
+}
 
 
 ZFS_MODULE_PARAM(zfs_anyraid, zfs_anyraid_, min_tile_size, U64, ZMOD_RW,

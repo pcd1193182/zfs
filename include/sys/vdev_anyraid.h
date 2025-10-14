@@ -49,6 +49,24 @@ typedef struct vdev_anyraid_node {
 	uint32_t	van_next_offset;
 } vdev_anyraid_node_t;
 
+typedef struct vdev_anyraid_rebalance_task {
+	list_node_t	vart_node;
+	uint8_t		vart_source_disk;
+	uint8_t		vart_dest_disk;
+	uint16_t	vart_source_off;
+	uint16_t	vart_dest_off;
+} vdev_anyraid_rebalance_task_t;
+
+typedef struct vdev_anyraid_rebalance {
+	list_t 		var_list;
+	uint64_t	var_offset;
+
+	dsl_scan_state_t var_state;
+	uint64_t var_start_time;
+	uint64_t var_end_time;
+	uint64_t var_bytes_copied;
+} vdev_anyraid_rebalance_t;
+
 typedef struct vdev_anyraid {
 	vdev_anyraid_parity_type_t vd_parity_type;
 	/*
@@ -65,6 +83,8 @@ typedef struct vdev_anyraid {
 	avl_tree_t	vd_children_tree;
 	uint32_t	vd_checkpoint_tile;
 	vdev_anyraid_node_t **vd_children;
+	/* non-null iff there's a rebalance in progress */
+	vdev_anyraid_rebalance_t *vd_rebalance;
 } vdev_anyraid_t;
 
 typedef struct anyraid_tile_node {
@@ -284,6 +304,9 @@ extern void vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 
 extern void vdev_anyraid_expand(vdev_t *tvd, vdev_t *newvd);
 extern boolean_t vdev_anyraid_mapped(vdev_t *vd, uint64_t offset);
+
+vdev_anyraid_rebalance_t *vdev_anyraid_rebalance_status(vdev_t *vd);
+void vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx);
 
 /*
  * These functions are exposed for ZDB.

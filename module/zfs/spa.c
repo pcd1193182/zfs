@@ -11694,6 +11694,70 @@ spa_event_notify(spa_t *spa, vdev_t *vd, nvlist_t *hist_nvl, const char *name)
 	spa_event_post(spa_event_create(spa, vd, hist_nvl, name));
 }
 
+static int
+spa_check_start_rebalance(void *arg, dmu_tx_t *tx) {
+	vdev_t *vd = (vdev_t *)arg;
+	if (!vdev_is_anyraid(vd))
+		return (SET_ERROR(EINVAL));
+	if (vdev_anyraid_rebalance_status(vd) != NULL)
+		return (SET_ERROR(EALREADY));
+	(void) tx;
+	return (0);
+}
+
+static void
+spa_sync_start_rebalance(void *arg, dmu_tx_t *tx) {
+	vdev_t *vd = (vdev_t *)arg;
+	ASSERT(vdev_is_anyraid(vd));
+	vdev_anyraid_setup_rebalance(vd, tx);
+}
+
+int
+spa_rebalance_vdevs(spa_t *spa, const uint64_t *guids, uint_t count)
+{
+	if (count == 0)
+		return (ENOENT);
+	ASSERT(guids);
+	uint_t lasterror = 0;
+	for (uint_t c = 0; c < count; c++) {
+		vdev_t *vd = spa_lookup_by_guid(spa, guids[c], B_FALSE);
+		if (vd == NULL) {
+			lasterror = SET_ERROR(ENOENT);
+			break;
+		}
+
+		lasterror = dsl_sync_task(spa->spa_name,
+		    spa_check_start_rebalance, spa_sync_start_rebalance,
+		    vd, 6, ZFS_SPACE_CHECK_NORMAL);
+		if (lasterror)
+			break;
+	}
+	return (lasterror);
+}
+
+int
+spa_rebalance_all(spa_t *spa)
+{
+	vdev_t *rvd = spa->spa_root_vdev;
+	uint_t count = 0;
+	uint_t lasterror = 0;
+
+	for (int c = 0; c < rvd->vdev_children; c++) {
+		vdev_t *cvd = rvd->vdev_child[c];
+		if (!vdev_is_anyraid(cvd))
+			continue;
+		count++;
+		lasterror = dsl_sync_task(spa->spa_name,
+		    spa_check_start_rebalance, spa_sync_start_rebalance,
+		    cvd, 6, ZFS_SPACE_CHECK_NORMAL); // TODO check blocks written
+		if (lasterror)
+			break;
+	}
+	if (count == 0)
+		return (ENOENT);
+	return (lasterror);
+}
+
 /* state manipulation functions */
 EXPORT_SYMBOL(spa_open);
 EXPORT_SYMBOL(spa_open_rewind);
