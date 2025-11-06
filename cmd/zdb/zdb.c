@@ -59,6 +59,7 @@
 #include <sys/vdev.h>
 #include <sys/vdev_impl.h>
 #include <sys/vdev_anyraid.h>
+#include <sys/vdev_anyraid_impl.h>
 #include <sys/metaslab_impl.h>
 #include <sys/dmu_objset.h>
 #include <sys/dsl_dir.h>

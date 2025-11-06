@@ -906,14 +906,14 @@ avl_destroy(avl_tree_t *tree)
  * Return the number of nodes in an AVL tree.
  */
 ulong_t
-avl_numnodes(avl_tree_t *tree)
+avl_numnodes(const avl_tree_t *tree)
 {
 	ASSERT(tree);
 	return (tree->avl_numnodes);
 }
 
 boolean_t
-avl_is_empty(avl_tree_t *tree)
+avl_is_empty(const avl_tree_t *tree)
 {
 	ASSERT(tree);
 	return (tree->avl_numnodes == 0);

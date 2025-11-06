@@ -110,6 +110,7 @@
 #include <sys/spa.h>
 #include <sys/vdev_impl.h>
 #include <sys/vdev_anyraid.h>
+#include <sys/vdev_anyraid_impl.h>
 #include <sys/vdev_mirror.h>
 #include <sys/vdev_raidz.h>
 #include <sys/vdev_raidz_impl.h>
@@ -126,6 +127,99 @@ uint64_t zfs_anyraid_min_tile_size = (16ULL << 30);
  * present at creation time)
  */
 int anyraid_disk_shift = 6;
+
+
+static inline int
+af_compar(const void *p1, const void *p2)
+{
+	const anyraid_free_node_t *af1 = p1, *af2 = p2;
+
+	return (TREE_CMP(af2->afn_tile, af1->afn_tile));
+}
+
+void
+anyraid_freelist_create(anyraid_freelist_t *af, uint16_t off)
+{
+	avl_create(&af->af_list, af_compar,
+	    sizeof (anyraid_free_node_t),
+	    offsetof(anyraid_free_node_t, afn_node));
+	af->af_next_off = off;
+}
+
+void
+anyraid_freelist_destroy(anyraid_freelist_t *af)
+{
+	void *cookie = NULL;
+	anyraid_free_node_t *node;
+	while ((node = avl_destroy_nodes(&af->af_list, &cookie)) != NULL)
+		kmem_free(node, sizeof (*node));
+	avl_destroy(&af->af_list);
+}
+
+void
+anyraid_freelist_add(anyraid_freelist_t *af, uint16_t off)
+{
+	avl_tree_t *t = &af->af_list;
+	ASSERT3U(off, <, af->af_next_off);
+	if (off != af->af_next_off - 1) {
+		anyraid_free_node_t *new = kmem_alloc(sizeof (*new), KM_SLEEP);
+		new->afn_tile = off;
+		avl_add(t, new);
+		return;
+	}
+	af->af_next_off--;
+	for (anyraid_free_node_t *tail = avl_last(t);
+	    tail->afn_tile == af->af_next_off - 1; tail = avl_last(t)) {
+		af->af_next_off--;
+		avl_remove(t, tail);
+		kmem_free(tail, sizeof (*tail));
+	}
+}
+
+void
+anyraid_freelist_remove(anyraid_freelist_t *af, uint16_t off)
+{
+	avl_tree_t *t = &af->af_list;
+	anyraid_free_node_t search;
+	search.afn_tile = off;
+	avl_index_t where;
+	anyraid_free_node_t *node = avl_find(t, &search, &where);
+	if (node) {
+		avl_remove(t, node);
+		kmem_free(node, sizeof (*node));
+		return;
+	}
+	ASSERT3U(off, >=, af->af_next_off);
+	while (off > af->af_next_off) {
+		node = kmem_alloc(sizeof (*node), KM_SLEEP);
+		node->afn_tile = af->af_next_off++;
+		avl_add(t, node);
+	}
+	af->af_next_off++;
+	return;
+
+}
+
+uint16_t
+anyraid_freelist_pop(anyraid_freelist_t *af)
+{
+	avl_tree_t *t = &af->af_list;
+	if (avl_numnodes(t) == 0) {
+		return (af->af_next_off++);
+	}
+
+	anyraid_free_node_t *head = avl_first(t);
+	avl_remove(t, head);
+	uint16_t ret = head->afn_tile;
+	kmem_free(head, sizeof (*head));
+	return (ret);
+}
+
+uint16_t
+anyraid_freelist_alloc(const anyraid_freelist_t *af)
+{
+	return (af->af_next_off - avl_numnodes(&af->af_list));
+}
 
 static inline uint64_t
 vdev_anyraid_header_offset(vdev_t *vd, int id)
@@ -151,8 +245,9 @@ anyraid_child_compare(const void *p1, const void *p2)
 {
 	const vdev_anyraid_node_t *van1 = p1, *van2 = p2;
 
-	int cmp = TREE_CMP(van2->van_capacity - van2->van_next_offset,
-	    van1->van_capacity - van1->van_next_offset);
+	int cmp = TREE_CMP(
+	    van2->van_capacity - anyraid_freelist_alloc(&van2->van_freelist),
+	    van1->van_capacity - anyraid_freelist_alloc(&van1->van_freelist));
 	if (cmp != 0)
 		return (cmp);
 
@@ -295,7 +390,8 @@ create_tile_entry(vdev_anyraid_t *var, anyraid_map_loc_entry_t *amle,
 
 	vdev_anyraid_node_t *van = var->vd_children[disk];
 	avl_remove(&var->vd_children_tree, van);
-	van->van_next_offset = MAX(van->van_next_offset, offset + 1);
+	
+	anyraid_freelist_remove(&van->van_freelist, offset);
 	avl_add(&var->vd_children_tree, van);
 	*out_at = at;
 }
@@ -783,7 +879,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		struct tile_count *rc = kmem_alloc(sizeof (*rc), KM_SLEEP);
 		rc->disk = c;
 		rc->remaining = num_tiles[c] -
-		    var->vd_children[c]->van_next_offset;
+		    anyraid_freelist_alloc(&var->vd_children[c]->van_freelist);
 		avl_add(&t, rc);
 	}
 
@@ -1149,7 +1245,7 @@ vdev_anyraid_io_start(zio_t *zio)
 			    kmem_alloc(sizeof (*atn), KM_SLEEP);
 			atn->atn_disk = vans[i]->van_id;
 			atn->atn_offset =
-			    vans[i]->van_next_offset++;
+			    anyraid_freelist_pop(&vans[i]->van_freelist);
 			list_insert_tail(&tile->at_list, atn);
 			zfs_dbgmsg("Entry %d: %u %u", i, atn->atn_disk,
 			    atn->atn_offset);
@@ -1622,7 +1718,7 @@ vdev_anyraid_expand(vdev_t *tvd, vdev_t *newvd)
 	vdev_anyraid_node_t *newchild = kmem_alloc(sizeof (*newchild),
 	    KM_SLEEP);
 	newchild->van_id = newvd->vdev_id;
-	newchild->van_next_offset = 0;
+	anyraid_freelist_create(&newchild->van_freelist, 0);
 	uint64_t max_size = VDEV_ANYRAID_MAX_TPD * var->vd_tile_size;
 	newchild->van_capacity = (MIN(max_size, (newvd->vdev_asize -
 	    VDEV_ANYRAID_TOTAL_MAP_SIZE(newvd->vdev_ashift))) /
@@ -1734,6 +1830,48 @@ vdev_anyraid_psize(vdev_t *vd, uint64_t asize, uint64_t txg)
 	return (psize);
 }
 
+uint64_t
+vdev_anyraid_child_num_tiles(vdev_t *vd, vdev_t *cvd)
+{
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	ASSERT(vdev_is_anyraid(vd));
+
+	uint64_t total = 0;
+	rw_enter(&var->vd_lock, RW_READER);
+	if (cvd != NULL) {
+		vdev_anyraid_node_t *n = var->vd_children[cvd->vdev_id];
+		total = anyraid_freelist_alloc(&n->van_freelist);
+	} else {
+		for (int i = 0; i < vd->vdev_children; i++) {
+			vdev_anyraid_node_t *n = var->vd_children[i];
+			total += anyraid_freelist_alloc(&n->van_freelist);
+		}
+	}
+	rw_exit(&var->vd_lock);
+	return (total);
+}
+
+uint64_t
+vdev_anyraid_child_capacity(vdev_t *vd, vdev_t *cvd)
+{
+	vdev_anyraid_t *var = vd->vdev_tsd;
+	ASSERT(vdev_is_anyraid(vd));
+
+	uint64_t total = 0;
+	rw_enter(&var->vd_lock, RW_READER);
+	if (cvd != NULL) {
+		vdev_anyraid_node_t *n = var->vd_children[cvd->vdev_id];
+		total = n->van_capacity + 1;
+	} else {
+		for (int i = 0; i < vd->vdev_children; i++) {
+			vdev_anyraid_node_t *n = var->vd_children[i];
+			total += n->van_capacity + 1;
+		}
+	}
+	rw_exit(&var->vd_lock);
+	return (total);
+}
+
 vdev_ops_t vdev_anymirror_ops = {
 	.vdev_op_init = vdev_anyraid_init,
 	.vdev_op_fini = vdev_anyraid_fini,
@@ -1815,12 +1953,12 @@ struct rebal_node {
 static int
 rebal_cmp(const void *a, const void *b)
 {
-	struct rebal_node *ra = a;
-	struct rebal_node *rb = b;
+	const struct rebal_node *ra = a;
+	const struct rebal_node *rb = b;
 	int cmp = TREE_CMP(rb->diff, ra->diff);
 	if (likely(cmp != 0))
 		return (cmp);
-	return (TREE_CMP(rb->cvd->vdev_id, ra->cvd->vdev_id));
+	return (TREE_CMP(rb->cvd, ra->cvd));
 }
 
 static void
@@ -1839,6 +1977,7 @@ populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr)
 void
 vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 {
+	(void)tx;
 	ASSERT(vdev_is_anyraid(vd));
 	vdev_anyraid_t *var = vd->vdev_tsd;
 
@@ -1862,12 +2001,12 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	for (int i = 0; i < vd->vdev_children; i++) {
 		struct rebal_node *rn = kmem_zalloc(sizeof (*rn), KM_SLEEP);
 		rn->cvd = i;
-		rn->diff = (avg * var->vd_children[i]->van_capacity) / 100000 -
-		    var->vd_children[i]->van_next_offset;
-		int64_t *arr = kmem_alloc(sizeof (*arr) *
-		    var->vd_children[i]->van_capacity, KM_SLEEP);
-		    memset(arr, -1, sizeof (*arr) *
-		        var->vd_children[i]->van_capacity);
+		vdev_anyraid_node_t *n = var->vd_children[i];
+		uint16_t cap = n->van_capacity;
+		rn->diff = (avg * cap) / 100000 -
+		    anyraid_freelist_alloc(&n->van_freelist);
+		int64_t *arr = kmem_alloc(sizeof (*arr) * cap, KM_SLEEP);
+		    memset(arr, -1, sizeof (*arr) *cap);
 		populate_child_array(var, i, rn->arr);
 		avl_add(&t, rn);
 	}
@@ -1882,27 +2021,40 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		vdev_anyraid_node_t *dvan = var->vd_children[donor->cvd];
 		vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
 
-		boolean_t stop = B_FALSE:
-		for (uint16_t tile = 0; tile < dvan->van_next_offset; tile++) {
-			for (uint16_t tile2 = 0;
-			    !found && tile < rvan->van_next_offset;
-			    tile++) {
-				if (receiver->arr[tile2] == donor->arr[tile])
-					B_TRUE;
-				break;
+		boolean_t moved = B_FALSE;
+		for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
+			if (donor->arr[i] == -1)
+				continue;
+			boolean_t found = B_FALSE;
+			anyraid_tile_t search;
+			search.at_tile_id = donor->arr[i];
+			anyraid_tile_t *tile = avl_find(&var->vd_tile_map,
+			    &search, NULL);
+			list_t *l = &tile->at_list;
+			for (anyraid_tile_node_t *arn =list_head(l);
+			    arn != NULL; arn = list_next(l, arn)) {
+				if (arn->atn_disk == receiver->cvd) {
+					found = B_TRUE;
+					break;
+				}
 			}
 			if (found)
 				continue;
 			vdev_anyraid_rebalance_task_t *task =
 			    kmem_zalloc(sizeof(*task), KM_SLEEP);
-			task->vart_source_disk = donor->cvd;
-			task->vart_dest_disk = receiver->cvd;
-			task->vart_source_off = tile;
-			task->vart_dest_off = rvan->van_next_offset;
+			task->vart_source_disk = (uint8_t)donor->cvd;
+			task->vart_dest_disk = (uint8_t)receiver->cvd;
+			task->vart_source_off = i;
+			task->vart_dest_off = anyraid_freelist_pop(
+			    &rvan->van_freelist);
 			list_insert_tail(&var->vd_rebalance->var_list, task);
-			receiver->arr[rvan->van_next_offset] = donor->arr[tile];
-			donor->arr[tile] = -1;
+			receiver->arr[task->vart_dest_off] = donor->arr[i];
+			donor->arr[i] = -1;
+			moved = B_TRUE;
 			break;
+		}
+		if (!moved) {
+			// idk this seems complicated
 		}
 	}
 	rw_exit(&var->vd_lock);

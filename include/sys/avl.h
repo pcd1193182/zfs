@@ -279,12 +279,12 @@ _AVL_H void avl_swap(avl_tree_t *tree1, avl_tree_t *tree2);
 /*
  * Return the number of nodes in the tree
  */
-_AVL_H ulong_t avl_numnodes(avl_tree_t *tree);
+_AVL_H ulong_t avl_numnodes(const avl_tree_t *tree);
 
 /*
  * Return B_TRUE if there are zero nodes in the tree, B_FALSE otherwise.
  */
-_AVL_H boolean_t avl_is_empty(avl_tree_t *tree);
+_AVL_H boolean_t avl_is_empty(const avl_tree_t *tree);
 
 /*
  * Used to destroy any remaining nodes in a tree. The cookie argument should

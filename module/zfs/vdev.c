@@ -6760,16 +6760,11 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 				vdev_t *pvd = vd->vdev_parent;
 				uint64_t total = 0;
 				if (vdev_is_anyraid(vd)) {
-					vdev_anyraid_t *var = vd->vdev_tsd;
-					for (int i = 0; i < vd->vdev_children;
-					    i++) {
-						total += var->vd_children[i]
-						    ->van_capacity + 1;
-					}
+					total = vdev_anyraid_child_capacity(vd,
+					    NULL);
 				} else if (pvd && vdev_is_anyraid(pvd)) {
-					vdev_anyraid_t *var = pvd->vdev_tsd;
-					total = var->vd_children[vd->vdev_id]
-					    ->van_capacity + 1;
+					total = vdev_anyraid_child_capacity(pvd,
+					    vd);
 				} else {
 					continue;
 				}
@@ -6782,16 +6777,11 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 				vdev_t *pvd = vd->vdev_parent;
 				uint64_t total = 0;
 				if (vdev_is_anyraid(vd)) {
-					vdev_anyraid_t *var = vd->vdev_tsd;
-					for (int i = 0; i < vd->vdev_children;
-					    i++) {
-						total += var->vd_children[i]
-						    ->van_next_offset;
-					}
+					total = vdev_anyraid_child_num_tiles(
+					    vd, NULL);
 				} else if (pvd && vdev_is_anyraid(pvd)) {
-					vdev_anyraid_t *var = pvd->vdev_tsd;
-					total = var->vd_children[vd->vdev_id]
-					    ->van_next_offset;
+					total = vdev_anyraid_child_num_tiles(
+					    pvd, vd);
 				} else {
 					continue;
 				}
