@@ -1974,6 +1974,42 @@ populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr)
 	}
 }
 
+static boolean_t
+rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
+    struct rebal_node *receiver)
+{
+	vdev_anyraid_node_t *dvan = var->vd_children[donor->cvd];
+	vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
+
+	for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
+		if (donor->arr[i] == -1)
+			continue;
+		boolean_t found = B_FALSE;
+		for (int j = 0; j < rvan->van_freelist.af_next_off;
+		    j++) {
+			if (donor->arr[i] == donor->arr[j]) {
+				found = B_TRUE;
+				break;
+			}
+		}
+		if (found)
+			continue;
+		vdev_anyraid_rebalance_task_t *task =
+		    kmem_zalloc(sizeof(*task), KM_SLEEP);
+		task->vart_source_disk = (uint8_t)donor->cvd;
+		task->vart_dest_disk = (uint8_t)receiver->cvd;
+		task->vart_source_off = i;
+		task->vart_dest_off = anyraid_freelist_pop(
+		    &rvan->van_freelist);
+		task->vart_tile = donor->arr[i];
+		list_insert_tail(&var->vd_rebalance->var_list, task);
+		receiver->arr[task->vart_dest_off] = donor->arr[i];
+		donor->arr[i] = -1;
+		return (B_TRUE);
+	}
+	return (B_FALSE);
+}
+
 void
 vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 {
@@ -1991,6 +2027,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	list_create(&var->vd_rebalance->var_list,
 	    sizeof (vdev_anyraid_rebalance_task_t),
 	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
+
+	spa->spa_anyraid_rebalance = &var->vd_rebalance;
 
 	rw_enter(&var->vd_lock, RW_READER);
 	uint64_t cap = vd->vdev_asize / var->vd_tile_size;
@@ -2010,53 +2048,36 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		populate_child_array(var, i, rn->arr);
 		avl_add(&t, rn);
 	}
+	struct rebal_node *donor = avl_first(&t);
+	avl_remove(&t, donor);
+	struct rebal_node *receiver = avl_last(&t);
 	for (;;) {
-		struct rebal_node *receiver = avl_last(&t);
-		struct rebal_node *donor = avl_first(&t);
-		if (receiver->diff <= 0 || donor->diff >=0)
+		if (donor->diff >= 0)
 			break;
-		avl_remove(&t, receiver);
-		avl_remove(&t, donor);
 
-		vdev_anyraid_node_t *dvan = var->vd_children[donor->cvd];
-		vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
-
-		boolean_t moved = B_FALSE;
-		for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
-			if (donor->arr[i] == -1)
-				continue;
-			boolean_t found = B_FALSE;
-			anyraid_tile_t search;
-			search.at_tile_id = donor->arr[i];
-			anyraid_tile_t *tile = avl_find(&var->vd_tile_map,
-			    &search, NULL);
-			list_t *l = &tile->at_list;
-			for (anyraid_tile_node_t *arn =list_head(l);
-			    arn != NULL; arn = list_next(l, arn)) {
-				if (arn->atn_disk == receiver->cvd) {
-					found = B_TRUE;
-					break;
-				}
-			}
-			if (found)
-				continue;
-			vdev_anyraid_rebalance_task_t *task =
-			    kmem_zalloc(sizeof(*task), KM_SLEEP);
-			task->vart_source_disk = (uint8_t)donor->cvd;
-			task->vart_dest_disk = (uint8_t)receiver->cvd;
-			task->vart_source_off = i;
-			task->vart_dest_off = anyraid_freelist_pop(
-			    &rvan->van_freelist);
-			list_insert_tail(&var->vd_rebalance->var_list, task);
-			receiver->arr[task->vart_dest_off] = donor->arr[i];
-			donor->arr[i] = -1;
-			moved = B_TRUE;
-			break;
-		}
+		struct rebal_node *prev = AVL_PREV(&t, receiver);
+		boolean_t moved = rebal_try_move_one(var, donor, receiver);
 		if (!moved) {
-			// idk this seems complicated
+			receiver = prev;
+			if (receiver->diff <= 0)
+				break;
+			continue;
 		}
+		avl_remove(&t, receiver);
+		receiver->diff--;
+		donor->diff++;
+		avl_add(&t, receiver);
+		if (avl_first(&t)->diff < donor->diff) {
+			avl_add(&t, donor);
+			donor = avl_first(&t);
+			avl_remove(&t, donor);
+			receiver = avl_liast(&t);
+			continue;
+		}
+		if (AVL_PREV(&t, receiver) != prev)
+			receiver = prev;
 	}
+	avl_add(&t, donor);
 	rw_exit(&var->vd_lock);
 }
 

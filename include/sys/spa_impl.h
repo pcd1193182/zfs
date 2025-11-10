@@ -347,6 +347,9 @@ struct spa {
 	vdev_raidz_expand_t	*spa_raidz_expand;
 	zthr_t		*spa_raidz_expand_zthr;
 
+	vdev_anyraid_rebalance_t *spa_anyraid_relabance;
+	zthr_t		*spa_anyraid_relabance_zthr;
+
 	uint64_t	spa_checkpoint_txg;	/* the txg of the checkpoint */
 	spa_checkpoint_info_t spa_checkpoint_info; /* checkpoint accounting */
 	zthr_t		*spa_checkpoint_discard_zthr;

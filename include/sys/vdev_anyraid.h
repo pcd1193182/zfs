@@ -48,6 +48,7 @@ typedef struct vdev_anyraid_rebalance_task {
 	uint8_t		vart_dest_disk;
 	uint16_t	vart_source_off;
 	uint16_t	vart_dest_off;
+	uint32_t	vart_tile;
 } vdev_anyraid_rebalance_task_t;
 
 typedef struct vdev_anyraid_rebalance {

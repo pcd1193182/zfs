@@ -2423,6 +2423,7 @@ spa_unload(spa_t *spa)
 	}
 
 	spa->spa_raidz_expand = NULL;
+	spa->spa_anyraid_relabance = NULL;
 	spa->spa_checkpoint_txg = 0;
 
 	spa_config_exit(spa, SCL_ALL, spa);
@@ -11557,6 +11558,12 @@ spa_activity_in_progress(spa_t *spa, zpool_wait_activity_t activity,
 	{
 		vdev_raidz_expand_t *vre = spa->spa_raidz_expand;
 		*in_progress = (vre != NULL && vre->vre_state == DSS_SCANNING);
+		break;
+	}
+	case ZPOOL_WAIT_ANYRAID_REBALANCE:
+	{
+		vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
+		*in_progress = (var != NULL && var->var_state == DSS_SCANNING);
 		break;
 	}
 	default:
