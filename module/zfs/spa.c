@@ -2144,6 +2144,10 @@ spa_destroy_aux_threads(spa_t *spa)
 		zthr_destroy(spa->spa_raidz_expand_zthr);
 		spa->spa_raidz_expand_zthr = NULL;
 	}
+	if (spa->spa_anyraid_rebalance_zthr != NULL) {
+		zthr_destroy(spa->spa_anyraid_rebalance_zthr);
+		spa->spa_anyraid_rebalance_zthr = NULL;
+	}
 }
 
 static void
@@ -2423,7 +2427,7 @@ spa_unload(spa_t *spa)
 	}
 
 	spa->spa_raidz_expand = NULL;
-	spa->spa_anyraid_relabance = NULL;
+	spa->spa_anyraid_rebalance = NULL;
 	spa->spa_checkpoint_txg = 0;
 
 	spa_config_exit(spa, SCL_ALL, spa);
@@ -3564,6 +3568,7 @@ spa_spawn_aux_threads(spa_t *spa)
 	ASSERT(spa_writeable(spa));
 
 	spa_start_raidz_expansion_thread(spa);
+	spa_start_anyraid_rebalance_thread(spa);
 	spa_start_indirect_condensing_thread(spa);
 	spa_start_livelist_destroy_thread(spa);
 	spa_start_livelist_condensing_thread(spa);
@@ -9932,6 +9937,10 @@ spa_async_suspend(spa_t *spa)
 	zthr_t *raidz_expand_thread = spa->spa_raidz_expand_zthr;
 	if (raidz_expand_thread != NULL)
 		zthr_cancel(raidz_expand_thread);
+
+	zthr_t *anyraid_rebalance_thread = spa->spa_anyraid_rebalance_zthr;
+	if (anyraid_rebalance_thread != NULL)
+		zthr_cancel(anyraid_rebalance_thread);
 
 	zthr_t *discard_thread = spa->spa_checkpoint_discard_zthr;
 	if (discard_thread != NULL)

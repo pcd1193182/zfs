@@ -29,6 +29,7 @@
 
 #include <sys/types.h>
 #include <sys/bitops.h>
+#include <sys/zfs_rlock.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -75,6 +76,14 @@ typedef struct anyraid_tile {
         uint32_t        at_tile_id;
         list_t          at_list;
 } anyraid_tile_t;
+
+typedef struct anyraid_move_arg {
+	vdev_anyraid_rebalance_t *ama_var;
+	zio_t			*ama_zio;
+	zfs_locked_range_t	*ama_lr;
+	uint64_t		ama_txg;
+	uint64_t		ama_size;
+} anyraid_move_arg_t;
 
 /*
  * The ondisk structure of the anyraid tile map is VDEV_ANYRAID_MAP_COPIES

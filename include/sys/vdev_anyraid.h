@@ -29,6 +29,7 @@
 
 #include <sys/types.h>
 #include <sys/vdev.h>
+#include <sys/zfs_rlock.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -54,11 +55,21 @@ typedef struct vdev_anyraid_rebalance_task {
 typedef struct vdev_anyraid_rebalance {
 	list_t 		var_list;
 	uint64_t	var_offset;
+	uint64_t	var_vd;
 
 	dsl_scan_state_t var_state;
-	uint64_t var_start_time;
-	uint64_t var_end_time;
-	uint64_t var_bytes_copied;
+	uint64_t	var_start_time;
+	uint64_t	var_end_time;
+	uint64_t	var_bytes_copied;
+	uint64_t	var_outstanding_bytes;
+
+	uint64_t	var_failed_offset;
+	boolean_t	var_waiting_for_resilver;
+	uint64_t	var_offset_pertxg[TXG_SIZE];
+	uint64_t	var_bytes_copied_pertxg[TXG_SIZE];
+
+	kmutex_t	var_lock;
+	kcondvar_t	var_cv;
 } vdev_anyraid_rebalance_t;
 
 typedef struct vdev_anyraid {
@@ -79,6 +90,7 @@ typedef struct vdev_anyraid {
 	vdev_anyraid_node_t **vd_children;
 	/* non-null iff there's a rebalance in progress */
 	vdev_anyraid_rebalance_t *vd_rebalance;
+	zfs_rangelock_t	var_rangelock;
 } vdev_anyraid_t;
 
 #define	VDEV_ANYRAID_MAX_DISKS	(1 << 8)
@@ -98,6 +110,7 @@ uint64_t vdev_anyraid_child_capacity(vdev_t *vd, vdev_t *cvd);
 
 vdev_anyraid_rebalance_t *vdev_anyraid_rebalance_status(vdev_t *vd);
 void vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx);
+void spa_start_anyraid_rebalance_thread(spa_t *spa);
 
 #ifdef	__cplusplus
 }
