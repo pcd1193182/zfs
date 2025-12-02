@@ -1331,6 +1331,7 @@ vdev_anyraid_io_done(zio_t *zio)
 	vdev_anyraid_t *var = vd->vdev_tsd;
 
 	zfs_locked_range_t *lr = zio->io_aux_vsd;
+	zfs_dbgmsg("%px %px", zio, lr);
 	ASSERT(lr);
 	zfs_rangelock_exit(lr);
 	zio->io_aux_vsd = NULL;

@@ -4841,6 +4841,7 @@ zio_vdev_io_done(zio_t *zio)
 		}
 	}
 
+	zfs_dbgmsg("%px %x", zio, zio->io_pipeline_trace);
 	ops->vdev_op_io_done(zio);
 
 	if (unexpected_error && vd->vdev_remove_wanted == B_FALSE)
