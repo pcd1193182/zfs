@@ -1330,25 +1330,26 @@ vdev_anyraid_io_done(zio_t *zio)
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
 
+	switch (var->vd_parity_type) {
+		case VAP_MIRROR:
+			if (var->vd_nparity > 0) {
+				vdev_mirror_io_done(zio);
+				break;
+			}
+			break;
+		case VAP_RAIDZ:
+			vdev_raidz_io_done(zio);
+			break;
+		default:
+			panic("Invalid parity type: %d", var->vd_parity_type);
+	}
+	if (zio->io_stage != ZIO_STAGE_VDEV_IO_DONE)
+		return;
 	zfs_locked_range_t *lr = zio->io_aux_vsd;
 	zfs_dbgmsg("%px %px", zio, lr);
 	ASSERT(lr);
 	zfs_rangelock_exit(lr);
 	zio->io_aux_vsd = NULL;
-
-	switch (var->vd_parity_type) {
-		case VAP_MIRROR:
-			if (var->vd_nparity > 0) {
-				vdev_mirror_io_done(zio);
-				return;
-			}
-			break;
-		case VAP_RAIDZ:
-			vdev_raidz_io_done(zio);
-			return;
-		default:
-			panic("Invalid parity type: %d", var->vd_parity_type);
-	}
 }
 
 static void
