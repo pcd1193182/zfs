@@ -80,6 +80,8 @@
 
 #include <libnvpair.h>
 #include <libzutil.h>
+#include <unistd.h>
+#include <getopt.h>
 
 #include "zdb.h"
 
@@ -1677,7 +1679,7 @@ dump_metaslab(metaslab_t *msp)
 
 	if (dump_opt[ALLOCATED_OPT]) {
 		uint64_t off = msp->ms_start;
-		zfs_range_tree_walk(msp->ms_allocatable, dump_allocated,
+		range_tree_walk(msp->ms_allocatable, dump_allocated,
 		    &off);
 		if (off != msp->ms_start + msp->ms_size)
 			(void) printf("ALLOC: %"PRIu64" %"PRIu64"\n", off,

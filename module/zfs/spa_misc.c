@@ -924,7 +924,7 @@ spa_close_common(spa_t *spa, const void *tag)
  * have the namespace lock held.
  */
 void
-spa_close(spa_t *spa, void *tag)
+spa_close(spa_t *spa, const void *tag)
 {
 	ASSERT(zfs_refcount_count(&spa->spa_refcount) > spa->spa_minref ||
 	    MUTEX_HELD(&spa_namespace_lock));

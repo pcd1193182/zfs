@@ -11,7 +11,6 @@ noinst_LTLIBRARIES = libzutil.la
 USER_C = \
 	zutil_device_path.c \
 	zutil_import.c \
-	zutil_import.h \
 	zutil_nicenum.c \
 	zutil_pool.c
 

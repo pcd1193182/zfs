@@ -5211,7 +5211,7 @@ spa_load_best(spa_t *spa, spa_load_state_t state, uint64_t max_request,
  * ambiguous state.
  */
 static int
-spa_open_common(const char *pool, spa_t **spapp, void *tag, nvlist_t *nvpolicy,
+spa_open_common(const char *pool, spa_t **spapp, const void *tag, nvlist_t *nvpolicy,
     nvlist_t **config)
 {
 	spa_t *spa;
@@ -5346,7 +5346,7 @@ spa_open_rewind(const char *name, spa_t **spapp, void *tag, nvlist_t *policy,
 }
 
 int
-spa_open(const char *name, spa_t **spapp, void *tag)
+spa_open(const char *name, spa_t **spapp, const void *tag)
 {
 	return (spa_open_common(name, spapp, tag, NULL, NULL));
 }

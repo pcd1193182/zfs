@@ -764,7 +764,7 @@ typedef enum trim_type {
 } trim_type_t;
 
 /* state manipulation functions */
-extern int spa_open(const char *pool, spa_t **, void *tag);
+extern int spa_open(const char *pool, spa_t **, const void *tag);
 extern int spa_open_rewind(const char *pool, spa_t **, void *tag,
     nvlist_t *policy, nvlist_t **config);
 extern int spa_get_stats(const char *pool, nvlist_t **config, char *altroot,
@@ -885,7 +885,7 @@ extern spa_t *spa_next(spa_t *prev);
 
 /* Refcount functions */
 extern void spa_open_ref(spa_t *spa, void *tag);
-extern void spa_close(spa_t *spa, void *tag);
+extern void spa_close(spa_t *spa, const void *tag);
 extern void spa_async_close(spa_t *spa, void *tag);
 extern boolean_t spa_refcount_zero(spa_t *spa);
 

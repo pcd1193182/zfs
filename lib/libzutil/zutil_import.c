@@ -67,7 +67,7 @@
 #include <libzutil.h>
 #include <libnvpair.h>
 
-#include "zutil_import.h"
+#include <libzutil_import.h>
 
 /*PRINTFLIKE2*/
 static void

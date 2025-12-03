@@ -19,6 +19,7 @@ USER_H = \
 	libzfs_core.h \
 	libzfs_impl.h \
 	libzutil.h \
+	libzutil_import.h \
 	thread_pool.h
 
 if CONFIG_USER

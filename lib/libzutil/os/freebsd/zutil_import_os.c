@@ -68,7 +68,7 @@
 
 #include <libzutil.h>
 
-#include "zutil_import.h"
+#include <libzutil_import.h>
 
 /*
  * Update a leaf vdev's persistent device strings

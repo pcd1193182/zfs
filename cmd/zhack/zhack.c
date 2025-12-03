@@ -54,6 +54,7 @@
 #include <sys/dmu_tx.h>
 #include <zfeature_common.h>
 #include <libzutil.h>
+#include <libzutil_import.h>
 #include <sys/metaslab_impl.h>
 
 static importargs_t g_importargs;
@@ -155,13 +156,9 @@ zhack_import(char *target, boolean_t readonly)
 	g_readonly = readonly;
 	g_importargs.can_be_active = readonly;
 	g_pool = strdup(target);
-
-	libpc_handle_t lpch = {
-		.lpc_lib_handle = NULL,
-		.lpc_ops = &libzpool_config_ops,
-		.lpc_printerr = B_TRUE
-	};
-	error = zpool_find_config(&lpch, target, &config, &g_importargs);
+	
+	error = zpool_find_config(NULL, target, &config, &g_importargs,
+	    &libzpool_config_ops);
 	if (error)
 		fatal(NULL, FTAG, "cannot import '%s'", target);
 
@@ -172,11 +169,11 @@ zhack_import(char *target, boolean_t readonly)
 		    zpool_prop_to_name(ZPOOL_PROP_READONLY), 1));
 	}
 
-	zfeature_checks_disable = B_TRUE;
+//	zfeature_checks_disable = B_TRUE;
 	error = spa_import(target, config, props,
 	    (readonly ?  ZFS_IMPORT_SKIP_MMP : ZFS_IMPORT_NORMAL));
 	fnvlist_free(config);
-	zfeature_checks_disable = B_FALSE;
+//	zfeature_checks_disable = B_FALSE;
 	if (error == EEXIST)
 		error = 0;
 
@@ -192,9 +189,9 @@ zhack_spa_open(char *target, boolean_t readonly, const void *tag, spa_t **spa)
 
 	zhack_import(target, readonly);
 
-	zfeature_checks_disable = B_TRUE;
+//	zfeature_checks_disable = B_TRUE;
 	err = spa_open(target, spa, tag);
-	zfeature_checks_disable = B_FALSE;
+//	zfeature_checks_disable = B_FALSE;
 
 	if (err != 0)
 		fatal(*spa, FTAG, "cannot open '%s': %s", target,
@@ -209,27 +206,26 @@ static void
 dump_obj(objset_t *os, uint64_t obj, const char *name)
 {
 	zap_cursor_t zc;
-	zap_attribute_t *za = zap_attribute_long_alloc();
+	zap_attribute_t za;
 
 	(void) printf("%s_obj:\n", name);
 
 	for (zap_cursor_init(&zc, os, obj);
-	    zap_cursor_retrieve(&zc, za) == 0;
+	    zap_cursor_retrieve(&zc, &za) == 0;
 	    zap_cursor_advance(&zc)) {
-		if (za->za_integer_length == 8) {
-			ASSERT(za->za_num_integers == 1);
+		if (za.za_integer_length == 8) {
+			ASSERT(za.za_num_integers == 1);
 			(void) printf("\t%s = %llu\n",
-			    za->za_name, (u_longlong_t)za->za_first_integer);
+			    za.za_name, (u_longlong_t)za.za_first_integer);
 		} else {
-			ASSERT(za->za_integer_length == 1);
+			ASSERT(za.za_integer_length == 1);
 			char val[1024];
-			VERIFY0(zap_lookup(os, obj, za->za_name,
+			VERIFY0(zap_lookup(os, obj, za.za_name,
 			    1, sizeof (val), val));
-			(void) printf("\t%s = %s\n", za->za_name, val);
+			(void) printf("\t%s = %s\n", za.za_name, val);
 		}
 	}
 	zap_cursor_fini(&zc);
-	zap_attribute_free(za);
 }
 
 static void
@@ -522,17 +518,17 @@ metaslab_force_alloc(metaslab_t *msp, uint64_t start, uint64_t size,
 	uint64_t off = start;
 	while (off < start + size) {
 		uint64_t ostart, osize;
-		boolean_t found = zfs_range_tree_find_in(msp->ms_allocatable,
+		boolean_t found = range_tree_find_in(msp->ms_allocatable,
 		    off, start + size - off, &ostart, &osize);
 		if (!found)
 			break;
-		zfs_range_tree_remove(msp->ms_allocatable, ostart, osize);
+		range_tree_remove(msp->ms_allocatable, ostart, osize);
 
-		if (zfs_range_tree_is_empty(msp->ms_allocating[txg & TXG_MASK]))
+		if (range_tree_is_empty(msp->ms_allocating[txg & TXG_MASK]))
 			vdev_dirty(msp->ms_group->mg_vd, VDD_METASLAB, msp,
 			    txg);
 
-		zfs_range_tree_add(msp->ms_allocating[txg & TXG_MASK], ostart,
+		range_tree_add(msp->ms_allocating[txg & TXG_MASK], ostart,
 		    osize);
 		msp->ms_allocating_total += osize;
 		off = ostart + osize;
@@ -638,7 +634,7 @@ zhack_do_metaslab_leak(int argc, char **argv)
 				prev = cur;
 				tx = dmu_tx_create_dd(
 				    spa_get_dsl(vd->vdev_spa)->dp_root_dir);
-				dmu_tx_assign(tx, DMU_TX_WAIT);
+				dmu_tx_assign(tx, DMU_TX_ASSIGN_WAIT);
 			}
 
 			metaslab_force_alloc(cur, start, size, tx);
@@ -803,8 +799,8 @@ zhack_repair_undetach(uberblock_t *ub, nvlist_t *cfg, const int l)
 	 * Uberblock root block pointer has valid birth TXG.
 	 * Copying it to the label NVlist
 	 */
-	if (BP_GET_LOGICAL_BIRTH(&ub->ub_rootbp) != 0) {
-		const uint64_t txg = BP_GET_LOGICAL_BIRTH(&ub->ub_rootbp);
+	if (ub->ub_rootbp.blk_birth != 0) {
+		const uint64_t txg = ub->ub_rootbp.blk_birth;
 		ub->ub_txg = txg;
 
 		if (nvlist_remove_all(cfg, ZPOOL_CONFIG_CREATE_TXG) != 0) {
@@ -1180,7 +1176,7 @@ main(int argc, char **argv)
 			g_importargs.path[g_importargs.paths++] = optarg;
 			break;
 		case 'o':
-			if (handle_tunable_option(optarg, B_FALSE) != 0)
+			if (set_global_var(optarg) != 0)
 				exit(1);
 			break;
 		default:

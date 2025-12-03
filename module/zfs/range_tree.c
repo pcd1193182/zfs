@@ -638,7 +638,7 @@ range_tree_find_in(range_tree_t *rt, uint64_t start, uint64_t size,
 	}
 
 	rs = zfs_btree_next(&rt->rt_root, &where, &where);
-	if (rs == NULL || rs_get_start(rs, rt) > start + size)
+	if (rs == NULL || rs_get_start(rs, rt) >= start + size)
 		return (B_FALSE);
 
 	*ostart = rs_get_start(rs, rt);
