@@ -2135,8 +2135,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		uint16_t cap = n->van_capacity;
 		rn->diff = (avg * cap) / 100000 -
 		    anyraid_freelist_alloc(&n->van_freelist);
-		int64_t *arr = kmem_alloc(sizeof (*arr) * cap, KM_SLEEP);
-		    memset(arr, -1, sizeof (*arr) *cap);
+		rn->arr = kmem_alloc(sizeof (*rn->arr) * cap, KM_SLEEP);
+		memset(rn->arr, -1, sizeof (*rn->arr) * cap);
 		populate_child_array(var, i, rn->arr);
 		avl_add(&t, rn);
 	}
