@@ -7374,7 +7374,7 @@ zfs_ioc_pool_rebalance(const char *pool, nvlist_t *innvl, nvlist_t *outnvl)
 
 	uint64_t *guids;
 	uint_t count;
-	if (nvlist_lookup_uint64_array(innvl, "vdevs", &guids, &count))
+	if (nvlist_lookup_uint64_array(innvl, "vdevs", &guids, &count) == 0)
 		err = spa_rebalance_vdevs(spa, guids, count);
 	else
 		err = spa_rebalance_all(spa);

@@ -2003,7 +2003,7 @@ lzc_pool_rebalance(const char *zpool, const uint64_t *guids, int count)
 	nvlist_t *result = NULL;
 	nvlist_t *args = fnvlist_alloc();
 
-	if (guids)
+	if (count != 0)
 		fnvlist_add_uint64_array(args, "vdevs", guids, count);
 
 	error = lzc_ioctl(ZFS_IOC_POOL_REBALANCE, zpool, args, &result);
