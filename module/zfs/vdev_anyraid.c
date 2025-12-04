@@ -1346,7 +1346,6 @@ vdev_anyraid_io_done(zio_t *zio)
 	if (zio->io_stage != ZIO_STAGE_VDEV_IO_DONE)
 		return;
 	zfs_locked_range_t *lr = zio->io_aux_vsd;
-	zfs_dbgmsg("%px %px", zio, lr);
 	ASSERT(lr);
 	zfs_rangelock_exit(lr);
 	zio->io_aux_vsd = NULL;
@@ -2093,6 +2092,7 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 		task->vart_dest_off = anyraid_freelist_pop(
 		    &rvan->van_freelist);
 		task->vart_tile = donor->arr[i];
+		zfs_dbgmsg("Moving %u %u to %u %u @ %lld", donor->cvd, i, receiver->cvd, task->vart_dest_off, (longlong_t)donor->arr[i]);
 		list_insert_tail(&var->vd_rebalance->var_list, task);
 		receiver->arr[task->vart_dest_off] = donor->arr[i];
 		donor->arr[i] = -1;

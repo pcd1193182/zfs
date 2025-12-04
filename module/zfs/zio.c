@@ -4841,7 +4841,6 @@ zio_vdev_io_done(zio_t *zio)
 		}
 	}
 
-	zfs_dbgmsg("%px %x", zio, zio->io_pipeline_trace);
 	ops->vdev_op_io_done(zio);
 
 	if (unexpected_error && vd->vdev_remove_wanted == B_FALSE)
@@ -4924,7 +4923,7 @@ zio_vdev_io_assess(zio_t *zio)
 	 * The only VDEV types that use this should have handled their aux data
 	 * by now.
 	 */
-	ASSERT0(zio->io_aux_vsd);
+	ASSERT3PF(NULL, ==, zio->io_aux_vsd, "%d %x", zio->io_error, zio->io_pipeline_trace);
 
 	/*
 	 * If a Direct I/O operation has a checksum verify error then this I/O
