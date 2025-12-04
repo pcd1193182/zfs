@@ -2171,6 +2171,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	}
 	avl_add(&t, donor);
 	rw_exit(&var->vd_lock);
+	zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
 }
 
 static boolean_t
