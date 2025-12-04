@@ -2170,6 +2170,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		if (AVL_PREV(&t, receiver) != prev)
 			receiver = prev;
 	}
+	if (list_is_empty(&var->vd_rebalance->var_list))
+		var->vd_rebalance->var_failed_offset = UINT64_MAX;
 	avl_add(&t, donor);
 	rw_exit(&var->vd_lock);
 	zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
