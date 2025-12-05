@@ -2382,9 +2382,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 	    vart = list_head(&var->var_list)) {
 		vdev_t *source_vd = pvd->vdev_child[vart->vart_source_disk];
 		rw_enter(&va->vd_lock, RW_READER);
-		uint64_t start = (vart->vart_tile * va->vd_tile_size) <<
+		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
 		    pvd->vdev_ms_shift;
-		uint64_t end = start + (va->vd_tile_size << pvd->vdev_ms_shift);
+		uint64_t end = start + (va->vd_tile_size >> pvd->vdev_ms_shift);
 		for (uint64_t i = start; i < end && !zthr_iscancelled(zthr);
 		    i++) {
 			metaslab_t *msp = pvd->vdev_ms[i];
