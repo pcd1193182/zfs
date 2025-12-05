@@ -2469,7 +2469,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		} */
 
 			while (!zthr_iscancelled(zthr) &&
-			    !zfs_range_tree_is_empty(rt) &&
+			    !zfs_range_tree_is_empty(phys) &&
 			    var->var_failed_offset == UINT64_MAX) {
 
 				/*
