@@ -2432,7 +2432,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			 * tile.
 			 */
 			zfs_range_tree_t *phys = zfs_range_tree_create_flags(
-			    NULL, type, NULL, start, shift, ZFS_RT_F_DYN_NAME,
+			    NULL, ZFS_RANGE_SEG64, NULL, 0, pvd->vdev_ashift, ZFS_RT_F_DYN_NAME,
 			    metaslab_rt_name(msp->ms_group, msp,
 			    "spa_anyraid_rebalance_thread2:rt"));
 			struct physify_arg pa;
