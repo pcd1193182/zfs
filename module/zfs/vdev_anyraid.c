@@ -2298,6 +2298,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 
 	size = MIN(size, anyraid_rebalance_max_copy_bytes);
 	size = MAX(size, 1 << ashift);
+	zfs_dbgmsg("Executing move for tile %d, %llu:%llu", vart->vart_tile, (u_longlong_t)offset, (u_longlong_t)size);
 
 	zfs_range_tree_remove(rt, offset, size);
 
