@@ -2289,7 +2289,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 
 	zfs_range_seg_t *rs = zfs_range_tree_first(rt);
 	if (rt == NULL)
-		return (B_FALSE);
+		return (B_TRUE);
 	uint64_t offset = zfs_rs_get_start(rs, rt);
 	ASSERT(IS_P2ALIGNED(offset, 1 << ashift));
 	uint64_t size = zfs_rs_get_end(rs, rt) - offset;
