@@ -1440,6 +1440,7 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			break;
 	// The tile exists, but isn't stored on this child
 	if (atn == NULL) {
+		zfs_dbgmsg("Tile %d not found on child %d", (int)start_tile_id, (int)cvd->vdev_id);
 		physical_rs->rs_start = physical_rs->rs_end = 0;
 		return;
 	}
@@ -2351,7 +2352,9 @@ anyraid_rt_physify(void *arg, uint64_t start, uint64_t size)
 	logical.rs_start = start;
 	logical.rs_end = start + size;
 	vdev_xlate(vd, &logical, &physical, &remain);
-	
+	zfs_dbgmsg("%llu:%llu %llu:%llu %llu:%llu", (u_longlong_t)start, (u_longlong_t)size,
+	    (u_longlong_t)logical.rs_start, (u_longlong_t)logical.rs_end,
+	    (u_longlong_t)physical.rs_start, (u_longlong_t)physical.rs_end);
 	ASSERT3U(remain.rs_end, ==, remain.rs_start);
 	zfs_range_tree_add(rt, physical.rs_start,
 	    physical.rs_end - physical.rs_start);
@@ -2386,6 +2389,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		    i++) {
 			metaslab_t *msp = pvd->vdev_ms[i];
 
+			zfs_dbgmsg("msp %d %d %llu %d", (int)msp->ms_id, (int)i, (u_longlong_t)start, (int)vart->vart_tile);
 			metaslab_disable(msp);
 			mutex_enter(&msp->ms_lock);
 
@@ -2434,6 +2438,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			struct physify_arg pa;
 			pa.rt = phys;
 			pa.vd = source_vd;
+			zfs_dbgmsg("physifying ms %d (tile %d) w/ vdev %d", (int)msp->ms_id, vart->vart_tile, vart->vart_source_disk);
 			zfs_range_tree_walk(rt, anyraid_rt_physify, &pa);
 			zfs_range_tree_vacate(rt, NULL, NULL);
 			zfs_range_tree_destroy(rt);
