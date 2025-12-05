@@ -2040,10 +2040,10 @@ rebal_cmp(const void *a, const void *b)
 {
 	const struct rebal_node *ra = a;
 	const struct rebal_node *rb = b;
-	int cmp = TREE_CMP(rb->diff, ra->diff);
+	int cmp = TREE_CMP(ra->diff, rb->diff);
 	if (likely(cmp != 0))
 		return (cmp);
-	return (TREE_CMP(rb->cvd, ra->cvd));
+	return (TREE_CMP(ra->cvd, rb->cvd));
 }
 
 static void
