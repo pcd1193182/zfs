@@ -137,7 +137,7 @@ int anyraid_disk_shift = 6;
 #ifdef _ILP32
 static unsigned long anyraid_rebalance_max_copy_bytes = SPA_MAXBLOCKSIZE;
 #else
-static unsigned long anyraid_rebalance_max_copy_bytes = 10 * SPA_MAXBLOCKSIZE;
+static unsigned long anyraid_rebalance_max_copy_bytes = SPA_MAXBLOCKSIZE;
 #endif
 
 /*
