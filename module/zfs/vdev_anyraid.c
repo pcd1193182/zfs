@@ -1113,7 +1113,7 @@ vdev_anyraid_close(vdev_t *vd)
  * logic.
  */
 static void
-vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile,
+vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile, vdev_anyraid_rebalance_task_t *task,
     zfs_locked_range_t *lr)
 {
 	vdev_t *vd = zio->io_vd;
@@ -1124,11 +1124,20 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile,
 
 	anyraid_tile_node_t *atn = list_head(&tile->at_list);
 	for (int c = 0; c < mm->mm_children; c++) {
+		uint8_t disk;
+		uint16_t offset;
+		if (task && task->vart_source_disk == atn->atn_disk) {
+			disk = task->vart_dest_disk;
+			offset = task->vart_source_off;
+		} else {
+			disk = atn->atn_disk;
+			offset = atn->atn_offset;
+		}
 		ASSERT(atn);
 		mirror_child_t *mc = &mm->mm_child[c];
-		mc->mc_vd = vd->vdev_child[atn->atn_disk];
+		mc->mc_vd = vd->vdev_child[disk];
 		mc->mc_offset = VDEV_ANYRAID_START_OFFSET(vd->vdev_ashift) +
-		    atn->atn_offset * tsize + zio->io_offset % tsize;
+		    offset * tsize + zio->io_offset % tsize;
 		ASSERT3U(mc->mc_offset, <, mc->mc_vd->vdev_psize -
 		    VDEV_LABEL_END_SIZE);
 		mm->mm_rebuilding = mc->mc_rebuilding = B_FALSE;
@@ -1149,7 +1158,7 @@ vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile,
  */
 static void
 vdev_anyraid_raidz_map_translate(vdev_t *vd, raidz_map_t *rm,
-    anyraid_tile_t *tile)
+    anyraid_tile_t *tile, vdev_anyraid_rebalance_task_t *task)
 {
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	ASSERT3U(rm->rm_nrows, ==, 1);
@@ -1167,12 +1176,21 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, raidz_map_t *rm,
 	for (uint64_t c = 0; c < rr->rr_scols; c++) {
 		raidz_col_t *rc = &rr->rr_col[c];
 		atn = mapping[rc->rc_devidx];
+		uint8_t disk;
+		uint16_t offset;
+		if (task && task->vart_source_disk == atn->atn_disk) {
+			disk = task->vart_dest_disk;
+			offset = task->vart_source_off;
+		} else {
+			disk = atn->atn_disk;
+			offset = atn->atn_offset;
+		}
 		uint64_t tile_off = rc->rc_offset % var->vd_tile_size;
 		uint64_t disk_off = tile_off +
-		    atn->atn_offset * var->vd_tile_size;
+		    offset * var->vd_tile_size;
 		rc->rc_offset = VDEV_ANYRAID_TOTAL_MAP_SIZE(vd->vdev_ashift) +
 		    disk_off;
-		rc->rc_devidx = atn->atn_disk;
+		rc->rc_devidx = disk;
 	}
 	kmem_free(mapping, sizeof (*mapping) * var->vd_width);
 }
@@ -1182,13 +1200,14 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, raidz_map_t *rm,
  * logic.
  */
 static void
-vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile, zfs_locked_range_t *lr)
+vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile, vdev_anyraid_rebalance_task_t *task,
+    zfs_locked_range_t *lr)
 {
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
 	raidz_map_t *rm = vdev_raidz_map_alloc(zio, vd->vdev_ashift,
 	    var->vd_width, var->vd_nparity);
-	vdev_anyraid_raidz_map_translate(vd, rm, tile);
+	vdev_anyraid_raidz_map_translate(vd, rm, tile, task);
 
 	zio->io_vsd = rm;
 	zio->io_vsd_ops = &vdev_raidz_vsd_ops;
@@ -1279,24 +1298,41 @@ vdev_anyraid_io_start(zio_t *zio)
 		kmem_free(vans, sizeof (*vans) * width);
 		avl_insert(&var->vd_tile_map, tile, where);
 	}
-	rw_exit(&var->vd_lock);
 
-	uint64_t end = zio->io_offset % tsize + zio->io_size;
-	ASSERT3U(end, <=, tsize);
 	zfs_locked_range_t *lr = zfs_rangelock_enter(&var->var_rangelock,
 	    zio->io_offset, zio->io_size, RL_READER);
+	
+	vdev_anyraid_rebalance_task_t *task = NULL;
+	if (var->vd_rebalance) {
+		vdev_anyraid_rebalance_t *vr = var->vd_rebalance;
+		mutex_enter(&vr->var_lock);
+		vdev_anyraid_rebalance_task_t *vart = list_head(&vr->var_list);
+		if (vart->vart_tile == tile->at_tile_id) {
+			ASSERT(vr->var_offset <= zio->io_offset ||
+			    vr->var_offset >= zio->io_offset + zio->io_size);
+			if (vr->var_offset >= zio->io_offset + zio->io_size)
+				task = kmem_zalloc(sizeof (*vart), KM_SLEEP);
+				*task = *vart;
+		}
+		mutex_exit(&vr->var_lock);
+	}
+	rw_exit(&var->vd_lock);
 
 	switch (var->vd_parity_type) {
 		case VAP_MIRROR:
 			if (var->vd_nparity > 0) {
-				vdev_anyraid_mirror_start(zio, tile, lr);
+				vdev_anyraid_mirror_start(zio, tile, task, lr);
 				zio_execute(zio);
+				if (task)
+					kmem_free(task, sizeof (*task));
 				return;
 			}
 			break;
 		case VAP_RAIDZ:
-			vdev_anyraid_raidz_start(zio, tile, lr);
+			vdev_anyraid_raidz_start(zio, tile, task, lr);
 			zio_execute(zio);
+			if (task)
+				kmem_free(task, sizeof (*task));
 			return;
 		default:
 			ASSERT0(1);
@@ -1322,6 +1358,8 @@ vdev_anyraid_io_start(zio_t *zio)
 	zio_nowait(cio);
 
 	zio_execute(zio);
+	if (task)
+		kmem_free(task, sizeof (*task));
 }
 
 static void
@@ -2541,7 +2579,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 			pvd = vdev_lookup_top(spa, var->var_vd);
 		}
+		mutex_enter(&var->var_lock);
 		list_remove(&var->var_list, vart);
+		mutex_exit(&var->var_lock);
 		kmem_free(vart, sizeof (*vart));
 		rw_exit(&va->vd_lock);
 	}
