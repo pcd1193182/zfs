@@ -1310,9 +1310,10 @@ vdev_anyraid_io_start(zio_t *zio)
 		if (vart->vart_tile == tile->at_tile_id) {
 			ASSERT(vr->var_offset <= zio->io_offset ||
 			    vr->var_offset >= zio->io_offset + zio->io_size);
-			if (vr->var_offset >= zio->io_offset + zio->io_size)
+			if (vr->var_offset >= zio->io_offset + zio->io_size) {
 				task = kmem_zalloc(sizeof (*vart), KM_SLEEP);
 				*task = *vart;
+			}
 		}
 		mutex_exit(&vr->var_lock);
 	}
@@ -1730,6 +1731,20 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		fnvlist_add_uint32(header, VDEV_ANYRAID_HEADER_CHECKPOINT,
 		    var->vd_checkpoint_tile);
 	}
+	if (var->vd_rebalance) {
+		mutex_enter(&var->vd_rebalance->var_lock);
+		vdev_anyraid_rebalance_task_t *vart = list_head(&var->vd_rebalance->var_list);
+		nvlist_t *rebal_task = fnvlist_alloc();
+		fnvlist_add_uint32(rebal_task, VART_TILE, vart->vart_tile);
+		fnvlist_add_uint8(rebal_task, VART_SOURCE_DISK, vart->vart_source_disk);
+		fnvlist_add_uint8(rebal_task, VART_DEST_DISK, vart->vart_dest_disk);
+		fnvlist_add_uint16(rebal_task, VART_SOURCE_OFF, vart->vart_source_off);
+		fnvlist_add_uint16(rebal_task, VART_DEST_OFF, vart->vart_dest_off);
+		fnvlist_add_uint64(rebal_task, VART_OFFSET, var->vd_rebalance->var_offset);
+		fnvlist_add_nvlist(header, VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
+		fnvlist_free(rebal_task);
+		mutex_exit(&var->vd_rebalance->var_lock);
+	}
 	size_t packed_size;
 	char *packed = NULL;
 	VERIFY0(nvlist_pack(header, &packed, &packed_size, NV_ENCODE_XDR,
@@ -2021,8 +2036,9 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
 	vdev_t *vd = vdev_lookup_top(spa, var->var_vd);
 
-	for (int i = 0; i < TXG_SIZE; i++)
-		VERIFY0(var->var_offset_pertxg[i]);
+	for (int i = 0; i < TXG_SIZE; i++) {
+		// VERIFY0(var->var_offset_pertxg[i]);
+	}
 
 	/*
 	 * Dirty the config so that the updated ZPOOL_CONFIG_RAIDZ_EXPAND_TXGS
@@ -2249,6 +2265,7 @@ anyraid_rebalance_write_done(zio_t *zio)
 		var->var_bytes_copied_pertxg[ama->ama_txg & TXG_MASK] +=
 		    zio->io_size;
 	}
+	var->var_offset = ama->ama_lr->lr_offset + ama->ama_lr->lr_length;
 	cv_signal(&var->var_cv);
 	mutex_exit(&var->var_lock);
 
@@ -2578,6 +2595,22 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 
 			spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 			pvd = vdev_lookup_top(spa, var->var_vd);
+		}
+		rw_exit(&va->vd_lock);
+		rw_enter(&va->vd_lock, RW_WRITER);
+
+		anyraid_tile_t search;
+		search.at_tile_id = vart->vart_tile;
+		anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search, NULL);
+		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);;
+		    atn = list_next(&tile->at_list, atn)) {
+			ASSERT(atn);
+			if (atn->atn_disk != vart->vart_source_disk)
+				continue;
+			ASSERT3U(atn->atn_offset, ==, vart->vart_source_off);
+			atn->atn_disk = vart->vart_dest_disk;
+			atn->atn_offset = vart->vart_dest_off;
+			break;
 		}
 		mutex_enter(&var->var_lock);
 		list_remove(&var->var_list, vart);

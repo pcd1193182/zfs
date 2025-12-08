@@ -144,6 +144,14 @@ typedef struct anyraid_move_arg {
 #define	VDEV_ANYRAID_HEADER_LENGTH	"length"
 #define	VDEV_ANYRAID_HEADER_CHECKPOINT	"checkpoint_txg"
 #define	VDEV_ANYRAID_HEADER_DISK_SIZES	"sizes"
+#define	VDEV_ANYRAID_HEADER_CUR_TASK	"cur_task"
+
+#define	VART_TILE		"tile"
+#define	VART_SOURCE_DISK	"source_disk"
+#define	VART_SOURCE_OFF		"source_off"
+#define	VART_DEST_DISK		"dest_disk"
+#define	VART_DEST_OFF		"dest_off"
+#define	VART_OFFSET		"offset"
 /*
  * We store the pool guid to prevent disks being reused from an old pool from
  * causing any issues.
