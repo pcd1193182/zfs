@@ -2059,6 +2059,10 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	    "%s vdev %llu", spa_name(spa),
 	    (unsigned long long)vd->vdev_id);
 
+	vdev_anyraid_rebalance_t *vr = spa->spa_anyraid_rebalance;
+	list_destroy(&vr->var_list);
+	cv_destroy(&vr->var_cv);
+	mutex_destroy(&vr->var_lock);
 	spa->spa_anyraid_rebalance = NULL;
 
 	spa_async_request(spa, SPA_ASYNC_INITIALIZE_RESTART);
