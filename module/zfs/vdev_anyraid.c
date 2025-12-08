@@ -1307,6 +1307,7 @@ vdev_anyraid_io_start(zio_t *zio)
 		vdev_anyraid_rebalance_t *vr = var->vd_rebalance;
 		mutex_enter(&vr->var_lock);
 		vdev_anyraid_rebalance_task_t *vart = list_head(&vr->var_list);
+		ASSERT(vart);
 		if (vart->vart_tile == tile->at_tile_id) {
 			ASSERT(vr->var_offset <= zio->io_offset ||
 			    vr->var_offset >= zio->io_offset + zio->io_size);
