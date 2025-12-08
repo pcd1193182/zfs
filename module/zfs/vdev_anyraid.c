@@ -2111,16 +2111,16 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 
 	vdev_config_dirty(vd);
 
-	var->vd_rebalance = kmem_alloc(sizeof (*var->vd_rebalance), KM_SLEEP);
+	var->vd_rebalance = kmem_zalloc(sizeof (*var->vd_rebalance), KM_SLEEP);
 	var->vd_rebalance->var_start_time = gethrestime_sec();
-	var->vd_rebalance->var_end_time = 0;
 	var->vd_rebalance->var_state = DSS_SCANNING;
-	var->vd_rebalance->var_bytes_copied = 0;
 	var->vd_rebalance->var_vd = vd->vdev_id;
 	var->vd_rebalance->var_failed_offset = UINT64_MAX;
 	list_create(&var->vd_rebalance->var_list,
 	    sizeof (vdev_anyraid_rebalance_task_t),
 	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
+	mutex_init(&var->vd_rebalance->var_lock, NULL, MUTEX_DEFAULT, NULL);
+	cv_init(&var->vd_rebalance->var_cv, NULL, CV_DEFAULT, NULL);
 
 	vd->vdev_spa->spa_anyraid_rebalance = var->vd_rebalance;
 
