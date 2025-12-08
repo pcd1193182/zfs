@@ -2228,7 +2228,6 @@ anyraid_rebalance_read_done(zio_t *zio)
 {
 	anyraid_move_arg_t *ama = zio->io_private;
 	vdev_anyraid_rebalance_t *var = ama->ama_var;
-	abd_free(zio->io_abd);
 
 	/*
 	 * If the read failed, or if it was done on a vdev that is not fully
