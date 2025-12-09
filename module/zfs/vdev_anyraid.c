@@ -2110,12 +2110,15 @@ rebal_cmp(const void *a, const void *b)
 static void
 populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr)
 {
+	zfs_dbgmsg("populating %d", child);
 	for (anyraid_tile_t *tile = avl_first(&var->vd_tile_map);
 	    tile; tile = AVL_NEXT(&var->vd_tile_map, tile)) {
 		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);
 		    atn; atn = list_next(&tile->at_list, atn)) {
-			if (atn->atn_disk == child)
+			if (atn->atn_disk == child) {
+				zfs_dbgmsg("putting %d at %d", tile->at_tile_id, atn->atn_offset);
 				arr[atn->atn_offset] = tile->at_tile_id;
+			}
 		}
 	}
 }
