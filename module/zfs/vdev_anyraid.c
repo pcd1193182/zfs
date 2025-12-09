@@ -2623,12 +2623,13 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			break;
 		}
 		mutex_enter(&var->var_lock);
+		zfs_dbgmsg("Removing task %px", vart);
 		list_remove(&var->var_list, vart);
 		mutex_exit(&var->var_lock);
 		kmem_free(vart, sizeof (*vart));
 		rw_exit(&va->vd_lock);
 	}
-
+	zfs_dbgmsg("Done with tasks %px", list_head(&var->var_list));
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
 	/*
