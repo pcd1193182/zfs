@@ -2635,6 +2635,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 	}
 	zfs_dbgmsg("Done with tasks %px", list_head(&var->var_list));
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
+	mutex_exit(&var->var_lock);
 
 	/*
 	 * The txg_wait_synced() here ensures that all rebalance zio's have
