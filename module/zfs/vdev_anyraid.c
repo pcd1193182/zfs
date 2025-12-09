@@ -1735,15 +1735,17 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 	if (var->vd_rebalance) {
 		mutex_enter(&var->vd_rebalance->var_lock);
 		vdev_anyraid_rebalance_task_t *vart = list_head(&var->vd_rebalance->var_list);
-		nvlist_t *rebal_task = fnvlist_alloc();
-		fnvlist_add_uint32(rebal_task, VART_TILE, vart->vart_tile);
-		fnvlist_add_uint8(rebal_task, VART_SOURCE_DISK, vart->vart_source_disk);
-		fnvlist_add_uint8(rebal_task, VART_DEST_DISK, vart->vart_dest_disk);
-		fnvlist_add_uint16(rebal_task, VART_SOURCE_OFF, vart->vart_source_off);
-		fnvlist_add_uint16(rebal_task, VART_DEST_OFF, vart->vart_dest_off);
-		fnvlist_add_uint64(rebal_task, VART_OFFSET, var->vd_rebalance->var_offset);
-		fnvlist_add_nvlist(header, VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
-		fnvlist_free(rebal_task);
+		if (vart) {
+			nvlist_t *rebal_task = fnvlist_alloc();
+			fnvlist_add_uint32(rebal_task, VART_TILE, vart->vart_tile);
+			fnvlist_add_uint8(rebal_task, VART_SOURCE_DISK, vart->vart_source_disk);
+			fnvlist_add_uint8(rebal_task, VART_DEST_DISK, vart->vart_dest_disk);
+			fnvlist_add_uint16(rebal_task, VART_SOURCE_OFF, vart->vart_source_off);
+			fnvlist_add_uint16(rebal_task, VART_DEST_OFF, vart->vart_dest_off);
+			fnvlist_add_uint64(rebal_task, VART_OFFSET, var->vd_rebalance->var_offset);
+			fnvlist_add_nvlist(header, VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
+			fnvlist_free(rebal_task);
+		}
 		mutex_exit(&var->vd_rebalance->var_lock);
 	}
 	size_t packed_size;
