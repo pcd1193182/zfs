@@ -2172,18 +2172,20 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 
 	vdev_config_dirty(vd);
 
-	var->vd_rebalance = kmem_zalloc(sizeof (*var->vd_rebalance), KM_SLEEP);
-	var->vd_rebalance->var_start_time = gethrestime_sec();
-	var->vd_rebalance->var_state = DSS_SCANNING;
-	var->vd_rebalance->var_vd = vd->vdev_id;
-	var->vd_rebalance->var_failed_offset = UINT64_MAX;
-	list_create(&var->vd_rebalance->var_list,
+	vdev_anyraid_rebalance_t *vr = kmem_zalloc(sizeof (*vr), KM_SLEEP);
+	vr->var_start_time = gethrestime_sec();
+	vr->var_state = DSS_SCANNING;
+	vr->var_vd = vd->vdev_id;
+	vr->var_failed_offset = UINT64_MAX;
+	list_create(&vr->var_list,
 	    sizeof (vdev_anyraid_rebalance_task_t),
 	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
-	mutex_init(&var->vd_rebalance->var_lock, NULL, MUTEX_DEFAULT, NULL);
-	cv_init(&var->vd_rebalance->var_cv, NULL, CV_DEFAULT, NULL);
+	mutex_init(&vr->var_lock, NULL, MUTEX_DEFAULT, NULL);
+	cv_init(&vr->var_cv, NULL, CV_DEFAULT, NULL);
 
-	vd->vdev_spa->spa_anyraid_rebalance = var->vd_rebalance;
+	mutex_enter(&vr->var_lock);
+	var->vd_rebalance = vr;
+	vd->vdev_spa->spa_anyraid_rebalance = vr;
 
 	rw_enter(&var->vd_lock, RW_READER);
 	uint64_t cap = vd->vdev_asize / var->vd_tile_size;
@@ -2235,6 +2237,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	}
 	avl_add(&t, donor);
 	rw_exit(&var->vd_lock);
+	mutex_exit(&vr->var_lock);
 	zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
 }
 
