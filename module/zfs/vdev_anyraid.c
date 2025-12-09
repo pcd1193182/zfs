@@ -1307,8 +1307,7 @@ vdev_anyraid_io_start(zio_t *zio)
 		vdev_anyraid_rebalance_t *vr = var->vd_rebalance;
 		mutex_enter(&vr->var_lock);
 		vdev_anyraid_rebalance_task_t *vart = list_head(&vr->var_list);
-		ASSERT(vart);
-		if (vart->vart_tile == tile->at_tile_id) {
+		if (vart && vart->vart_tile == tile->at_tile_id) {
 			ASSERT(vr->var_offset <= zio->io_offset ||
 			    vr->var_offset >= zio->io_offset + zio->io_size);
 			if (vr->var_offset >= zio->io_offset + zio->io_size) {
@@ -2439,11 +2438,13 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 
 	uint64_t guid = pvd->vdev_guid;
 
+	mutex_enter(&var->var_lock);
 	/* Iterate over all the tasks */
 	for (vdev_anyraid_rebalance_task_t *vart =
 	    list_head(&var->var_list);
 	    vart != NULL && !zthr_iscancelled(zthr);
 	    vart = list_head(&var->var_list)) {
+		mutex_exit(&var->var_lock);
 		vdev_t *source_vd = pvd->vdev_child[vart->vart_source_disk];
 		rw_enter(&va->vd_lock, RW_READER);
 		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
@@ -2625,7 +2626,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		mutex_enter(&var->var_lock);
 		zfs_dbgmsg("Removing task %px", vart);
 		list_remove(&var->var_list, vart);
-		mutex_exit(&var->var_lock);
 		kmem_free(vart, sizeof (*vart));
 		rw_exit(&va->vd_lock);
 	}
@@ -2665,7 +2665,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		    NULL, "offset=%llu failed_offset=%lld",
 		    (long long)var->var_offset,
 		    (long long)var->var_failed_offset);
-		mutex_enter(&var->var_lock);
 		if (var->var_failed_offset != UINT64_MAX) {
 			/*
 			 * Reset progress so that we will retry everything
@@ -2675,8 +2674,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			var->var_failed_offset = UINT64_MAX;
 			var->var_waiting_for_resilver = B_TRUE;
 		}
-		mutex_exit(&var->var_lock);
 	}
+	mutex_exit(&var->var_lock);
 }
 
 void
