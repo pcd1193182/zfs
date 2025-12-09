@@ -2139,6 +2139,7 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 			 * if so, we have to skip it.
 			*/
 			if (donor->arr[i] == donor->arr[j]) {
+				zfs_dbgmsg("Found %lld at %d, %d", (longlong_t)donor->arr[i], i, j);
 				found = B_TRUE;
 				break;
 			}
