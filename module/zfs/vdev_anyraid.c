@@ -2651,7 +2651,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 	 */
 	txg_wait_synced(spa->spa_dsl_pool, 0);
 
-	mutex_enter(&var->var_lock);
 	if (!zthr_iscancelled(zthr) && list_head(&var->var_list) == NULL) {
 		/*
 		 * We are not being canceled or paused, so the reflow must be
@@ -2681,7 +2680,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			var->var_waiting_for_resilver = B_TRUE;
 		}
 	}
-	mutex_exit(&var->var_lock);
 }
 
 void
