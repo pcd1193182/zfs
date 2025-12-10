@@ -334,6 +334,7 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	for (int c = 0; c < children; c++) {
 		vdev_anyraid_node_t *van = kmem_zalloc(sizeof (*van), KM_SLEEP);
 		van->van_id = c;
+		anyraid_freelist_create(&van->van_freelist, 0);
 		avl_add(&var->vd_children_tree, van);
 		var->vd_children[c] = van;
 	}
@@ -351,6 +352,7 @@ vdev_anyraid_fini(vdev_t *vd)
 	vdev_anyraid_node_t *node;
 	void *cookie = NULL;
 	while ((node = avl_destroy_nodes(&var->vd_children_tree, &cookie))) {
+		anyraid_freelist_destroy(&node->van_freelist);
 		kmem_free(node, sizeof (*node));
 	}
 	avl_destroy(&var->vd_children_tree);
