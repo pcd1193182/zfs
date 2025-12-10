@@ -327,7 +327,7 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	avl_create(&var->vd_children_tree, anyraid_child_compare,
 	    sizeof (vdev_anyraid_node_t),
 	    offsetof(vdev_anyraid_node_t, van_node));
-	zfs_rangelock_init(&var->var_rangelock, NULL, NULL);
+	zfs_rangelock_init(&var->vd_rangelock, NULL, NULL);
 
 	var->vd_children = kmem_zalloc(sizeof (*var->vd_children) * children,
 	    KM_SLEEP);
@@ -356,7 +356,7 @@ vdev_anyraid_fini(vdev_t *vd)
 		kmem_free(node, sizeof (*node));
 	}
 	avl_destroy(&var->vd_children_tree);
-	zfs_rangelock_fini(&var->var_rangelock);
+	zfs_rangelock_fini(&var->vd_rangelock);
 
 	rw_destroy(&var->vd_lock);
 	kmem_free(var->vd_children,
@@ -1301,7 +1301,7 @@ vdev_anyraid_io_start(zio_t *zio)
 		avl_insert(&var->vd_tile_map, tile, where);
 	}
 
-	zfs_locked_range_t *lr = zfs_rangelock_enter(&var->var_rangelock,
+	zfs_locked_range_t *lr = zfs_rangelock_enter(&var->vd_rangelock,
 	    zio->io_offset, zio->io_size, RL_READER);
 	
 	vdev_anyraid_rebalance_task_t *task = NULL;
@@ -2039,11 +2039,13 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	spa_t *spa = arg;
 	vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
 	vdev_t *vd = vdev_lookup_top(spa, var->var_vd);
+	vdev_anyraid_t *va = vd->vdev_tsd;
 
 	for (int i = 0; i < TXG_SIZE; i++) {
 		// VERIFY0(var->var_offset_pertxg[i]);
 	}
 
+	rw_enter(&va->vd_lock, RW_WRITER);
 	/*
 	 * Dirty the config so that the updated ZPOOL_CONFIG_RAIDZ_EXPAND_TXGS
 	 * will get written (based on vd_expand_txgs).
@@ -2062,11 +2064,12 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	    "%s vdev %llu", spa_name(spa),
 	    (unsigned long long)vd->vdev_id);
 
-	vdev_anyraid_rebalance_t *vr = spa->spa_anyraid_rebalance;
-	list_destroy(&vr->var_list);
-	cv_destroy(&vr->var_cv);
-	mutex_destroy(&vr->var_lock);
+	list_destroy(&var->var_list);
+	cv_destroy(&var->var_cv);
+	mutex_destroy(&var->var_lock);
 	spa->spa_anyraid_rebalance = NULL;
+	va->vd_rebalance = NULL;
+	rw_exit(&va->vd_lock);
 
 	spa_async_request(spa, SPA_ASYNC_INITIALIZE_RESTART);
 	spa_async_request(spa, SPA_ASYNC_TRIM_RESTART);
@@ -2372,7 +2375,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 
 	anyraid_move_arg_t *ama = kmem_zalloc(sizeof (*ama), KM_SLEEP);
 	ama->ama_var = var;
-	ama->ama_lr = zfs_rangelock_enter(&va->var_rangelock,
+	ama->ama_lr = zfs_rangelock_enter(&va->vd_rangelock,
 	    offset, size, RL_WRITER);
 	ama->ama_txg = dmu_tx_get_txg(tx);
 	ama->ama_size = size;

@@ -90,7 +90,7 @@ typedef struct vdev_anyraid {
 	vdev_anyraid_node_t **vd_children;
 	/* non-null iff there's a rebalance in progress */
 	vdev_anyraid_rebalance_t *vd_rebalance;
-	zfs_rangelock_t	var_rangelock;
+	zfs_rangelock_t	vd_rangelock;
 } vdev_anyraid_t;
 
 #define	VDEV_ANYRAID_MAX_DISKS	(1 << 8)
