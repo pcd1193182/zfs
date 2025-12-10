@@ -149,7 +149,7 @@ static unsigned long anyraid_rebalance_max_copy_bytes = SPA_MAXBLOCKSIZE;
 static int zfs_scrub_after_rebalance = 1;
 
 
-static inline int
+static int
 af_compar(const void *p1, const void *p2)
 {
 	const anyraid_free_node_t *af1 = p1, *af2 = p2;
