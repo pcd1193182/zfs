@@ -2137,11 +2137,13 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 	vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
 
 	for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
-		if (donor->arr[i] == -1)
+		zfs_dbgmsg("Donor %d (%d) considering offset %d, contains %lld", donor->cvd, dvan->van_freelist.af_next_off, i, (longlong_t)donor->arr[i]);
+		if (donor->arr[i] == -1LL)
 			continue;
 		boolean_t found = B_FALSE;
 		for (int j = 0; j < rvan->van_freelist.af_next_off;
 		    j++) {
+			zfs_dbgmsg("Receiver %d (%d) considering offset %d, contains %lld", receiver->cvd, rvan->van_freelist.af_next_off, j, (longlong_t)receiver->arr[i]);
 			/*
 			 * TODO we need to check here if doing this move would
 			 * cause the total number of allocatable tiles to drop;
