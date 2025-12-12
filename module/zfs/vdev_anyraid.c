@@ -2203,7 +2203,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		struct rebal_node *rn = kmem_zalloc(sizeof (*rn), KM_SLEEP);
 		rn->cvd = i;
 		vdev_anyraid_node_t *n = var->vd_children[i];
-		uint16_t cap = n->van_capacity;
+		uint32_t cap = n->van_capacity + 1;
 		rn->diff = cap -
 		    anyraid_freelist_alloc(&n->van_freelist);
 		rn->arr = kmem_alloc(sizeof (*rn->arr) * cap, KM_SLEEP);
