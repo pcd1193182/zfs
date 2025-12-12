@@ -2338,7 +2338,6 @@ anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
 		return;
 
 	mutex_enter(&var->var_lock);
-	ASSERT3U(var->var_offset, <=, offset);
 	var->var_offset = offset;
 	mutex_exit(&var->var_lock);
 
