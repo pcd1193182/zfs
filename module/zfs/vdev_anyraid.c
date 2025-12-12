@@ -2097,7 +2097,7 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 struct rebal_node {
 	avl_node_t node;
 	int cvd;
-	int64_t diff; // positive: wants more tiles, negative: wants fewer
+	int diff; // positive: wants more tiles, negative: wants fewer
 	int64_t *arr;
 };
 
@@ -2196,9 +2196,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	vd->vdev_spa->spa_anyraid_rebalance = vr;
 
 	rw_enter(&var->vd_lock, RW_READER);
-	uint64_t cap = vd->vdev_asize / var->vd_tile_size;
-	uint64_t avg = (var->vd_width * avl_numnodes(&var->vd_tile_map)) *
-	    100000 / cap;
 	avl_tree_t t;
 	avl_create(&t, rebal_cmp, sizeof (struct rebal_node), offsetof (struct rebal_node, node));
 	for (int i = 0; i < vd->vdev_children; i++) {
@@ -2206,7 +2203,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		rn->cvd = i;
 		vdev_anyraid_node_t *n = var->vd_children[i];
 		uint16_t cap = n->van_capacity;
-		rn->diff = (avg * cap) / 100000 -
+		rn->diff = cap -
 		    anyraid_freelist_alloc(&n->van_freelist);
 		rn->arr = kmem_alloc(sizeof (*rn->arr) * cap, KM_SLEEP);
 		memset(rn->arr, -1, sizeof (*rn->arr) * cap);
@@ -2217,8 +2214,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	avl_remove(&t, donor);
 	struct rebal_node *receiver = avl_last(&t);
 	for (;;) {
-		zfs_dbgmsg("donor: %d receiver: %d", donor->cvd, receiver->cvd);
-		if (donor->diff >= 0)
+		zfs_dbgmsg("donor: %d (%d) receiver: %d (%d)", donor->cvd, donor->diff, receiver->cvd, receiver->diff);
+		if (donor->diff >= receiver->diff)
 			break;
 
 		struct rebal_node *prev = AVL_PREV(&t, receiver);
