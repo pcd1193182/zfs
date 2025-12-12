@@ -2137,6 +2137,7 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 	vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
 
 	for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
+		ASSERT3U(dvan->van_freelist.af_next_off, <=, dvan->van_capacity + 1);
 		zfs_dbgmsg("Donor %d (%d) considering offset %d, contains %lld", donor->cvd, dvan->van_freelist.af_next_off, i, (longlong_t)donor->arr[i]);
 		if (donor->arr[i] == -1LL)
 			continue;
