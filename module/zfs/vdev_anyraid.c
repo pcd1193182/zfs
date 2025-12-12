@@ -2242,7 +2242,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	rw_exit(&var->vd_lock);
 	mutex_exit(&vr->var_lock);
 	// TODO destroy tree
-	zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
+	//zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
 }
 
 static boolean_t
