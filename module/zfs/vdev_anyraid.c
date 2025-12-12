@@ -2215,7 +2215,10 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	avl_remove(&t, donor);
 	struct rebal_node *receiver = avl_last(&t);
 	for (;;) {
+		ASSERT(donor);
+		ASSERT(receiver);
 		zfs_dbgmsg("donor: %d (%d) receiver: %d (%d)", donor->cvd, donor->diff, receiver->cvd, receiver->diff);
+		ASSERT3P(donor, !=, receiver);
 		if (donor->diff >= receiver->diff)
 			break;
 
