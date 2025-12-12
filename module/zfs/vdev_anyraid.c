@@ -2113,7 +2113,7 @@ rebal_cmp(const void *a, const void *b)
 }
 
 static void
-populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr)
+populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr, uint32_t cap)
 {
 	zfs_dbgmsg("populating %d", child);
 	for (anyraid_tile_t *tile = avl_first(&var->vd_tile_map);
@@ -2121,6 +2121,7 @@ populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr)
 		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);
 		    atn; atn = list_next(&tile->at_list, atn)) {
 			if (atn->atn_disk == child) {
+				ASSERT3U(atn->atn_offset, <, cap);
 				zfs_dbgmsg("putting %d at %d", tile->at_tile_id, atn->atn_offset);
 				arr[atn->atn_offset] = tile->at_tile_id;
 			}
@@ -2208,7 +2209,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		    anyraid_freelist_alloc(&n->van_freelist);
 		rn->arr = kmem_alloc(sizeof (*rn->arr) * cap, KM_SLEEP);
 		memset(rn->arr, -1, sizeof (*rn->arr) * cap);
-		populate_child_array(var, i, rn->arr);
+		populate_child_array(var, i, rn->arr, cap);
 		avl_add(&t, rn);
 	}
 	struct rebal_node *donor = avl_first(&t);
@@ -2245,6 +2246,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	avl_add(&t, donor);
 	rw_exit(&var->vd_lock);
 	mutex_exit(&vr->var_lock);
+	ASSERT0(1);
 	// TODO destroy tree
 	//zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
 }
