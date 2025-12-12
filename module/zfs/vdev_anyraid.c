@@ -2097,7 +2097,7 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 struct rebal_node {
 	avl_node_t node;
 	int cvd;
-	int diff; // positive: wants more tiles, negative: wants fewer
+	int diff; // number of free tiles
 	int64_t *arr;
 };
 
@@ -2222,8 +2222,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		boolean_t moved = rebal_try_move_one(var, donor, receiver);
 		if (!moved) {
 			receiver = prev;
-			if (receiver->diff <= 0)
-				break;
 			continue;
 		}
 		avl_remove(&t, receiver);
