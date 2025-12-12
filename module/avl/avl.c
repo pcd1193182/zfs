@@ -180,8 +180,10 @@ avl_first(avl_tree_t *tree)
 	avl_node_t *prev = NULL;
 	size_t off = tree->avl_offset;
 
-	for (node = tree->avl_root; node != NULL; node = node->avl_child[0])
+	for (node = tree->avl_root; node != NULL; node = node->avl_child[0]) {
+		ASSERT(node == NULL || (uintptr_t)node > 64);
 		prev = node;
+	}
 
 	if (prev != NULL)
 		return (AVL_NODE2DATA(prev, off));
