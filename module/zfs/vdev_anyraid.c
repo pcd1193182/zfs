@@ -2267,6 +2267,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 				break;
 			donor = prev_donor;
 		}
+		if (donor == NULL || donor->alloc == 0)
+			break;
 	}
 	rw_exit(&var->vd_lock);
 	mutex_exit(&vr->var_lock);
