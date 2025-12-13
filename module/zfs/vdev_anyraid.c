@@ -2246,6 +2246,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 				    donor, receiver);
 				if (!moved) {
 					receiver = prev_rec;
+					prev_rec = AVL_PREV(&ft, receiver);
 					continue;
 				}
 				avl_remove(&ft, receiver);
@@ -2265,6 +2266,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 			if (moved)
 				break;
 			donor = prev_donor;
+			prev_donor = AVL_PREV(&at, donor);
 		}
 	}
 	rw_exit(&var->vd_lock);
