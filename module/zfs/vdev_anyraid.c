@@ -2095,18 +2095,31 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 }
 
 struct rebal_node {
-	avl_node_t node;
+	avl_node_t node1;
+	avl_node_t node2;
 	int cvd;
-	int diff; // number of free tiles
+	int free; // number of free tiles
+	int alloc; // number of allocated tiles
 	int64_t *arr;
 };
 
 static int
-rebal_cmp(const void *a, const void *b)
+rebal_cmp_free(const void *a, const void *b)
 {
 	const struct rebal_node *ra = a;
 	const struct rebal_node *rb = b;
-	int cmp = TREE_CMP(ra->diff, rb->diff);
+	int cmp = TREE_CMP(ra->free, rb->free);
+	if (likely(cmp != 0))
+		return (cmp);
+	return (TREE_CMP(ra->cvd, rb->cvd));
+}
+
+static int
+rebal_cmp_alloc(const void *a, const void *b)
+{
+	const struct rebal_node *ra = a;
+	const struct rebal_node *rb = b;
+	int cmp = TREE_CMP(ra->alloc, rb->alloc);
 	if (likely(cmp != 0))
 		return (cmp);
 	return (TREE_CMP(ra->cvd, rb->cvd));
@@ -2201,52 +2214,59 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	vd->vdev_spa->spa_anyraid_rebalance = vr;
 
 	rw_enter(&var->vd_lock, RW_READER);
-	avl_tree_t t;
-	avl_create(&t, rebal_cmp, sizeof (struct rebal_node), offsetof (struct rebal_node, node));
+	avl_tree_t ft;
+	avl_create(&ft, rebal_cmp_free, sizeof (struct rebal_node), offsetof (struct rebal_node, node1));
+	avl_tree_t at;
+	avl_create(&at, rebal_cmp_alloc, sizeof (struct rebal_node), offsetof (struct rebal_node, node2));
 	for (int i = 0; i < vd->vdev_children; i++) {
 		struct rebal_node *rn = kmem_zalloc(sizeof (*rn), KM_SLEEP);
 		rn->cvd = i;
 		vdev_anyraid_node_t *n = var->vd_children[i];
 		uint32_t cap = n->van_capacity + 1;
-		rn->diff = cap -
-		    anyraid_freelist_alloc(&n->van_freelist);
+		rn->alloc = anyraid_freelist_alloc(&n->van_freelist);
+		rn->free = cap - rn->alloc;
 		rn->arr = kmem_alloc(sizeof (*rn->arr) * cap, KM_SLEEP);
 		memset(rn->arr, -1, sizeof (*rn->arr) * cap);
 		populate_child_array(var, i, rn->arr, cap);
-		avl_add(&t, rn);
+		avl_add(&ft, rn);
+		avl_add(&at, rn);
 	}
-	struct rebal_node *donor = avl_first(&t);
-	avl_remove(&t, donor);
-	struct rebal_node *receiver = avl_last(&t);
 	for (;;) {
-		ASSERT(donor);
-		ASSERT(receiver);
-		zfs_dbgmsg("donor: %d (%d) receiver: %d (%d)", donor->cvd, donor->diff, receiver->cvd, receiver->diff);
-		ASSERT3P(donor, !=, receiver);
-		if (donor->diff >= receiver->diff)
-			break;
-
-		struct rebal_node *prev = AVL_PREV(&t, receiver);
-		boolean_t moved = rebal_try_move_one(var, donor, receiver);
-		if (!moved) {
-			receiver = prev;
-			continue;
+		struct rebal_node *donor = avl_last(&at);
+		struct rebal_node *prev_donor = AVL_PREV(&at, donor);
+		boolean_t moved = B_FALSE;
+		for (; donor && donor->alloc > 0;) {
+			struct rebal_node *receiver = avl_last(&ft);
+			struct rebal_node *prev_rec = AVL_PREV(&ft, receiver);
+			for (; receiver && receiver->free > 0;) {
+				zfs_dbgmsg("donor: %d (%d) receiver: %d (%d)", donor->cvd, donor->alloc, receiver->cvd, receiver->free);
+				if (receiver->free <= donor->free + 1)
+					break;
+				moved = rebal_try_move_one(var,
+				    donor, receiver);
+				if (!moved) {
+					receiver = prev_rec;
+					continue;
+				}
+				avl_remove(&ft, receiver);
+				avl_remove(&at, receiver);
+				receiver->free--;
+				receiver->alloc++;
+				avl_add(&ft, receiver);
+				avl_add(&at, receiver);
+				avl_remove(&ft, donor);
+				avl_remove(&at, donor);
+				donor->free++;
+				donor->alloc--;
+				avl_add(&ft, donor);
+				avl_add(&at, donor);
+				break;
+			}
+			if (moved)
+				break;
+			donor = prev_donor;
 		}
-		avl_remove(&t, receiver);
-		receiver->diff--;
-		donor->diff++;
-		avl_add(&t, receiver);
-		if (((struct rebal_node *)avl_first(&t))->diff < donor->diff) {
-			avl_add(&t, donor);
-			donor = avl_first(&t);
-			avl_remove(&t, donor);
-			receiver = avl_last(&t);
-			continue;
-		}
-		if (AVL_PREV(&t, receiver) != prev)
-			receiver = prev;
 	}
-	avl_add(&t, donor);
 	rw_exit(&var->vd_lock);
 	mutex_exit(&vr->var_lock);
 	ASSERT0(1);
