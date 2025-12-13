@@ -2233,12 +2233,13 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	}
 	for (;;) {
 		struct rebal_node *donor = avl_last(&at);
-		struct rebal_node *prev_donor = AVL_PREV(&at, donor);
 		boolean_t moved = B_FALSE;
 		for (; donor && donor->alloc > 0;) {
+			struct rebal_node *prev_donor = AVL_PREV(&at, donor);
 			struct rebal_node *receiver = avl_last(&ft);
-			struct rebal_node *prev_rec = AVL_PREV(&ft, receiver);
 			for (; receiver && receiver->free > 0;) {
+				struct rebal_node *prev_rec =
+				    AVL_PREV(&ft, receiver);
 				zfs_dbgmsg("donor: %d (%d) receiver: %d (%d)", donor->cvd, donor->alloc, receiver->cvd, receiver->free);
 				if (receiver->free <= donor->free + 1)
 					break;
@@ -2246,7 +2247,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 				    donor, receiver);
 				if (!moved) {
 					receiver = prev_rec;
-					prev_rec = AVL_PREV(&ft, receiver);
 					continue;
 				}
 				avl_remove(&ft, receiver);
@@ -2266,7 +2266,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 			if (moved)
 				break;
 			donor = prev_donor;
-			prev_donor = AVL_PREV(&at, donor);
 		}
 	}
 	rw_exit(&var->vd_lock);
