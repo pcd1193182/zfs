@@ -245,7 +245,7 @@ static inline uint64_t
 vdev_anyraid_header_offset(vdev_t *vd, int id)
 {
 	uint64_t full_size = VDEV_ANYRAID_SINGLE_MAP_SIZE(vd->vdev_ashift);
-	if (id < VDEV_ANYRAID_START_COPES)
+	if (id < VDEV_ANYRAID_START_COPIES)
 		return (VDEV_LABEL_START_SIZE + id * full_size);
 	else
 		return (vd->vdev_psize - VDEV_LABEL_END_SIZE -
@@ -2296,6 +2296,7 @@ anyraid_rebalance_write_done(zio_t *zio)
 		/* Force a rebalance pause on errors */
 		var->var_failed_offset =
 		    MIN(var->var_failed_offset, ama->ama_lr->lr_offset);
+		ASSERT0F(zio->io_error, "io failed: %llu %llu", (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size);
 	}
 	ASSERT3U(var->var_outstanding_bytes, >=, zio->io_size);
 	var->var_outstanding_bytes -= zio->io_size;
