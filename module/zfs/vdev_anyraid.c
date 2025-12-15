@@ -2128,14 +2128,12 @@ rebal_cmp_alloc(const void *a, const void *b)
 static void
 populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr, uint32_t cap)
 {
-	zfs_dbgmsg("populating %d", child);
 	for (anyraid_tile_t *tile = avl_first(&var->vd_tile_map);
 	    tile; tile = AVL_NEXT(&var->vd_tile_map, tile)) {
 		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);
 		    atn; atn = list_next(&tile->at_list, atn)) {
 			if (atn->atn_disk == child) {
 				ASSERT3U(atn->atn_offset, <, cap);
-				zfs_dbgmsg("putting %d at %d", tile->at_tile_id, atn->atn_offset);
 				arr[atn->atn_offset] = tile->at_tile_id;
 			}
 		}
@@ -2151,20 +2149,17 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 
 	for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
 		ASSERT3U(dvan->van_freelist.af_next_off, <=, dvan->van_capacity + 1);
-		//zfs_dbgmsg("Donor %d (%d) considering offset %d, contains %lld", donor->cvd, dvan->van_freelist.af_next_off, i, (longlong_t)donor->arr[i]);
 		if (donor->arr[i] == -1LL)
 			continue;
 		boolean_t found = B_FALSE;
 		for (int j = 0; j < rvan->van_freelist.af_next_off;
 		    j++) {
-			//zfs_dbgmsg("Receiver %d (%d) considering offset %d, contains %lld", receiver->cvd, rvan->van_freelist.af_next_off, j, (longlong_t)receiver->arr[j]);
 			/*
 			 * TODO we need to check here if doing this move would
 			 * cause the total number of allocatable tiles to drop;
 			 * if so, we have to skip it.
 			*/
 			if (donor->arr[i] == receiver->arr[j]) {
-				zfs_dbgmsg("Found %lld at %d, %d", (longlong_t)donor->arr[i], i, j);
 				found = B_TRUE;
 				break;
 			}
@@ -2240,7 +2235,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 			for (; receiver && receiver->free > 0;) {
 				struct rebal_node *prev_rec =
 				    AVL_PREV(&ft, receiver);
-				zfs_dbgmsg("donor: %d (%d) receiver: %d (%d)", donor->cvd, donor->alloc, receiver->cvd, receiver->free);
 				if (receiver->free <= donor->free + 1)
 					break;
 				moved = rebal_try_move_one(var,
