@@ -2111,7 +2111,7 @@ rebal_cmp_free(const void *a, const void *b)
 	int cmp = TREE_CMP(ra->free, rb->free);
 	if (likely(cmp != 0))
 		return (cmp);
-	return (TREE_CMP(ra->cvd, rb->cvd));
+	return (TREE_CMP(rb->cvd, ra->cvd));
 }
 
 static int
@@ -2122,7 +2122,7 @@ rebal_cmp_alloc(const void *a, const void *b)
 	int cmp = TREE_CMP(ra->alloc, rb->alloc);
 	if (likely(cmp != 0))
 		return (cmp);
-	return (TREE_CMP(ra->cvd, rb->cvd));
+	return (TREE_CMP(rb->cvd, ra->cvd));
 }
 
 static void
