@@ -2060,7 +2060,7 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	    vd->vdev_top_zap, VDEV_TOP_ZAP_RAIDZ_EXPAND_END_TIME,
 	    sizeof (end_time), 1, &end_time, tx));*/
 
-	spa_history_log_internal(spa, "anyraid rebalanace completed",  tx,
+	spa_history_log_internal(spa, "anyraid rebalance completed",  tx,
 	    "%s vdev %llu", spa_name(spa),
 	    (unsigned long long)vd->vdev_id);
 
