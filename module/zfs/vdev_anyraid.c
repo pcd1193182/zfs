@@ -2417,9 +2417,15 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	int txgoff = dmu_tx_get_txg(tx) & TXG_MASK;
 	zio_t *pio = spa->spa_txg_zio[txgoff];
 	abd_t *abd = abd_alloc_for_io(size, B_FALSE);
+	vdev_t *source_vd = vd->vdev_child[vart->vart_source_disk];
+	vdev_t *dest_vd = vd->vdev_child[vart->vart_dest_disk];
+	uint64_t source_header =
+	    VDEV_ANYRAID_START_OFFSET(source_vd->vdev_ashift);
+	uint64_t dest_header =
+	    VDEV_ANYRAID_START_OFFSET(dest_vd->vdev_ashift);
 	ama->ama_zio = zio_vdev_child_io(pio, NULL,
-	    vd->vdev_child[vart->vart_dest_disk],
-	    vart->vart_dest_off * va->vd_tile_size + (offset % va->vd_tile_size), abd, size, ZIO_TYPE_WRITE, ZIO_PRIORITY_REMOVAL,
+	    dest_vd, dest_header + vart->vart_dest_off * va->vd_tile_size +
+	    ((offset - source_header) % va->vd_tile_size), abd, size, ZIO_TYPE_WRITE, ZIO_PRIORITY_REMOVAL,
 	    ZIO_FLAG_CANFAIL, anyraid_rebalance_write_done, ama);
 
 	zio_nowait(zio_vdev_child_io(pio, NULL,
