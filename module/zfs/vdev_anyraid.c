@@ -2033,6 +2033,41 @@ vdev_anyraid_rebalance_status(vdev_t *vd)
 	return (var->vd_rebalance);
 }
 
+struct anyraid_done_arg {
+	vdev_t *vd;
+};
+
+static void
+anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
+{
+	(void) tx;
+	struct anyraid_done_arg *ada = arg;
+	vdev_anyraid_t *va = ada->vd->vdev_tsd;
+	vdev_anyraid_rebalance_t *var = va->vd_rebalance;
+	rw_enter(&va->vd_lock, RW_WRITER);
+	for (vdev_anyraid_rebalance_task_t *task =
+	    list_head(&var->var_done_list); task;
+	    task = list_head(&var->var_done_list)) {
+		anyraid_freelist_add(&va->vd_children[task->vart_source_disk]->van_freelist, task->vart_source_off);
+		list_remove(&var->var_done_list, task);
+		kmem_free(task, sizeof (*task));
+	}
+	ada->vd->vdev_expanding = B_TRUE;
+	vdev_reopen(ada->vd);
+	spa->spa_ccw_fail_time = 0;
+	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
+
+	list_destroy(&var->var_list);
+	list_destroy(&var->var_done_list);
+	mutex_destroy(&var->var_lock);
+	cv_destroy(&var->var_cv);
+	spa->spa_anyraid_rebalance = NULL;
+	va->vd_rebalance = NULL;
+	kmem_free(var, sizeof (*var));
+	rw_exit(&va->vd_lock);
+	kmem_free(ada, sizeof (*ada));
+}
+
 static void
 anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 {
@@ -2064,11 +2099,6 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	    "%s vdev %llu", spa_name(spa),
 	    (unsigned long long)vd->vdev_id);
 
-	list_destroy(&var->var_list);
-	cv_destroy(&var->var_cv);
-	mutex_destroy(&var->var_lock);
-	spa->spa_anyraid_rebalance = NULL;
-	va->vd_rebalance = NULL;
 	rw_exit(&va->vd_lock);
 
 	spa_async_request(spa, SPA_ASYNC_INITIALIZE_RESTART);
@@ -2083,14 +2113,20 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	 * setup a scrub. All the data has been sucessfully copied
 	 * but we have not validated any checksums.
 	 */
+	struct anyraid_done_arg *ada = kmem_alloc(sizeof (*ada), KM_SLEEP);
+	ada->vd = vd;
 	setup_sync_arg_t setup_sync_arg = {
 		.func = POOL_SCAN_SCRUB,
 		.txgstart = 0,
 		.txgend = 0,
+		.done = anyraid_scrub_done,
+		.done_arg = ada,
 	};
 	if (zfs_scrub_after_rebalance &&
 	    dsl_scan_setup_check(&setup_sync_arg.func, tx) == 0) {
 		dsl_scan_setup_sync(&setup_sync_arg, tx);
+	} else {
+		anyraid_scrub_done(spa, tx, ada);
 	}
 }
 
@@ -2199,6 +2235,9 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	vr->var_vd = vd->vdev_id;
 	vr->var_failed_offset = UINT64_MAX;
 	list_create(&vr->var_list,
+	    sizeof (vdev_anyraid_rebalance_task_t),
+	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
+	list_create(&vr->var_done_list,
 	    sizeof (vdev_anyraid_rebalance_task_t),
 	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
 	mutex_init(&vr->var_lock, NULL, MUTEX_DEFAULT, NULL);
@@ -2662,7 +2701,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		mutex_enter(&var->var_lock);
 		zfs_dbgmsg("Removing task %px", vart);
 		list_remove(&var->var_list, vart);
-		kmem_free(vart, sizeof (*vart));
+		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
 	}
 	zfs_dbgmsg("Done with tasks %px", list_head(&var->var_list));

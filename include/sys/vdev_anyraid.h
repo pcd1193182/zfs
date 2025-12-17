@@ -54,6 +54,7 @@ typedef struct vdev_anyraid_rebalance_task {
 
 typedef struct vdev_anyraid_rebalance {
 	list_t 		var_list;
+	list_t 		var_done_list;
 	uint64_t	var_offset;
 	uint64_t	var_vd;
 
