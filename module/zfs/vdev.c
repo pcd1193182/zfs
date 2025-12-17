@@ -2894,7 +2894,8 @@ vdev_reopen(vdev_t *vd)
 {
 	spa_t *spa = vd->vdev_spa;
 
-	ASSERT(spa_config_held(spa, SCL_STATE_ALL, RW_WRITER) == SCL_STATE_ALL);
+	ASSERT3U(spa_config_held(spa, SCL_STATE_ALL, RW_WRITER), ==,
+	SCL_STATE_ALL);
 
 	/* set the reopening flag unless we're taking the vdev offline */
 	vd->vdev_reopening = !vd->vdev_offline;
