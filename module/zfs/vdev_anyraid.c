@@ -2514,8 +2514,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 	vdev_t *pvd = vdev_lookup_top(spa, var->var_vd);
 	vdev_anyraid_t *va = pvd->vdev_tsd;
 
-	uint64_t guid = pvd->vdev_guid;
-
 	mutex_enter(&var->var_lock);
 	/* Iterate over all the tasks */
 	for (vdev_anyraid_rebalance_task_t *vart =
@@ -2734,7 +2732,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_rebalance_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
-		(void) vdev_online(spa, guid, ZFS_ONLINE_EXPAND, NULL);
 	} else {
 		/*
 		 * Wait for all copy zio's to complete and for all the
