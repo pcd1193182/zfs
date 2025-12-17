@@ -2052,13 +2052,6 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
-	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
-	ada->vd->vdev_expanding = B_TRUE;
-	vdev_reopen(ada->vd);
-	spa->spa_ccw_fail_time = 0;
-	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
-	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
-	vdev_config_dirty(ada->vd);
 
 	list_destroy(&var->var_list);
 	list_destroy(&var->var_done_list);
@@ -2068,6 +2061,14 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	va->vd_rebalance = NULL;
 	kmem_free(var, sizeof (*var));
 	rw_exit(&va->vd_lock);
+
+	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
+	ada->vd->vdev_expanding = B_TRUE;
+	vdev_reopen(ada->vd);
+	spa->spa_ccw_fail_time = 0;
+	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
+	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
+	vdev_config_dirty(ada->vd);
 	kmem_free(ada, sizeof (*ada));
 }
 
