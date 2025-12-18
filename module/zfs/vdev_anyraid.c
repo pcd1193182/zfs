@@ -2104,6 +2104,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		kmem_free(task, sizeof (*task));
 	}
 
+	zfs_dbgmsg("scrub done");
 	vdev_update_nonallocating_space(ada->vd, var->var_nonalloc, B_FALSE);
 	list_destroy(&var->var_list);
 	list_destroy(&var->var_done_list);
