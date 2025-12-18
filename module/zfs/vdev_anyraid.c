@@ -2053,6 +2053,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		kmem_free(task, sizeof (*task));
 	}
 
+	vdev_update_nonallocating_space(ada->vd, var->var_nonalloc, B_FALSE);
 	list_destroy(&var->var_list);
 	list_destroy(&var->var_done_list);
 	mutex_destroy(&var->var_lock);
@@ -2251,11 +2252,17 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	var->vd_rebalance = vr;
 	vd->vdev_spa->spa_anyraid_rebalance = vr;
 
-	rw_enter(&var->vd_lock, RW_READER);
+	rw_enter(&var->vd_lock, RW_WRITER);
 	avl_tree_t ft;
 	avl_create(&ft, rebal_cmp_free, sizeof (struct rebal_node), offsetof (struct rebal_node, node1));
 	avl_tree_t at;
 	avl_create(&at, rebal_cmp_alloc, sizeof (struct rebal_node), offsetof (struct rebal_node, node2));
+
+	uint64_t *num_tiles = kmem_zalloc(vd->vdev_children *
+	    sizeof (*num_tiles), KM_SLEEP);
+	for (int c = 0; c < vd->vdev_children; c++)
+		num_tiles[c] = (var->vd_children[c]->van_capacity + 1); 
+
 	for (int i = 0; i < vd->vdev_children; i++) {
 		struct rebal_node *rn = kmem_zalloc(sizeof (*rn), KM_SLEEP);
 		rn->cvd = i;
@@ -2292,6 +2299,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 				receiver->alloc++;
 				avl_add(&ft, receiver);
 				avl_add(&at, receiver);
+				num_tiles[receiver->cvd]--;
 				avl_remove(&ft, donor);
 				avl_remove(&at, donor);
 				donor->free++;
@@ -2307,7 +2315,12 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		if (donor == NULL || donor->alloc == 0)
 			break;
 	}
+	uint64_t updated_asize = calculate_asize(vd, num_tiles);
 	rw_exit(&var->vd_lock);
+	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
+	ASSERT3U(vd->vdev_asize, >=, updated_asize);
+	vr->var_nonalloc = vd->vdev_asize - updated_asize;
+	vdev_update_nonallocating_space(vd, vr->var_nonalloc, B_TRUE);
 	mutex_exit(&vr->var_lock);
 	// TODO destroy tree
 	zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);

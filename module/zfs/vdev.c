@@ -1620,16 +1620,16 @@ vdev_metaslab_group_create(vdev_t *vd)
 }
 
 void
-vdev_update_nonallocating_space(vdev_t *vd, boolean_t add)
+vdev_update_nonallocating_space(vdev_t *vd, uint64_t bytes, boolean_t add)
 {
 	spa_t *spa = vd->vdev_spa;
 
-	if (vd->vdev_mg->mg_class != spa_normal_class(spa))
+	if (vd->vdev_mg->mg_class != spa_normal_class(spa) || bytes == 0)
 		return;
 
 	uint64_t raw_space = metaslab_group_get_space(vd->vdev_mg);
-	uint64_t dspace = spa_deflate(spa) ?
-	    vdev_deflated_space(vd, raw_space) : raw_space;
+	uint64_t dspace = bytes != -1ULL ? bytes : (spa_deflate(spa) ?
+	    vdev_deflated_space(vd, raw_space) : raw_space);
 	if (add) {
 		spa->spa_nonallocating_dspace += dspace;
 	} else {
@@ -1762,7 +1762,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	 */
 	if (vd->vdev_noalloc) {
 		/* track non-allocating vdev space */
-		vdev_update_nonallocating_space(vd, B_TRUE);
+		vdev_update_nonallocating_space(vd, -1ULL, B_TRUE);
 	} else if (!expanding) {
 		metaslab_group_activate(vd->vdev_mg);
 		if (vd->vdev_log_mg != NULL)

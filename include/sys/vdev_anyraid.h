@@ -71,6 +71,7 @@ typedef struct vdev_anyraid_rebalance {
 
 	kmutex_t	var_lock;
 	kcondvar_t	var_cv;
+	uint64_t	var_nonalloc;
 } vdev_anyraid_rebalance_t;
 
 typedef struct vdev_anyraid {
