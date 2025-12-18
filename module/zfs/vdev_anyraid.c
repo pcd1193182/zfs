@@ -135,9 +135,9 @@ int anyraid_disk_shift = 6;
  * Maximum amount of copy io's outstanding at once.
  */
 #ifdef _ILP32
-static unsigned long anyraid_rebalance_max_copy_bytes = SPA_MAXBLOCKSIZE;
+static unsigned long anyraid_rebalance_max_move_bytes = SPA_MAXBLOCKSIZE;
 #else
-static unsigned long anyraid_rebalance_max_copy_bytes = SPA_MAXBLOCKSIZE;
+static unsigned long anyraid_rebalance_max_move_bytes = SPA_MAXBLOCKSIZE;
 #endif
 
 /*
@@ -147,6 +147,15 @@ static unsigned long anyraid_rebalance_max_copy_bytes = SPA_MAXBLOCKSIZE;
  * is strongly recommended.
  */
 static int zfs_scrub_after_rebalance = 1;
+
+/*
+ * For testing only: pause the anyraid rebalance after reflowing this amount.
+ * (accessed by ZTS and ztest)
+ */
+#ifdef	_KERNEL
+static
+#endif	/* _KERNEL */
+unsigned long anyraid_rebalance_max_bytes_pause = 0;
 
 
 static int
@@ -2033,6 +2042,47 @@ vdev_anyraid_rebalance_status(vdev_t *vd)
 	return (var->vd_rebalance);
 }
 
+static void
+anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
+{
+	spa_t *spa = arg;
+	int txgoff = dmu_tx_get_txg(tx) & TXG_MASK;
+	vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
+
+	/*
+	 * Ensure there are no i/os to the range that is being committed.
+	 */
+	uint64_t old_offset = var->var_offset;
+	ASSERT3U(var->var_offset_pertxg[txgoff], >=, old_offset);
+
+	mutex_enter(&var->var_lock);
+	uint64_t new_offset =
+	    MIN(var->var_offset_pertxg[txgoff], var->var_failed_offset);
+	/*
+	 * We should not have committed anything that failed.
+	 */
+	VERIFY3U(var->var_failed_offset, >=, old_offset);
+	mutex_exit(&var->var_lock);
+
+	vdev_t *vd = vdev_lookup_top(spa, var->var_vd);
+	vdev_anyraid_t *va = vd->vdev_tsd;
+
+	zfs_locked_range_t *lr = zfs_rangelock_enter(&va->vd_rangelock,
+	    old_offset, new_offset - old_offset,
+	    RL_WRITER);
+
+	var->var_offset = new_offset;
+	var->var_offset_pertxg[txgoff] = 0;
+	zfs_rangelock_exit(lr);
+
+	mutex_enter(&var->var_lock);
+	var->var_bytes_copied += var->var_bytes_copied_pertxg[txgoff];
+	var->var_bytes_copied_pertxg[txgoff] = 0;
+	mutex_exit(&var->var_lock);
+
+	/* TODO Put the anyraid task list in the MOS object */
+}
+
 struct anyraid_done_arg {
 	vdev_t *vd;
 };
@@ -2410,7 +2460,7 @@ anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
     uint64_t offset, dmu_tx_t *tx)
 {
 	int txgoff = dmu_tx_get_txg(tx) & TXG_MASK;
-	//spa_t *spa = dmu_tx_pool(tx)->dp_spa;
+	spa_t *spa = dmu_tx_pool(tx)->dp_spa;
 
 	if (offset == 0)
 		return;
@@ -2419,10 +2469,10 @@ anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
 	var->var_offset = offset;
 	mutex_exit(&var->var_lock);
 
-/*	if (var->var_offset_pertxg[txgoff] == 0) {
+	if (var->var_offset_pertxg[txgoff] == 0) {
 		dsl_sync_task_nowait(dmu_tx_pool(tx), anyraid_rebalance_sync,
 		    spa, tx);
-	}*/
+	}
 	var->var_offset_pertxg[txgoff] = offset;
 }
 
@@ -2444,7 +2494,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	ASSERT3U(size, >=, 1 << ashift);
 	ASSERT(IS_P2ALIGNED(size, 1 << ashift));
 
-	size = MIN(size, anyraid_rebalance_max_copy_bytes);
+	size = MIN(size, anyraid_rebalance_max_move_bytes);
 	size = MAX(size, 1 << ashift);
 	zfs_dbgmsg("Executing move for tile %d, %llu:%llu", vart->vart_tile, (u_longlong_t)offset, (u_longlong_t)size);
 
@@ -2639,21 +2689,24 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 				spa_config_exit(spa, SCL_CONFIG, FTAG);
 				rw_exit(&va->vd_lock);
 
-			/*
-			 * If requested, pause the reflow when the amount
-			 * specified by raidz_expand_max_reflow_bytes is reached
-			 *
-			 * This pause is only used during testing or debugging.
-			 *
-			while (raidz_expand_max_reflow_bytes != 0 &&
-			    raidz_expand_max_reflow_bytes <=
-			    var->var_bytes_copied && !zthr_iscancelled(zthr)) {
-				delay(hz);
-			}*/
+				/*
+				 * If requested, pause the reflow when the
+				 * amount specified by
+				 * anyraid_rebalance_max_bytes_pause is reached
+				 *
+				 * This pause is only used during testing or
+				 * debugging.
+				 */
+				while (anyraid_rebalance_max_bytes_pause != 0 &&
+				    anyraid_rebalance_max_bytes_pause <=
+				    var->var_bytes_copied &&
+				    !zthr_iscancelled(zthr)) {
+					delay(hz);
+				}
 
 				mutex_enter(&var->var_lock);
 				while (var->var_outstanding_bytes >
-				    anyraid_rebalance_max_copy_bytes) {
+				    anyraid_rebalance_max_move_bytes) {
 					cv_wait(&var->var_cv, &var->var_lock);
 				}
 				mutex_exit(&var->var_lock);
@@ -2778,3 +2831,6 @@ spa_start_anyraid_rebalance_thread(spa_t *spa)
 
 ZFS_MODULE_PARAM(zfs_anyraid, zfs_anyraid_, min_tile_size, U64, ZMOD_RW,
 	"Minimum tile size for anyraid");
+
+ZFS_MODULE_PARAM(zfs_vdev, anyraid_, rebalance_max_bytes_pause, ULONG, ZMOD_RW,
+	"For testing, pause AnyRAID rebalance after moving this many bytes");
