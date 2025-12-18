@@ -2079,6 +2079,7 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	var->var_bytes_copied += var->var_bytes_copied_pertxg[txgoff];
 	var->var_bytes_copied_pertxg[txgoff] = 0;
 	mutex_exit(&var->var_lock);
+	zfs_dbgmsg("Executing synctask %llu %llu", (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_offset);
 
 	/* TODO Put the anyraid task list in the MOS object */
 }
@@ -2472,6 +2473,7 @@ anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
 	if (var->var_offset_pertxg[txgoff] == 0) {
 		dsl_sync_task_nowait(dmu_tx_pool(tx), anyraid_rebalance_sync,
 		    spa, tx);
+		    zfs_dbgmsg("Scheduling synctask");
 	}
 	var->var_offset_pertxg[txgoff] = offset;
 }
