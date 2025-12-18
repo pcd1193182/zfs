@@ -2488,8 +2488,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
 	zfs_range_seg_t *rs = zfs_range_tree_first(rt);
-	if (rt == NULL)
-		return (B_TRUE);
+	ASSERT(rs);
 	uint64_t offset = zfs_rs_get_start(rs, rt);
 	ASSERT(IS_P2ALIGNED(offset, 1 << ashift));
 	uint64_t size = zfs_rs_get_end(rs, rt) - offset;
@@ -2540,7 +2539,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	    vd->vdev_child[vart->vart_source_disk],
 	    offset, abd, size, ZIO_TYPE_READ, ZIO_PRIORITY_REMOVAL,
 	    ZIO_FLAG_CANFAIL, anyraid_rebalance_read_done, ama));
-	return (B_FALSE);
+	return (zfs_range_tree_numsegs(rt) == 0);
 }
 
 struct physify_arg {
