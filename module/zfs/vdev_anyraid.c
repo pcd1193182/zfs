@@ -2145,7 +2145,6 @@ anyraid_rebalance_complete_sync(void *arg, dmu_tx_t *tx)
 	vdev_config_dirty(vd);
 
 	var->var_end_time = gethrestime_sec();
-	var->var_state = DSS_FINISHED;
 
 /*	uint64_t end_time = var->var_end_time;
 	VERIFY0(zap_update(spa->spa_meta_objset,
@@ -2384,8 +2383,9 @@ spa_anyraid_rebalance_thread_check(void *arg, zthr_t *zthr)
 {
 	(void) zthr;
 	spa_t *spa = arg;
+	vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
 
-	return (spa->spa_anyraid_rebalance != NULL);
+	return (var != NULL && var->var_state != DSS_FINISHED);
 }
 
 /*
@@ -2576,7 +2576,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 {
 	spa_t *spa = arg;
 	vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
-
+	ASSERT(var);
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	vdev_t *pvd = vdev_lookup_top(spa, var->var_vd);
 	vdev_anyraid_t *va = pvd->vdev_tsd;
@@ -2803,6 +2803,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_rebalance_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
+		var->var_state = DSS_FINISHED;
 	} else {
 		/*
 		 * Wait for all copy zio's to complete and for all the
