@@ -109,6 +109,8 @@ extern void vdev_anyraid_expand(vdev_t *tvd, vdev_t *newvd);
 extern boolean_t vdev_anyraid_mapped(vdev_t *vd, uint64_t offset);
 uint64_t vdev_anyraid_child_num_tiles(vdev_t *vd, vdev_t *cvd);
 uint64_t vdev_anyraid_child_capacity(vdev_t *vd, vdev_t *cvd);
+int spa_anyraid_rebalance_get_stats(spa_t *spa,
+    pool_anyraid_rebalance_stat_t *pars);
 
 vdev_anyraid_rebalance_t *vdev_anyraid_rebalance_status(vdev_t *vd);
 void vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx);

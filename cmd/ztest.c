@@ -8196,7 +8196,7 @@ ztest_raidz_expand_check(spa_t *spa)
  * doing such does not lead to pool corruption.
  */
 static void
-ztest_raidz_expand_run(ztest_shared_t *zs, spa_t *spa)
+ztest_raidz_expand_run(ztest_shared_t *zs, spa_t *spa) // TODO this but rebalance
 {
 	nvlist_t *root;
 	pool_raidz_expand_stat_t rzx_stats;

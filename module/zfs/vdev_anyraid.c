@@ -2834,6 +2834,33 @@ spa_start_anyraid_rebalance_thread(spa_t *spa)
 	    spa, defclsyspri);
 }
 
+int
+spa_anyraid_rebalance_get_stats(spa_t *spa, pool_anyraid_rebalance_stat_t *pars)
+{
+	vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
+
+	if (var == NULL)
+		return (SET_ERROR(ENOENT));
+
+	pars->pars_state = var->var_state;
+	pars->pars_rebalancing_vdev = var->var_vd;
+
+	vdev_t *vd = vdev_lookup_top(spa, var->var_vd);
+	pars->pars_to_move = vd->vdev_stat.vs_alloc;
+
+	mutex_enter(&var->var_lock);
+	pars->pars_moved = var->var_bytes_copied;
+	for (int i = 0; i < TXG_SIZE; i++)
+		pars->pars_moved += var->var_bytes_copied_pertxg[i];
+	mutex_exit(&var->var_lock);
+
+	pars->pars_start_time = var->var_start_time;
+	pars->pars_end_time = var->var_end_time;
+	pars->pars_waiting_for_resilver = var->var_waiting_for_resilver;
+
+	return (0);
+}
+
 ZFS_MODULE_PARAM(zfs_anyraid, zfs_anyraid_, min_tile_size, U64, ZMOD_RW,
 	"Minimum tile size for anyraid");
 
