@@ -2104,7 +2104,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		kmem_free(task, sizeof (*task));
 	}
 
-	zfs_dbgmsg("scrub done");
+	zfs_dbgmsg("scrub done %llu", (u_longlong_t)var->var_nonalloc);
 	vdev_update_nonallocating_space(ada->vd, var->var_nonalloc, B_FALSE);
 	list_destroy(&var->var_list);
 	list_destroy(&var->var_done_list);
@@ -2372,6 +2372,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
 	ASSERT3U(vd->vdev_asize, >=, updated_asize);
 	vr->var_nonalloc = vd->vdev_asize - updated_asize;
+	zfs_dbgmsg("Adding nonalloc %llu", (u_longlong_t)vr->var_nonalloc);
 	vdev_update_nonallocating_space(vd, vr->var_nonalloc, B_TRUE);
 	mutex_exit(&vr->var_lock);
 	// TODO destroy tree
@@ -2797,6 +2798,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		 * We are not being canceled or paused, so the reflow must be
 		 * complete. In that case also mark it as completed on disk.
 		 */
+		zfs_dbgmsg("a %llu", (u_longlong_t)var->var_failed_offset);
 		ASSERT3U(var->var_failed_offset, ==, UINT64_MAX);
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_rebalance_complete_sync, spa,
