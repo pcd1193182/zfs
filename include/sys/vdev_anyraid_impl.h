@@ -66,15 +66,15 @@ typedef struct vdev_anyraid_node {
 } vdev_anyraid_node_t;
 
 typedef struct anyraid_tile_node {
-        list_node_t     atn_node;
-        uint8_t         atn_disk;
-        uint16_t        atn_offset;
+	list_node_t	atn_node;
+	uint8_t		atn_disk;
+	uint16_t	atn_offset;
 } anyraid_tile_node_t;
 
 typedef struct anyraid_tile {
-        avl_node_t      at_node;
-        uint32_t        at_tile_id;
-        list_t          at_list;
+	avl_node_t	at_node;
+	uint32_t	at_tile_id;
+	list_t		at_list;
 } anyraid_tile_t;
 
 typedef struct anyraid_move_arg {

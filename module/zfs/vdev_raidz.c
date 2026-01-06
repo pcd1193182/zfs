@@ -5081,7 +5081,7 @@ spa_raidz_expand_thread(void *arg, zthr_t *zthr)
 void
 spa_start_raidz_expansion_thread(spa_t *spa)
 {
- 	ASSERT0P(spa->spa_raidz_expand_zthr);
+	ASSERT0P(spa->spa_raidz_expand_zthr);
 	spa->spa_raidz_expand_zthr = zthr_create("raidz_expand",
 	    spa_raidz_expand_thread_check, spa_raidz_expand_thread,
 	    spa, defclsyspri);

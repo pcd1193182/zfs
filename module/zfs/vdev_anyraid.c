@@ -423,7 +423,7 @@ create_tile_entry(vdev_anyraid_t *var, anyraid_map_loc_entry_t *amle,
 
 	vdev_anyraid_node_t *van = var->vd_children[disk];
 	avl_remove(&var->vd_children_tree, van);
-	
+
 	anyraid_freelist_remove(&van->van_freelist, offset);
 	avl_add(&var->vd_children_tree, van);
 	*out_at = at;
@@ -1124,8 +1124,8 @@ vdev_anyraid_close(vdev_t *vd)
  * logic.
  */
 static void
-vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile, vdev_anyraid_rebalance_task_t *task,
-    zfs_locked_range_t *lr)
+vdev_anyraid_mirror_start(zio_t *zio, anyraid_tile_t *tile,
+    vdev_anyraid_rebalance_task_t *task, zfs_locked_range_t *lr)
 {
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
@@ -1211,8 +1211,8 @@ vdev_anyraid_raidz_map_translate(vdev_t *vd, raidz_map_t *rm,
  * logic.
  */
 static void
-vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile, vdev_anyraid_rebalance_task_t *task,
-    zfs_locked_range_t *lr)
+vdev_anyraid_raidz_start(zio_t *zio, anyraid_tile_t *tile,
+    vdev_anyraid_rebalance_task_t *task, zfs_locked_range_t *lr)
 {
 	vdev_t *vd = zio->io_vd;
 	vdev_anyraid_t *var = vd->vdev_tsd;
@@ -1312,7 +1312,7 @@ vdev_anyraid_io_start(zio_t *zio)
 
 	zfs_locked_range_t *lr = zfs_rangelock_enter(&var->vd_rangelock,
 	    zio->io_offset, zio->io_size, RL_READER);
-	
+
 	vdev_anyraid_rebalance_task_t *task = NULL;
 	if (var->vd_rebalance) {
 		vdev_anyraid_rebalance_t *vr = var->vd_rebalance;
@@ -1490,7 +1490,8 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			break;
 	// The tile exists, but isn't stored on this child
 	if (atn == NULL) {
-		zfs_dbgmsg("Tile %d not found on child %d", (int)start_tile_id, (int)cvd->vdev_id);
+		zfs_dbgmsg("Tile %d not found on child %d", (int)start_tile_id,
+		    (int)cvd->vdev_id);
 		physical_rs->rs_start = physical_rs->rs_end = 0;
 		return;
 	}
@@ -1744,16 +1745,24 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 	}
 	if (var->vd_rebalance) {
 		mutex_enter(&var->vd_rebalance->var_lock);
-		vdev_anyraid_rebalance_task_t *vart = list_head(&var->vd_rebalance->var_list);
+		vdev_anyraid_rebalance_task_t *vart =
+		    list_head(&var->vd_rebalance->var_list);
 		if (vart) {
 			nvlist_t *rebal_task = fnvlist_alloc();
-			fnvlist_add_uint32(rebal_task, VART_TILE, vart->vart_tile);
-			fnvlist_add_uint8(rebal_task, VART_SOURCE_DISK, vart->vart_source_disk);
-			fnvlist_add_uint8(rebal_task, VART_DEST_DISK, vart->vart_dest_disk);
-			fnvlist_add_uint16(rebal_task, VART_SOURCE_OFF, vart->vart_source_off);
-			fnvlist_add_uint16(rebal_task, VART_DEST_OFF, vart->vart_dest_off);
-			fnvlist_add_uint64(rebal_task, VART_OFFSET, var->vd_rebalance->var_offset);
-			fnvlist_add_nvlist(header, VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
+			fnvlist_add_uint32(rebal_task, VART_TILE,
+			    vart->vart_tile);
+			fnvlist_add_uint8(rebal_task, VART_SOURCE_DISK,
+			    vart->vart_source_disk);
+			fnvlist_add_uint8(rebal_task, VART_DEST_DISK,
+			    vart->vart_dest_disk);
+			fnvlist_add_uint16(rebal_task, VART_SOURCE_OFF,
+			    vart->vart_source_off);
+			fnvlist_add_uint16(rebal_task, VART_DEST_OFF,
+			    vart->vart_dest_off);
+			fnvlist_add_uint64(rebal_task, VART_OFFSET,
+			    var->vd_rebalance->var_offset);
+			fnvlist_add_nvlist(header,
+			    VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
 			fnvlist_free(rebal_task);
 		}
 		mutex_exit(&var->vd_rebalance->var_lock);
@@ -2030,7 +2039,7 @@ vdev_ops_t vdev_anyraidz_ops = {
 
 /*
  * ==========================================================================
- * TILE MOTION & REBALANCE LOGIC 
+ * TILE MOTION & REBALANCE LOGIC
  * ==========================================================================
  */
 
@@ -2079,7 +2088,8 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	var->var_bytes_copied += var->var_bytes_copied_pertxg[txgoff];
 	var->var_bytes_copied_pertxg[txgoff] = 0;
 	mutex_exit(&var->var_lock);
-	zfs_dbgmsg("Executing synctask %llu %llu", (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_offset);
+	zfs_dbgmsg("Executing synctask %llu %llu",
+	    (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_offset);
 
 	/* TODO Put the anyraid task list in the MOS object */
 }
@@ -2099,7 +2109,9 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	for (vdev_anyraid_rebalance_task_t *task =
 	    list_head(&var->var_done_list); task;
 	    task = list_head(&var->var_done_list)) {
-		anyraid_freelist_add(&va->vd_children[task->vart_source_disk]->van_freelist, task->vart_source_off);
+		anyraid_freelist_add(
+		    &va->vd_children[task->vart_source_disk]->van_freelist,
+		    task->vart_source_off);
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
@@ -2240,7 +2252,8 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 	vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
 
 	for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
-		ASSERT3U(dvan->van_freelist.af_next_off, <=, dvan->van_capacity + 1);
+		ASSERT3U(dvan->van_freelist.af_next_off, <=,
+		    dvan->van_capacity + 1);
 		if (donor->arr[i] == -1LL)
 			continue;
 		boolean_t found = B_FALSE;
@@ -2250,7 +2263,7 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 			 * TODO we need to check here if doing this move would
 			 * cause the total number of allocatable tiles to drop;
 			 * if so, we have to skip it.
-			*/
+			 */
 			if (donor->arr[i] == receiver->arr[j]) {
 				found = B_TRUE;
 				break;
@@ -2259,15 +2272,18 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 		if (found)
 			continue;
 		vdev_anyraid_rebalance_task_t *task =
-		    kmem_zalloc(sizeof(*task), KM_SLEEP);
+		    kmem_zalloc(sizeof (*task), KM_SLEEP);
 		task->vart_source_disk = (uint8_t)donor->cvd;
 		task->vart_dest_disk = (uint8_t)receiver->cvd;
 		task->vart_source_off = i;
-		ASSERT(rvan->van_capacity - anyraid_freelist_alloc(&rvan->van_freelist));
+		ASSERT(rvan->van_capacity -
+		    anyraid_freelist_alloc(&rvan->van_freelist));
 		task->vart_dest_off = anyraid_freelist_pop(
 		    &rvan->van_freelist);
 		task->vart_tile = donor->arr[i];
-		zfs_dbgmsg("Moving %u %u to %u %u @ %lld", donor->cvd, i, receiver->cvd, task->vart_dest_off, (longlong_t)donor->arr[i]);
+		zfs_dbgmsg("Moving %u %u to %u %u @ %lld", donor->cvd, i,
+		    receiver->cvd, task->vart_dest_off,
+		    (longlong_t)donor->arr[i]);
 		list_insert_tail(&var->vd_rebalance->var_list, task);
 		receiver->arr[task->vart_dest_off] = donor->arr[i];
 		donor->arr[i] = -1LL;
@@ -2305,9 +2321,11 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 
 	rw_enter(&var->vd_lock, RW_WRITER);
 	avl_tree_t ft;
-	avl_create(&ft, rebal_cmp_free, sizeof (struct rebal_node), offsetof (struct rebal_node, node1));
+	avl_create(&ft, rebal_cmp_free, sizeof (struct rebal_node),
+	    offsetof (struct rebal_node, node1));
 	avl_tree_t at;
-	avl_create(&at, rebal_cmp_alloc, sizeof (struct rebal_node), offsetof (struct rebal_node, node2));
+	avl_create(&at, rebal_cmp_alloc, sizeof (struct rebal_node),
+	    offsetof (struct rebal_node, node2));
 
 	uint64_t *num_tiles = kmem_zalloc(vd->vdev_children *
 	    sizeof (*num_tiles), KM_SLEEP);
@@ -2405,7 +2423,8 @@ anyraid_rebalance_write_done(zio_t *zio)
 		/* Force a rebalance pause on errors */
 		var->var_failed_offset =
 		    MIN(var->var_failed_offset, ama->ama_lr->lr_offset);
-		ASSERT0F(zio->io_error, "io failed: %llu %llu", (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size);
+		ASSERT0F(zio->io_error, "io failed: %llu %llu",
+		    (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size);
 	}
 	ASSERT3U(var->var_outstanding_bytes, >=, zio->io_size);
 	var->var_outstanding_bytes -= zio->io_size;
@@ -2499,7 +2518,8 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 
 	size = MIN(size, anyraid_rebalance_max_move_bytes);
 	size = MAX(size, 1 << ashift);
-	zfs_dbgmsg("Executing move for tile %d, %llu:%llu", vart->vart_tile, (u_longlong_t)offset, (u_longlong_t)size);
+	zfs_dbgmsg("Executing move for tile %d, %llu:%llu",
+	    vart->vart_tile, (u_longlong_t)offset, (u_longlong_t)size);
 
 	zfs_range_tree_remove(rt, offset, size);
 
@@ -2534,7 +2554,8 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	    VDEV_ANYRAID_START_OFFSET(dest_vd->vdev_ashift);
 	ama->ama_zio = zio_vdev_child_io(pio, NULL,
 	    dest_vd, dest_header + vart->vart_dest_off * va->vd_tile_size +
-	    ((offset - source_header) % va->vd_tile_size), abd, size, ZIO_TYPE_WRITE, ZIO_PRIORITY_REMOVAL,
+	    ((offset - source_header) % va->vd_tile_size), abd, size,
+	    ZIO_TYPE_WRITE, ZIO_PRIORITY_REMOVAL,
 	    ZIO_FLAG_CANFAIL, anyraid_rebalance_write_done, ama);
 
 	zio_nowait(zio_vdev_child_io(pio, NULL,
@@ -2560,7 +2581,8 @@ anyraid_rt_physify(void *arg, uint64_t start, uint64_t size)
 	logical.rs_start = start;
 	logical.rs_end = start + size;
 	vdev_xlate(vd, &logical, &physical, &remain);
-	zfs_dbgmsg("%llu:%llu %llu:%llu %llu:%llu", (u_longlong_t)start, (u_longlong_t)size,
+	zfs_dbgmsg("%llu:%llu %llu:%llu %llu:%llu", (u_longlong_t)start,
+	    (u_longlong_t)size,
 	    (u_longlong_t)logical.rs_start, (u_longlong_t)logical.rs_end,
 	    (u_longlong_t)physical.rs_start, (u_longlong_t)physical.rs_end);
 	ASSERT3U(remain.rs_end, ==, remain.rs_start);
@@ -2597,7 +2619,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		    i++) {
 			metaslab_t *msp = pvd->vdev_ms[i];
 
-			zfs_dbgmsg("msp %d %d %llu %d", (int)msp->ms_id, (int)i, (u_longlong_t)start, (int)vart->vart_tile);
+			zfs_dbgmsg("msp %d %d %llu %d", (int)msp->ms_id,
+			    (int)i, (u_longlong_t)start, (int)vart->vart_tile);
 			metaslab_disable(msp);
 			mutex_enter(&msp->ms_lock);
 
@@ -2640,13 +2663,15 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			 * tile.
 			 */
 			zfs_range_tree_t *phys = zfs_range_tree_create_flags(
-			    NULL, ZFS_RANGE_SEG64, NULL, 0, pvd->vdev_ashift, ZFS_RT_F_DYN_NAME,
-			    metaslab_rt_name(msp->ms_group, msp,
-			    "spa_anyraid_rebalance_thread2:rt"));
+			    NULL, ZFS_RANGE_SEG64, NULL, 0, pvd->vdev_ashift,
+			    ZFS_RT_F_DYN_NAME, metaslab_rt_name(msp->ms_group,
+			    msp, "spa_anyraid_rebalance_thread2:rt"));
 			struct physify_arg pa;
 			pa.rt = phys;
 			pa.vd = source_vd;
-			zfs_dbgmsg("physifying ms %d (tile %d) w/ vdev %d", (int)msp->ms_id, vart->vart_tile, vart->vart_source_disk);
+			zfs_dbgmsg("physifying ms %d (tile %d) w/ vdev %d",
+			    (int)msp->ms_id, vart->vart_tile,
+			    vart->vart_source_disk);
 			zfs_range_tree_walk(rt, anyraid_rt_physify, &pa);
 			zfs_range_tree_vacate(rt, NULL, NULL);
 			zfs_range_tree_destroy(rt);
@@ -2681,13 +2706,14 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			    var->var_failed_offset == UINT64_MAX) {
 
 				/*
-				 * We need to periodically drop the config lock so that
-				 * writers can get in.  Additionally, we can't wait
-				 * for a txg to sync while holding a config lock
-				 * (since a waiting writer could cause a 3-way deadlock
-				 * with the sync thread, which also gets a config
-				 * lock for reader).  So we can't hold the config lock
-				 * while calling dmu_tx_assign().
+				 * We need to periodically drop the config lock
+				 * so that writers can get in.  Additionally,
+				 * we can't wait for a txg to sync while
+				 * holding a config lock (since a waiting
+				 * writer could cause a 3-way deadlock with the
+				 * sync thread, which also gets a config lock
+				 * for reader).  So we can't hold the config
+				 * lock while calling dmu_tx_assign().
 				 */
 				spa_config_exit(spa, SCL_CONFIG, FTAG);
 				rw_exit(&va->vd_lock);
@@ -2722,11 +2748,13 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 				uint64_t txg = dmu_tx_get_txg(tx);
 
 				/*
-				 * Reacquire the vdev_config lock.  Theoretically, the
+				 * Reacquire the vdev_config lock. 
+				 * Theoretically, the
 				 * vdev_t that we're expanding may have changed.
 				 */
 				rw_enter(&va->vd_lock, RW_READER);
-				spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+				spa_config_enter(spa, SCL_CONFIG, FTAG,
+				    RW_READER);
 				pvd = vdev_lookup_top(spa, var->var_vd);
 
 				boolean_t needsync =
@@ -2758,7 +2786,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 
 		anyraid_tile_t search;
 		search.at_tile_id = vart->vart_tile;
-		anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search, NULL);
+		anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search,
+		    NULL);
 		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);;
 		    atn = list_next(&tile->at_list, atn)) {
 			ASSERT(atn);
@@ -2782,9 +2811,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 	/*
 	 * The txg_wait_synced() here ensures that all rebalance zio's have
 	 * completed, and var_failed_offset has been set if necessary.  It
-	 * also ensures that the progress of the last anyraid_rebalance_sync() is
-	 * written to disk before anyraid_rebalance_complete_sync() changes the
-	 * in-memory var_state.  vdev_anyraid_io_start() uses var_state to
+	 * also ensures that the progress of the last anyraid_rebalance_sync()
+	 * is written to disk before anyraid_rebalance_complete_sync() changes
+	 * the in-memory var_state.  vdev_anyraid_io_start() uses var_state to
 	 * determine if a rebalance is in progress, in which case we may need to
 	 * write to both old and new locations.  Therefore we can only change
 	 * var_state once this is not necessary, which is once the on-disk
