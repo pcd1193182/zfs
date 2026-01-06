@@ -2052,6 +2052,61 @@ vdev_anyraid_rebalance_status(vdev_t *vd)
 }
 
 static void
+tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
+{
+	uint64_t obj = var->var_object;
+	objset_t *mos = spa->spa_meta_objset;
+	ASSERT(MUTEX_HELD(&var->var_lock));
+
+	size_t total_count = 0;
+	for (vdev_anyraid_rebalance_task_t *t = list_head(&var->var_list); t;
+	    t = list_next(&var->var_list, t))
+		total_count++;
+	size_t buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
+	    total_count * sizeof (rebalance_task_phys_t));
+	rebalance_task_phys_t *buf = kmem_alloc(buflen, KM_SLEEP);
+
+	size_t count = 0;
+	size_t written = 0;
+	for (vdev_anyraid_rebalance_task_t *t = list_head(&var->var_list); t;
+	    t = list_next(&var->var_list, t)) {
+		ASSERT3U(count * sizeof (rebalance_task_phys_t), <, buflen);
+		rebalance_task_phys_t *rtp = buf + count;
+		rtp->rtp_source_disk = t->vart_source_disk;
+		rtp->rtp_dest_disk = t->vart_dest_disk;
+		rtp->rtp_source_off = t->vart_source_off;
+		rtp->rtp_dest_off = t->vart_dest_off;
+		rtp->rtp_tile = t->vart_tile;
+		rtp->rtp_pad1 = rtp->rtp_pad2 = 0;
+
+		if (count == SPA_OLD_MAXBLOCKSIZE / sizeof (*rtp)) {
+			ASSERT3U(buflen, ==, SPA_OLD_MAXBLOCKSIZE);
+			dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE,
+			    buflen, buf, tx, DMU_READ_NO_PREFETCH);
+
+			size_t next_buflen =  MIN(SPA_OLD_MAXBLOCKSIZE,
+			    (total_count - count) * sizeof (*rtp));
+			if (next_buflen != buflen) {
+				kmem_free(buf, buflen);
+				buf = kmem_alloc(next_buflen, KM_SLEEP);
+				buflen = next_buflen;
+			}
+		}
+	}
+	dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
+	    DMU_READ_NO_PREFETCH);
+	kmem_free(buf, buflen);
+
+	dmu_buf_t *dbp;
+	VERIFY0(dmu_bonus_hold(mos, obj, FTAG, &dbp));
+	ASSERT3U(dbp->db_size, >=, sizeof (rebalance_phys_t));
+	rebalance_phys_t *rp = dbp->db_data;
+	dmu_buf_will_dirty(dbp, tx);
+	rp->rp_tasks = total_count;
+	dmu_buf_rele(dbp, FTAG);
+}
+
+static void
 anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 {
 	spa_t *spa = arg;
@@ -2087,11 +2142,11 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	mutex_enter(&var->var_lock);
 	var->var_bytes_copied += var->var_bytes_copied_pertxg[txgoff];
 	var->var_bytes_copied_pertxg[txgoff] = 0;
-	mutex_exit(&var->var_lock);
-	zfs_dbgmsg("Executing synctask %llu %llu",
-	    (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_offset);
 
-	/* TODO Put the anyraid task list in the MOS object */
+	tasklist_write(spa, var, tx);
+	mutex_exit(&var->var_lock);
+	zfs_dbgmsg("Executed synctask %llu %llu",
+	    (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_offset);
 }
 
 struct anyraid_done_arg {
@@ -2115,6 +2170,11 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
+
+	objset_t *mos = spa->spa_meta_objset;
+	VERIFY0(dmu_object_free(mos, var->var_object, tx));
+	VERIFY0(zap_remove(mos, DMU_POOL_DIRECTORY_OBJECT,
+	    DMU_POOL_REBALANCE_OBJ, tx));
 
 	zfs_dbgmsg("scrub done %llu", (u_longlong_t)var->var_nonalloc);
 	vdev_update_nonallocating_space(ada->vd, var->var_nonalloc, B_FALSE);
@@ -2391,6 +2451,15 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	vr->var_nonalloc = vd->vdev_asize - updated_asize;
 	zfs_dbgmsg("Adding nonalloc %llu", (u_longlong_t)vr->var_nonalloc);
 	vdev_update_nonallocating_space(vd, vr->var_nonalloc, B_TRUE);
+
+	objset_t *mos = vd->vdev_spa->spa_meta_objset;
+	vr->var_object = dmu_object_alloc(mos, DMU_OTN_UINT64_METADATA,
+	    SPA_OLD_MAXBLOCKSIZE, DMU_OTN_UINT64_METADATA,
+	    sizeof (rebalance_phys_t), tx);
+	VERIFY0(zap_add(mos, DMU_POOL_DIRECTORY_OBJECT, DMU_POOL_REBALANCE_OBJ,
+	    sizeof (uint64_t), 1, &vr->var_object, tx));
+
+	tasklist_write(vd->vdev_spa, vr, tx);
 	mutex_exit(&vr->var_lock);
 	// TODO destroy tree
 	zthr_wakeup(vd->vdev_spa->spa_anyraid_rebalance_zthr);
