@@ -7353,13 +7353,13 @@ error:
  * none are specified.
  *
  * innvl: {
- *    "guids" (optional) -> raw uint64_t array of vdev guids
+ *    "vdevs" (optional) -> raw uint64_t array of vdev guids
  * }
  *
  * outnvl is unused
  */
 static const zfs_ioc_key_t zfs_keys_pool_rebalance[] = {
-	{"guids",	DATA_TYPE_UINT64_ARRAY,	ZK_OPTIONAL},
+	{"vdevs",	DATA_TYPE_UINT64_ARRAY,	ZK_OPTIONAL},
 };
 
 static int
@@ -7372,10 +7372,10 @@ zfs_ioc_pool_rebalance(const char *pool, nvlist_t *innvl, nvlist_t *outnvl)
 	if ((err = spa_open(pool, &spa, FTAG)) != 0)
 		return (err);
 
-	uint64_t *guids;
+	uint64_t *vdevs;
 	uint_t count;
-	if (nvlist_lookup_uint64_array(innvl, "vdevs", &guids, &count) == 0)
-		err = spa_rebalance_vdevs(spa, guids, count);
+	if (nvlist_lookup_uint64_array(innvl, "vdevs", &vdevs, &count) == 0)
+		err = spa_rebalance_vdevs(spa, vdevs, count);
 	else
 		err = spa_rebalance_all(spa);
 	spa_close(spa, FTAG);
