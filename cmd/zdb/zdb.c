@@ -1098,6 +1098,64 @@ dump_uint8(objset_t *os, uint64_t object, void *data, size_t size)
 }
 
 static void
+dump_uint32(objset_t *os, uint64_t object, void *data, size_t size)
+{
+	uint32_t *arr;
+	uint64_t oursize;
+	if (dump_opt['d'] < 6)
+		return;
+
+	if (data == NULL) {
+		dmu_object_info_t doi;
+
+		VERIFY0(dmu_object_info(os, object, &doi));
+		size = doi.doi_max_offset;
+		/*
+		 * We cap the size at 1 mebibyte here to prevent
+		 * allocation failures and nigh-infinite printing if the
+		 * object is extremely large.
+		 */
+		oursize = MIN(size, 1 << 20);
+		arr = kmem_alloc(oursize, KM_SLEEP);
+
+		int err = dmu_read(os, object, 0, oursize, arr, 0);
+		if (err != 0) {
+			(void) printf("got error %u from dmu_read\n", err);
+			kmem_free(arr, oursize);
+			return;
+		}
+	} else {
+		/*
+		 * Even though the allocation is already done in this code path,
+		 * we still cap the size to prevent excessive printing.
+		 */
+		oursize = MIN(size, 1 << 20);
+		arr = data;
+	}
+
+	if (size == 0) {
+		if (data == NULL)
+			kmem_free(arr, oursize);
+		(void) printf("\t\t[]\n");
+		return;
+	}
+
+	(void) printf("\t\t[%0x", arr[0]);
+	for (size_t i = 1; i * sizeof (uint32_t) < oursize; i++) {
+		if (i % 4 != 0)
+			(void) printf(", %0x", arr[i]);
+		else
+			(void) printf(",\n\t\t%0x", (arr[i]));
+	}
+	if (oursize != size)
+		(void) printf(", ... ");
+	(void) printf("]\n");
+
+	if (data == NULL)
+		kmem_free(arr, oursize);
+}
+
+static void
 dump_uint64(objset_t *os, uint64_t object, void *data, size_t size)
 {
 	uint64_t *arr;
@@ -3929,6 +3987,14 @@ static object_viewer_t *object_viewer[DMU_OT_NUMTYPES + 1] = {
 	dump_unknown,		/* Unknown type, must be last	*/
 };
 
+static object_viewer_t *
+get_objview(dmu_object_type_t ot)
+{
+	if (ot == DMU_OTN_UINT32_DATA || ot == DMU_OTN_UINT32_METADATA)
+		return (dump_uint32);
+	return (object_viewer[ZDB_OT_TYPE(ot)]);
+}
+
 static boolean_t
 match_object_type(dmu_object_type_t obj_type, uint64_t flags)
 {
@@ -4103,7 +4169,7 @@ dump_object(objset_t *os, uint64_t object, int verbosity,
 		    (longlong_t)dn->dn_phys->dn_maxblkid);
 
 		if (!dnode_held) {
-			object_viewer[ZDB_OT_TYPE(doi.doi_bonus_type)](os,
+			get_objview(doi.doi_bonus_type)(os,
 			    object, bonus, bsize);
 		} else {
 			(void) printf("\t\t(bonus encrypted)\n");
@@ -4111,7 +4177,7 @@ dump_object(objset_t *os, uint64_t object, int verbosity,
 
 		if (key_loaded ||
 		    (!os->os_encrypted || !DMU_OT_IS_ENCRYPTED(doi.doi_type))) {
-			object_viewer[ZDB_OT_TYPE(doi.doi_type)](os, object,
+			get_objview(doi.doi_type)(os, object,
 			    NULL, 0);
 		} else {
 			(void) printf("\t\t(object encrypted)\n");
