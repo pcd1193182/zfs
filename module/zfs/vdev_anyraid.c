@@ -2222,7 +2222,7 @@ tasklist_read(vdev_t *vd)
 	rebalance_task_phys_t *buf = kmem_alloc(buflen, KM_SLEEP);
 	list_t *l = &var->var_list;
 	for (size_t i = 0; i < total; i++) {
-		size_t idx = (i * sizeof (*buf)) % SPA_OLD_MAXBLOCKSIZE;
+		size_t idx = i % (SPA_OLD_MAXBLOCKSIZE / sizeof (*buf));
 		if (idx == 0) {
 			size_t next_buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
 			    (total - i) * sizeof (rebalance_task_phys_t));
