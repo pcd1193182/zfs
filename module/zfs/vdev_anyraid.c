@@ -2788,6 +2788,7 @@ anyraid_rt_physify(void *arg, uint64_t start, uint64_t size)
 	struct physify_arg *pa = (struct physify_arg *)arg;
 	zfs_range_tree_t *rt = pa->rt;
 	vdev_t *vd = pa->vd;
+	ASSERT3U(size, >, 0);
 
 	zfs_range_seg64_t logical, physical, remain;
 	logical.rs_start = start;
@@ -2798,6 +2799,7 @@ anyraid_rt_physify(void *arg, uint64_t start, uint64_t size)
 	    (u_longlong_t)logical.rs_start, (u_longlong_t)logical.rs_end,
 	    (u_longlong_t)physical.rs_start, (u_longlong_t)physical.rs_end);
 	ASSERT3U(remain.rs_end, ==, remain.rs_start);
+	ASSERT(physical.rs_end - physical.rs_start);
 	zfs_range_tree_add(rt, physical.rs_start,
 	    physical.rs_end - physical.rs_start);
 }
