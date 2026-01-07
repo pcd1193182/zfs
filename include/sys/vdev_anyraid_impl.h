@@ -97,6 +97,8 @@ typedef struct rebalance_task_phys {
 	uint32_t	rtp_source_off;
 	uint32_t	rtp_dest_off;
 	uint32_t	rtp_tile;
+	uint32_t	rtp_pad;
+	uint64_t	rtp_pad2;
 } rebalance_task_phys_t;
 
 /*

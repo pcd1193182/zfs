@@ -2171,6 +2171,8 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 			rtp->rtp_source_off = t->vart_source_off;
 			rtp->rtp_dest_off = t->vart_dest_off;
 			rtp->rtp_tile = t->vart_tile;
+			rtp->rtp_pad = 0;
+			rtp->rtp_pad2 = 0;
 		}
 	}
 	dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
