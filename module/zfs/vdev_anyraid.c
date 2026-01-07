@@ -2250,7 +2250,6 @@ tasklist_read(vdev_t *vd)
 		list_insert_tail(l, vart);
 	}
 	kmem_free(buf, buflen);
-	zthr_wakeup(spa->spa_anyraid_rebalance_zthr);
 out:
 	if (error) {
 		// TODO free tasklist
