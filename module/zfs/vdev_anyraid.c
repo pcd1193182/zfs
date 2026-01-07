@@ -2307,6 +2307,8 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	for (vdev_anyraid_rebalance_task_t *task =
 	    list_head(&var->var_done_list); task;
 	    task = list_head(&var->var_done_list)) {
+		zfs_dbgmsg("freeing %d %d", task->vart_source_disk,
+		    task->vart_source_off);
 		anyraid_freelist_add(
 		    &va->vd_children[task->vart_source_disk]->van_freelist,
 		    task->vart_source_off);
