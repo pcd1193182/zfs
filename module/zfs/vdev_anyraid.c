@@ -1803,6 +1803,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		vdev_anyraid_rebalance_task_t *vart =
 		    list_head(&var->vd_rebalance->var_list);
 		if (vart) {
+			zfs_dbgmsg("Head task tile %u", vart->vart_tile);
 			nvlist_t *rebal_task = fnvlist_alloc();
 			fnvlist_add_uint32(rebal_task, VART_TILE,
 			    vart->vart_tile);
