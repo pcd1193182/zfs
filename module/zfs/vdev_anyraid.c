@@ -2454,7 +2454,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	vdev_update_nonallocating_space(vd, vr->var_nonalloc, B_TRUE);
 
 	objset_t *mos = vd->vdev_spa->spa_meta_objset;
-	vr->var_object = dmu_object_alloc(mos, DMU_OTN_UINT64_METADATA,
+	vr->var_object = dmu_object_alloc(mos, DMU_OTN_UINT32_METADATA,
 	    SPA_OLD_MAXBLOCKSIZE, DMU_OTN_UINT64_METADATA,
 	    sizeof (rebalance_phys_t), tx);
 	VERIFY0(zap_add(mos, DMU_POOL_DIRECTORY_OBJECT, DMU_POOL_REBALANCE_OBJ,

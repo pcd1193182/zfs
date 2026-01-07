@@ -90,12 +90,10 @@ typedef struct rebalance_phys {
 } rebalance_phys_t;
 
 typedef struct rebalance_task_phys {
-	uint8_t		rtp_source_disk;
-	uint8_t		rtp_dest_disk;
-	uint16_t	rtp_pad1;
-	uint32_t	rtp_pad2;
-	uint16_t	rtp_source_off;
-	uint16_t	rtp_dest_off;
+	uint32_t	rtp_source_disk;
+	uint32_t	rtp_dest_disk;
+	uint32_t	rtp_source_off;
+	uint32_t	rtp_dest_off;
 	uint32_t	rtp_tile;
 } rebalance_task_phys_t;
 
