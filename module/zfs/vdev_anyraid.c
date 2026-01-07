@@ -3026,6 +3026,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		zfs_dbgmsg("Removing task %px", vart);
 		list_remove(&var->var_list, vart);
 		list_insert_tail(&var->var_done_list, vart);
+		anyraid_rebalance_record_progress(var, var->var_offset, tx);
 		rw_exit(&va->vd_lock);
 	}
 	zfs_dbgmsg("Done with tasks %px", list_head(&var->var_list));
