@@ -251,6 +251,19 @@ anyraid_freelist_alloc(const anyraid_freelist_t *af)
 	return (af->af_next_off - avl_numnodes(&af->af_list));
 }
 
+boolean_t
+anyraid_freelist_isfree(const anyraid_freelist_t *af, uint16_t off)
+{
+	if (off >= af->af_next_off)
+		return (B_TRUE);
+	anyraid_free_node_t search;
+	search.afn_tile = off;
+	avl_index_t where;
+	anyraid_free_node_t *node = avl_find(&af->af_list, &search, &where);
+	return (node != NULL);
+	
+}
+
 static inline uint64_t
 vdev_anyraid_header_offset(vdev_t *vd, int id)
 {
@@ -2239,6 +2252,25 @@ tasklist_read(vdev_t *vd)
 		vart->vart_source_off = rtp->rtp_source_off;
 		vart->vart_dest_off = rtp->rtp_dest_off;
 		vart->vart_tile = rtp->rtp_tile;
+
+		rw_enter(&va->vd_lock, RW_WRITER);
+		anyraid_freelist_t *af =
+		    &va->vd_children[vart->vart_source_disk]->van_freelist;
+		boolean_t sourcefree = anyraid_freelist_isfree(af,
+		    vart->vart_source_off);
+		if (sourcefree)
+			anyraid_freelist_remove(af, vart->vart_source_off);
+
+		af = &va->vd_children[vart->vart_dest_disk]->van_freelist;
+		boolean_t destfree = anyraid_freelist_isfree(af,
+		    vart->vart_dest_off);
+		if (destfree)
+			anyraid_freelist_remove(af, vart->vart_dest_off);
+
+		// Either one or the other should be in the mapping already.
+		ASSERT3U(sourcefree, !=, destfree);
+		rw_exit(&va->vd_lock);
+
 		list_insert_tail(l, vart);
 	}
 	kmem_free(buf, buflen);

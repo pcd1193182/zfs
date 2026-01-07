@@ -56,6 +56,7 @@ void anyraid_freelist_add(anyraid_freelist_t *, uint16_t);
 void anyraid_freelist_remove(anyraid_freelist_t *, uint16_t);
 uint16_t anyraid_freelist_pop(anyraid_freelist_t *);
 uint16_t anyraid_freelist_alloc(const anyraid_freelist_t *);
+boolean_t anyraid_freelist_isfree(const anyraid_freelist_t *af, uint16_t off);
 
 typedef struct vdev_anyraid_node {
 	avl_node_t	van_node;

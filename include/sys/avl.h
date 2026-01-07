@@ -173,7 +173,8 @@ _AVL_H void avl_create(avl_tree_t *tree,
  * node   - node that has the value being looked for
  * where  - position for use with avl_nearest() or avl_insert(), may be NULL
  */
-_AVL_H void *avl_find(avl_tree_t *tree, const void *node, avl_index_t *where);
+_AVL_H void *avl_find(const avl_tree_t *tree, const void *node,
+    avl_index_t *where);
 
 /*
  * Insert a node into the tree.
