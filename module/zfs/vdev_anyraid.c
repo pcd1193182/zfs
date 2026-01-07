@@ -157,6 +157,7 @@ static
 #endif	/* _KERNEL */
 unsigned long anyraid_rebalance_max_bytes_pause = 0;
 
+static int tasklist_read(vdev_t *vd);
 
 static int
 af_compar(const void *p1, const void *p2)
@@ -692,6 +693,47 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		return (0);
 	}
 
+	nvlist_t *cur_task;
+	error = nvlist_lookup_nvlist(header.ah_nvl,
+	    VDEV_ANYRAID_HEADER_CUR_TASK, &cur_task);
+	if (error != 0 && error != ENOENT) {
+		free_header(&header, header_size);
+		return (error);
+	}
+	if (error == 0) {
+		vdev_anyraid_rebalance_t *varr = kmem_zalloc(sizeof (*var),
+		    KM_SLEEP);
+
+		varr->var_state = DSS_SCANNING;
+		varr->var_vd = vd->vdev_id;
+		varr->var_failed_offset = UINT64_MAX;
+		list_create(&varr->var_list,
+		    sizeof (vdev_anyraid_rebalance_task_t),
+		    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
+		list_create(&varr->var_done_list,
+		    sizeof (vdev_anyraid_rebalance_task_t),
+		    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
+		mutex_init(&varr->var_lock, NULL, MUTEX_DEFAULT, NULL);
+		cv_init(&varr->var_cv, NULL, CV_DEFAULT, NULL);
+
+		varr->var_offset = fnvlist_lookup_uint64(cur_task, VART_OFFSET);
+		vdev_anyraid_rebalance_task_t *vart =
+		    kmem_alloc(sizeof (*vart), KM_SLEEP);
+		vart->vart_source_disk = fnvlist_lookup_uint8(cur_task,
+		    VART_SOURCE_DISK);
+		vart->vart_source_off = fnvlist_lookup_uint16(cur_task,
+		    VART_SOURCE_OFF);
+		vart->vart_dest_disk = fnvlist_lookup_uint8(cur_task,
+		    VART_DEST_DISK);
+		vart->vart_dest_off = fnvlist_lookup_uint16(cur_task,
+		    VART_DEST_OFF);
+		vart->vart_tile = fnvlist_lookup_uint32(cur_task,
+		    VART_TILE);
+		list_insert_head(&varr->var_list, vart);
+		var->vd_rebalance = varr;
+		spa->spa_anyraid_rebalance = varr;
+	}
+
 	var->vd_checkpoint_tile = UINT32_MAX;
 	(void) nvlist_lookup_uint32(header.ah_nvl,
 	    VDEV_ANYRAID_HEADER_CHECKPOINT, &var->vd_checkpoint_tile);
@@ -1080,6 +1122,17 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 	}
 	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
 	return (0);
+}
+
+int
+vdev_anyraid_load(vdev_t *vd)
+{
+	vdev_anyraid_t *va = vd->vdev_tsd;
+
+	if (va->vd_rebalance == NULL)
+		return (0);
+
+	return (tasklist_read(vd));
 }
 
 /*
@@ -2058,7 +2111,12 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 	objset_t *mos = spa->spa_meta_objset;
 	ASSERT(MUTEX_HELD(&var->var_lock));
 
-	size_t total_count = 0;
+	size_t total_count = 0, done_count = 0;
+	for (vdev_anyraid_rebalance_task_t *t = list_head(&var->var_done_list);
+	    t; t = list_next(&var->var_done_list, t)) {
+		done_count++;
+		total_count++;
+	}
 	for (vdev_anyraid_rebalance_task_t *t = list_head(&var->var_list); t;
 	    t = list_next(&var->var_list, t))
 		total_count++;
@@ -2068,31 +2126,36 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 
 	size_t count = 0;
 	size_t written = 0;
-	for (vdev_anyraid_rebalance_task_t *t = list_head(&var->var_list); t;
-	    t = list_next(&var->var_list, t)) {
-		if (count == SPA_OLD_MAXBLOCKSIZE / sizeof (*buf)) {
-			ASSERT3U(buflen, ==, SPA_OLD_MAXBLOCKSIZE);
-			dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE,
-			    buflen, buf, tx, DMU_READ_NO_PREFETCH);
+	list_t *ls[2];
+	ls[0] = &var->var_done_list;
+	ls[1] = &var->var_list;
+	for (int i = 0; i < 2; i++) {
+		for (vdev_anyraid_rebalance_task_t *t = list_head(ls[i]); t;
+		    t = list_next(ls[i], t)) {
+			if (count == SPA_OLD_MAXBLOCKSIZE / sizeof (*buf)) {
+				ASSERT3U(buflen, ==, SPA_OLD_MAXBLOCKSIZE);
+				dmu_write(mos, obj, written *
+				    SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
+				    DMU_READ_NO_PREFETCH);
 
-			size_t next_buflen =  MIN(SPA_OLD_MAXBLOCKSIZE,
-			    (total_count - count) * sizeof (*buf));
-			if (next_buflen != buflen) {
-				kmem_free(buf, buflen);
-				buf = kmem_alloc(next_buflen, KM_SLEEP);
-				buflen = next_buflen;
+				size_t next_buflen =  MIN(SPA_OLD_MAXBLOCKSIZE,
+				    (total_count - count) * sizeof (*buf));
+				if (next_buflen != buflen) {
+					kmem_free(buf, buflen);
+					buf = kmem_alloc(next_buflen, KM_SLEEP);
+					buflen = next_buflen;
+				}
+				count = 0;
 			}
-			count = 0;
-		}
 
-		ASSERT3U(count * sizeof (*buf), <, buflen);
-		rebalance_task_phys_t *rtp = buf + count++;
-		rtp->rtp_source_disk = t->vart_source_disk;
-		rtp->rtp_dest_disk = t->vart_dest_disk;
-		rtp->rtp_source_off = t->vart_source_off;
-		rtp->rtp_dest_off = t->vart_dest_off;
-		rtp->rtp_tile = t->vart_tile;
-		rtp->rtp_pad1 = rtp->rtp_pad2 = 0;
+			ASSERT3U(count * sizeof (*buf), <, buflen);
+			rebalance_task_phys_t *rtp = buf + count++;
+			rtp->rtp_source_disk = t->vart_source_disk;
+			rtp->rtp_dest_disk = t->vart_dest_disk;
+			rtp->rtp_source_off = t->vart_source_off;
+			rtp->rtp_dest_off = t->vart_dest_off;
+			rtp->rtp_tile = t->vart_tile;
+		}
 	}
 	dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
 	    DMU_READ_NO_PREFETCH);
@@ -2103,8 +2166,95 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 	ASSERT3U(dbp->db_size, >=, sizeof (rebalance_phys_t));
 	rebalance_phys_t *rp = dbp->db_data;
 	dmu_buf_will_dirty(dbp, tx);
-	rp->rp_tasks = total_count;
+	rp->rp_total = total_count;
+	rp->rp_done = done_count;
 	dmu_buf_rele(dbp, FTAG);
+}
+
+static int
+tasklist_read(vdev_t *vd)
+{
+	spa_t *spa = vd->vdev_spa;
+	vdev_anyraid_t *va = vd->vdev_tsd;
+	vdev_anyraid_rebalance_t *var = va->vd_rebalance;
+	ASSERT3P(spa->spa_anyraid_rebalance, ==, var);
+
+	objset_t *mos = spa->spa_meta_objset;
+	mutex_enter(&var->var_lock);
+	int error = zap_lookup(mos, DMU_POOL_DIRECTORY_OBJECT,
+	    DMU_POOL_REBALANCE_OBJ, sizeof (uint64_t), 1, &var->var_object);
+	if (error) {
+		mutex_exit(&var->var_lock);
+		return (error);
+	}
+
+	dmu_buf_t *dbp;
+	if ((error = dmu_bonus_hold(mos, var->var_object, FTAG, &dbp)) != 0) {
+		mutex_exit(&var->var_lock);
+		return (error);
+	}
+	rebalance_phys_t *rpp = dbp->db_data;
+	size_t done = rpp->rp_done;
+	size_t total = rpp->rp_total;
+	dmu_buf_rele(dbp, FTAG);
+
+	size_t buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
+	    total * sizeof (rebalance_task_phys_t));
+	rebalance_task_phys_t *buf = kmem_alloc(buflen, KM_SLEEP);
+	list_t *l = &var->var_list;
+	for (size_t i = 0; i < total; i++) {
+		size_t idx = (i * sizeof (*buf)) % SPA_OLD_MAXBLOCKSIZE;
+		if (idx == 0) {
+			size_t next_buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
+			    (total - i) * sizeof (rebalance_task_phys_t));
+			if (next_buflen != buflen) {
+				kmem_free(buf, buflen);
+				buflen = next_buflen;
+				buf = kmem_alloc(buflen, KM_SLEEP);
+			}
+			error = dmu_read(mos, var->var_object,
+			    i * sizeof (*buf), buflen, buf, DMU_READ_PREFETCH);
+			if (error) {
+				kmem_free(buf, buflen);
+				goto out;
+			}
+		}
+		if (i == done) {
+			l = &var->var_list;
+			/*
+			 * The first entry on the task list should already be
+			 * present from the version in the mapping header, just
+			 * verify they match for debugging purposes.
+			 */
+			rebalance_task_phys_t *rtp = buf + idx;
+			vdev_anyraid_rebalance_task_t *vart = list_head(l);
+			ASSERT3U(vart->vart_source_disk, ==,
+			    rtp->rtp_source_disk);
+			ASSERT3U(vart->vart_dest_disk, ==, rtp->rtp_dest_disk);
+			ASSERT3U(vart->vart_source_off, ==,
+			    rtp->rtp_source_off);
+			ASSERT3U(vart->vart_dest_off, ==, rtp->rtp_dest_off);
+			ASSERT3U(vart->vart_tile, ==, rtp->rtp_tile);
+			continue;
+		}
+		vdev_anyraid_rebalance_task_t *vart =
+		    kmem_alloc(sizeof (*vart), KM_SLEEP);
+		rebalance_task_phys_t *rtp = buf + idx;
+		vart->vart_source_disk = rtp->rtp_source_disk;
+		vart->vart_dest_disk = rtp->rtp_dest_disk;
+		vart->vart_source_off = rtp->rtp_source_off;
+		vart->vart_dest_off = rtp->rtp_dest_off;
+		vart->vart_tile = rtp->rtp_tile;
+		list_insert_tail(l, vart);
+	}
+	kmem_free(buf, buflen);
+	zthr_wakeup(spa->spa_anyraid_rebalance_zthr);
+out:
+	if (error) {
+		// TODO free tasklist
+	}
+	mutex_exit(&var->var_lock);
+	return (error);
 }
 
 static void

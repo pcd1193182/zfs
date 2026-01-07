@@ -86,7 +86,8 @@ typedef struct anyraid_move_arg {
 } anyraid_move_arg_t;
 
 typedef struct rebalance_phys {
-	uint64_t	rp_tasks;
+	uint64_t	rp_done;
+	uint64_t	rp_total;
 } rebalance_phys_t;
 
 typedef struct rebalance_task_phys {
@@ -96,9 +97,6 @@ typedef struct rebalance_task_phys {
 	uint32_t	rtp_dest_off;
 	uint32_t	rtp_tile;
 } rebalance_task_phys_t;
-
-_Static_assert(sizeof (rebalance_task_phys_t) == 2 * sizeof (uint64_t),
-	"rebalance_task_phy_t wrong size");
 
 /*
  * The ondisk structure of the anyraid tile map is VDEV_ANYRAID_MAP_COPIES

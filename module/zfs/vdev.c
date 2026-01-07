@@ -3481,6 +3481,7 @@ vdev_dtl_reassess_impl(vdev_t *vd, uint64_t txg, uint64_t scrub_txg,
 	if (vd->vdev_top->vdev_ops == &vdev_raidz_ops) {
 		raidz_dtl_reassessed(vd);
 	}
+	// TODO need here for anyraid rebalance?
 }
 
 void
@@ -3873,6 +3874,10 @@ vdev_load(vdev_t *vd)
 
 	if (vd->vdev_ops == &vdev_raidz_ops) {
 		error = vdev_raidz_load(vd);
+		if (error != 0)
+			return (error);
+	} else if (vdev_is_anyraid(vd)) {
+		error = vdev_anyraid_load(vd);
 		if (error != 0)
 			return (error);
 	}
