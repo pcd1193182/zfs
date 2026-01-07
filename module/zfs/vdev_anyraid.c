@@ -2824,9 +2824,11 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		mutex_exit(&var->var_lock);
 		vdev_t *source_vd = pvd->vdev_child[vart->vart_source_disk];
 		rw_enter(&va->vd_lock, RW_READER);
+		uint16_t ms_shift = pvd->vdev_ms_shift;
 		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
-		    pvd->vdev_ms_shift;
-		uint64_t end = start + (va->vd_tile_size >> pvd->vdev_ms_shift);
+		    ms_shift;
+		zfs_dbgmsg("Offset %llu tile %d start %llu", (u_longlong_t)var->var_offset, vart->vart_tile, (u_longlong_t)start);
+		uint64_t end = start + (va->vd_tile_size >> ms_shift);
 		for (uint64_t i = start; i < end && !zthr_iscancelled(zthr);
 		    i++) {
 			metaslab_t *msp = pvd->vdev_ms[i];
@@ -2903,15 +2905,15 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			zfs_range_tree_add(rt, ms_last_offset, sectorsz);
 		}*/
 
-		/*
-		 * When we are resuming from a paused expansion (i.e.
-		 * when importing a pool with a expansion in progress),
-		 * discard any state that we have already processed.
-		 *
-		if (var->var_offset > msp->ms_start) {
-			zfs_range_tree_clear(rt, msp->ms_start,
-			    var->var_offset - msp->ms_start);
-		} */
+			/*
+			 * When we are resuming from a paused rebalance (i.e.
+			 * when importing a pool with a rebalance in progress),
+			 * discard any state that we have already processed.
+			 */
+			if (var->var_offset > msp->ms_start) {
+				zfs_range_tree_clear(rt, msp->ms_start,
+				    var->var_offset - msp->ms_start);
+			}
 
 			while (!zthr_iscancelled(zthr) &&
 			    !zfs_range_tree_is_empty(phys) &&
