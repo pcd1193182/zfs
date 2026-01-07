@@ -2227,21 +2227,9 @@ tasklist_read(vdev_t *vd)
 		}
 		if (i == done) {
 			l = &var->var_list;
-			/*
-			 * The first entry on the task list should already be
-			 * present from the version in the mapping header, just
-			 * verify they match for debugging purposes.
-			 */
-			rebalance_task_phys_t *rtp = buf + idx;
-			vdev_anyraid_rebalance_task_t *vart = list_head(l);
-			ASSERT3U(vart->vart_source_disk, ==,
-			    rtp->rtp_source_disk);
-			ASSERT3U(vart->vart_dest_disk, ==, rtp->rtp_dest_disk);
-			ASSERT3U(vart->vart_source_off, ==,
-			    rtp->rtp_source_off);
-			ASSERT3U(vart->vart_dest_off, ==, rtp->rtp_dest_off);
-			ASSERT3U(vart->vart_tile, ==, rtp->rtp_tile);
-			continue;
+			vdev_anyraid_rebalance_task_t *vart =
+			    list_remove_head(l);
+			kmem_free(vart, sizeof (*vart));
 		}
 		vdev_anyraid_rebalance_task_t *vart =
 		    kmem_alloc(sizeof (*vart), KM_SLEEP);
@@ -3026,7 +3014,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		zfs_dbgmsg("Removing task %px", vart);
 		list_remove(&var->var_list, vart);
 		list_insert_tail(&var->var_done_list, vart);
-		anyraid_rebalance_record_progress(var, var->var_offset, tx);
 		rw_exit(&va->vd_lock);
 	}
 	zfs_dbgmsg("Done with tasks %px", list_head(&var->var_list));
