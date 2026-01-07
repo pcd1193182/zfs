@@ -2829,6 +2829,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		uint16_t ms_shift = pvd->vdev_ms_shift;
 		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
 		    ms_shift;
+		uint64_t starting_offset = var->var_offset;
 		zfs_dbgmsg("Offset %llu tile %d start %llu", (u_longlong_t)var->var_offset, vart->vart_tile, (u_longlong_t)start);
 		uint64_t end = start + (va->vd_tile_size >> ms_shift);
 		for (uint64_t i = start; i < end && !zthr_iscancelled(zthr);
@@ -3006,7 +3007,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		search.at_tile_id = vart->vart_tile;
 		anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search,
 		    NULL);
-		for (anyraid_tile_node_t *atn = list_head(&tile->at_list);;
+		boolean_t found = B_FALSE;
+		for (anyraid_tile_node_t *atn = list_head(&tile->at_list); atn;
 		    atn = list_next(&tile->at_list, atn)) {
 			ASSERT(atn);
 			if (atn->atn_disk != vart->vart_source_disk)
@@ -3014,8 +3016,10 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			ASSERT3U(atn->atn_offset, ==, vart->vart_source_off);
 			atn->atn_disk = vart->vart_dest_disk;
 			atn->atn_offset = vart->vart_dest_off;
+			found = B_TRUE;
 			break;
 		}
+		IMPLY(!found, starting_offset >= end);
 		mutex_enter(&var->var_lock);
 		zfs_dbgmsg("Removing task %px", vart);
 		list_remove(&var->var_list, vart);
