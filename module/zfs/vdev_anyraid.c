@@ -697,6 +697,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 	error = nvlist_lookup_nvlist(header.ah_nvl,
 	    VDEV_ANYRAID_HEADER_CUR_TASK, &cur_task);
 	if (error != 0 && error != ENOENT) {
+		zfs_dbgmsg("Error opening anyraid vdev %llu: Error opening "
+		    "rebalance info %d", (u_longlong_t)vd->vdev_id, error);
 		free_header(&header, header_size);
 		return (error);
 	}
