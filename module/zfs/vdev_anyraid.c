@@ -2202,6 +2202,7 @@ tasklist_read(vdev_t *vd)
 
 	mutex_enter(&var->var_lock);
 	var->var_object = object;
+	mutex_exit(&var->var_lock);
 	size_t buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
 	    total * sizeof (rebalance_task_phys_t));
 	rebalance_task_phys_t *buf = kmem_alloc(buflen, KM_SLEEP);
@@ -2256,7 +2257,6 @@ out:
 	if (error) {
 		// TODO free tasklist
 	}
-	mutex_exit(&var->var_lock);
 	return (error);
 }
 
