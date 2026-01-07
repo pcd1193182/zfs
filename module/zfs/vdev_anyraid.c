@@ -2070,28 +2070,29 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 	size_t written = 0;
 	for (vdev_anyraid_rebalance_task_t *t = list_head(&var->var_list); t;
 	    t = list_next(&var->var_list, t)) {
-		ASSERT3U(count * sizeof (rebalance_task_phys_t), <, buflen);
-		rebalance_task_phys_t *rtp = buf + count;
+		if (count == SPA_OLD_MAXBLOCKSIZE / sizeof (*buf)) {
+			ASSERT3U(buflen, ==, SPA_OLD_MAXBLOCKSIZE);
+			dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE,
+			    buflen, buf, tx, DMU_READ_NO_PREFETCH);
+
+			size_t next_buflen =  MIN(SPA_OLD_MAXBLOCKSIZE,
+			    (total_count - count) * sizeof (*buf));
+			if (next_buflen != buflen) {
+				kmem_free(buf, buflen);
+				buf = kmem_alloc(next_buflen, KM_SLEEP);
+				buflen = next_buflen;
+			}
+			count = 0;
+		}
+
+		ASSERT3U(count * sizeof (*buf), <, buflen);
+		rebalance_task_phys_t *rtp = buf + count++;
 		rtp->rtp_source_disk = t->vart_source_disk;
 		rtp->rtp_dest_disk = t->vart_dest_disk;
 		rtp->rtp_source_off = t->vart_source_off;
 		rtp->rtp_dest_off = t->vart_dest_off;
 		rtp->rtp_tile = t->vart_tile;
 		rtp->rtp_pad1 = rtp->rtp_pad2 = 0;
-
-		if (count == SPA_OLD_MAXBLOCKSIZE / sizeof (*rtp)) {
-			ASSERT3U(buflen, ==, SPA_OLD_MAXBLOCKSIZE);
-			dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE,
-			    buflen, buf, tx, DMU_READ_NO_PREFETCH);
-
-			size_t next_buflen =  MIN(SPA_OLD_MAXBLOCKSIZE,
-			    (total_count - count) * sizeof (*rtp));
-			if (next_buflen != buflen) {
-				kmem_free(buf, buflen);
-				buf = kmem_alloc(next_buflen, KM_SLEEP);
-				buflen = next_buflen;
-			}
-		}
 	}
 	dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
 	    DMU_READ_NO_PREFETCH);
