@@ -2177,19 +2177,19 @@ tasklist_read(vdev_t *vd)
 	spa_t *spa = vd->vdev_spa;
 	vdev_anyraid_t *va = vd->vdev_tsd;
 	vdev_anyraid_rebalance_t *var = va->vd_rebalance;
+	uint64_t object;
 	ASSERT3P(spa->spa_anyraid_rebalance, ==, var);
 
 	objset_t *mos = spa->spa_meta_objset;
-	mutex_enter(&var->var_lock);
 	int error = zap_lookup(mos, DMU_POOL_DIRECTORY_OBJECT,
-	    DMU_POOL_REBALANCE_OBJ, sizeof (uint64_t), 1, &var->var_object);
+	    DMU_POOL_REBALANCE_OBJ, sizeof (uint64_t), 1, &object);
 	if (error) {
 		mutex_exit(&var->var_lock);
 		return (error);
 	}
 
 	dmu_buf_t *dbp;
-	if ((error = dmu_bonus_hold(mos, var->var_object, FTAG, &dbp)) != 0) {
+	if ((error = dmu_bonus_hold(mos, object, FTAG, &dbp)) != 0) {
 		mutex_exit(&var->var_lock);
 		return (error);
 	}
@@ -2198,6 +2198,8 @@ tasklist_read(vdev_t *vd)
 	size_t total = rpp->rp_total;
 	dmu_buf_rele(dbp, FTAG);
 
+	mutex_enter(&var->var_lock);
+	var->var_object = object;
 	size_t buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
 	    total * sizeof (rebalance_task_phys_t));
 	rebalance_task_phys_t *buf = kmem_alloc(buflen, KM_SLEEP);
