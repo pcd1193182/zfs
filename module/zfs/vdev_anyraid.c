@@ -2866,7 +2866,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		uint16_t ms_shift = pvd->vdev_ms_shift;
 		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
 		    ms_shift;
-		uint64_t starting_offset = var->var_offset;
+		uint64_t starting_offset = var->var_offset; // TODO handle the fact that the offset doesn't increase monotonically
 		zfs_dbgmsg("Offset %llu tile %d start %llu", (u_longlong_t)var->var_offset, vart->vart_tile, (u_longlong_t)start);
 		uint64_t end = start + (va->vd_tile_size >> ms_shift);
 		for (uint64_t i = start; i < end && !zthr_iscancelled(zthr);
