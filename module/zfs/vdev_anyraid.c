@@ -2351,12 +2351,12 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		kmem_free(task, sizeof (*task));
 	}
 
+	zfs_dbgmsg("scrub done %llu", (u_longlong_t)var->var_nonalloc);
+
 	objset_t *mos = spa->spa_meta_objset;
 	VERIFY0(dmu_object_free(mos, var->var_object, tx));
 	VERIFY0(zap_remove(mos, DMU_POOL_DIRECTORY_OBJECT,
 	    DMU_POOL_REBALANCE_OBJ, tx));
-
-	zfs_dbgmsg("scrub done %llu", (u_longlong_t)var->var_nonalloc);
 	vdev_update_nonallocating_space(ada->vd, var->var_nonalloc, B_FALSE);
 	list_destroy(&var->var_list);
 	list_destroy(&var->var_done_list);
