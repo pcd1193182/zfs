@@ -1147,6 +1147,7 @@ vdev_anyraid_load(vdev_t *vd)
 	if (va->vd_rebalance == NULL)
 		return (0);
 
+	return (0);
 	return (tasklist_read(vd));
 }
 
