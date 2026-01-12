@@ -716,12 +716,13 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		return (error);
 	}
 	if (error == 0) {
-		vdev_anyraid_rebalance_t *varr = kmem_zalloc(sizeof (*var),
+		vdev_anyraid_rebalance_t *varr = kmem_zalloc(sizeof (*varr),
 		    KM_SLEEP);
 
 		varr->var_state = DSS_SCANNING;
 		varr->var_vd = vd->vdev_id;
 		varr->var_failed_offset = UINT64_MAX;
+		varr->var_failed_task = UINT64_MAX;
 		list_create(&varr->var_list,
 		    sizeof (vdev_anyraid_rebalance_task_t),
 		    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
@@ -731,7 +732,10 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		mutex_init(&varr->var_lock, NULL, MUTEX_DEFAULT, NULL);
 		cv_init(&varr->var_cv, NULL, CV_DEFAULT, NULL);
 
-		varr->var_offset = fnvlist_lookup_uint64(cur_task, VART_OFFSET);
+		varr->var_offset = varr->var_synced_offset =
+		    fnvlist_lookup_uint64(cur_task, VART_OFFSET);
+		varr->var_task = varr->var_synced_task =
+		    fnvlist_lookup_uint32(cur_task, VART_TASK);
 		vdev_anyraid_rebalance_task_t *vart =
 		    kmem_alloc(sizeof (*vart), KM_SLEEP);
 		vart->vart_source_disk = fnvlist_lookup_uint8(cur_task,
@@ -744,6 +748,7 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		    VART_DEST_OFF);
 		vart->vart_tile = fnvlist_lookup_uint32(cur_task,
 		    VART_TILE);
+		vart->vart_task = varr->var_task;
 		list_insert_head(&varr->var_list, vart);
 		var->vd_rebalance = varr;
 		spa->spa_anyraid_rebalance = varr;
@@ -1830,7 +1835,8 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 			fnvlist_add_uint16(rebal_task, VART_DEST_OFF,
 			    vart->vart_dest_off);
 			fnvlist_add_uint64(rebal_task, VART_OFFSET,
-			    var->vd_rebalance->var_offset);
+			    var->vd_rebalance->var_synced_offset);
+			fnvlist_add_uint32(rebal_task, VART_TASK, var->vd_rebalance->var_synced_task);
 			fnvlist_add_nvlist(header,
 			    VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
 			fnvlist_free(rebal_task);
@@ -2172,7 +2178,7 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 			rtp->rtp_source_off = t->vart_source_off;
 			rtp->rtp_dest_off = t->vart_dest_off;
 			rtp->rtp_tile = t->vart_tile;
-			rtp->rtp_pad = 0;
+			rtp->rtp_task = t->vart_task;
 			rtp->rtp_pad2 = 0;
 		}
 	}
@@ -2255,6 +2261,7 @@ tasklist_read(vdev_t *vd)
 		vart->vart_source_off = rtp->rtp_source_off;
 		vart->vart_dest_off = rtp->rtp_dest_off;
 		vart->vart_tile = rtp->rtp_tile;
+		vart->vart_task = rtp->rtp_task;
 
 		rw_enter(&va->vd_lock, RW_WRITER);
 		anyraid_freelist_t *af =
@@ -2294,16 +2301,20 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	/*
 	 * Ensure there are no i/os to the range that is being committed.
 	 */
-	uint64_t old_offset = var->var_offset;
-	ASSERT3U(var->var_offset_pertxg[txgoff], >=, old_offset);
+	uint64_t old_offset = var->var_synced_offset;
+	uint64_t old_task = var->var_synced_task;
+	ASSERT3U(var->var_task_pertxg[txgoff], >=, old_task);
+	ASSERT(var->var_task_pertxg[txgoff] > old_task ||
+	    var->var_offset_pertxg[txgoff] >= old_offset);
 
 	mutex_enter(&var->var_lock);
 	uint64_t new_offset =
 	    MIN(var->var_offset_pertxg[txgoff], var->var_failed_offset);
+	uint64_t new_task =
+	    MIN(var->var_task_pertxg[txgoff], var->var_failed_task);
 	/*
 	 * We should not have committed anything that failed.
 	 */
-	VERIFY3U(var->var_failed_offset, >=, old_offset);
 	mutex_exit(&var->var_lock);
 
 	vdev_t *vd = vdev_lookup_top(spa, var->var_vd);
@@ -2313,8 +2324,10 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	    old_offset, new_offset - old_offset,
 	    RL_WRITER);
 
-	var->var_offset = new_offset;
+	var->var_synced_offset = new_offset;
+	var->var_synced_task = new_task;
 	var->var_offset_pertxg[txgoff] = 0;
+	var->var_task_pertxg[txgoff] = 0;
 	zfs_rangelock_exit(lr);
 
 	mutex_enter(&var->var_lock);
@@ -2323,8 +2336,9 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 
 	tasklist_write(spa, var, tx);
 	mutex_exit(&var->var_lock);
-	zfs_dbgmsg("Executed synctask %llu %llu",
-	    (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_offset);
+	zfs_dbgmsg("Executed synctask %llu %llu/%llu",
+	    (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_task,
+	    (u_longlong_t)var->var_offset);
 }
 
 struct anyraid_done_arg {
@@ -2486,7 +2500,7 @@ populate_child_array(vdev_anyraid_t *var, int child, int64_t *arr, uint32_t cap)
 
 static boolean_t
 rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
-    struct rebal_node *receiver)
+    struct rebal_node *receiver, uint32_t *tid)
 {
 	vdev_anyraid_node_t *dvan = var->vd_children[donor->cvd];
 	vdev_anyraid_node_t *rvan = var->vd_children[receiver->cvd];
@@ -2521,9 +2535,10 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 		task->vart_dest_off = anyraid_freelist_pop(
 		    &rvan->van_freelist);
 		task->vart_tile = donor->arr[i];
-		zfs_dbgmsg("Moving %u %u to %u %u @ %lld", donor->cvd, i,
+		task->vart_task = (*tid)++;
+		zfs_dbgmsg("Moving %u %u to %u %u @ %lld (%u)", donor->cvd, i,
 		    receiver->cvd, task->vart_dest_off,
-		    (longlong_t)donor->arr[i]);
+		    (longlong_t)donor->arr[i], task->vart_task);
 		list_insert_tail(&var->vd_rebalance->var_list, task);
 		receiver->arr[task->vart_dest_off] = donor->arr[i];
 		donor->arr[i] = -1LL;
@@ -2545,7 +2560,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	vr->var_start_time = gethrestime_sec();
 	vr->var_state = DSS_SCANNING;
 	vr->var_vd = vd->vdev_id;
-	vr->var_failed_offset = UINT64_MAX;
+	vr->var_failed_offset = vr->var_failed_task = UINT64_MAX;
 	list_create(&vr->var_list,
 	    sizeof (vdev_anyraid_rebalance_task_t),
 	    offsetof(vdev_anyraid_rebalance_task_t, vart_node));
@@ -2585,6 +2600,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		avl_add(&ft, rn);
 		avl_add(&at, rn);
 	}
+	uint32_t tid = 0;
 	for (;;) {
 		struct rebal_node *donor = avl_last(&at);
 		boolean_t moved = B_FALSE;
@@ -2597,7 +2613,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 				if (receiver->free <= donor->free + 1)
 					break;
 				moved = rebal_try_move_one(var,
-				    donor, receiver);
+				    donor, receiver, &tid);
 				if (!moved) {
 					receiver = prev_rec;
 					continue;
@@ -2672,6 +2688,7 @@ anyraid_rebalance_write_done(zio_t *zio)
 		/* Force a rebalance pause on errors */
 		var->var_failed_offset =
 		    MIN(var->var_failed_offset, ama->ama_lr->lr_offset);
+		var->var_failed_task = MIN(var->var_failed_task, ama->ama_tid);
 		ASSERT0F(zio->io_error, "io failed: %llu %llu",
 		    (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size);
 	}
@@ -2682,7 +2699,6 @@ anyraid_rebalance_write_done(zio_t *zio)
 		var->var_bytes_copied_pertxg[ama->ama_txg & TXG_MASK] +=
 		    zio->io_size;
 	}
-	var->var_offset = ama->ama_lr->lr_offset + ama->ama_lr->lr_length;
 	cv_signal(&var->var_cv);
 	mutex_exit(&var->var_lock);
 
@@ -2778,6 +2794,7 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	    offset, size, RL_WRITER);
 	ama->ama_txg = dmu_tx_get_txg(tx);
 	ama->ama_size = size;
+	ama->ama_tid = vart->vart_task;
 
 	anyraid_rebalance_record_progress(var, offset + size, tx);
 
@@ -2875,7 +2892,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 
 			zfs_dbgmsg("msp %d %d %llu %d", (int)msp->ms_id,
 			    (int)i, (u_longlong_t)start, (int)vart->vart_tile);
-			if (msp->ms_start + msp->ms_size <= var->var_offset)
+			if (vart->vart_task < var->var_task ||
+			    (vart->vart_task == var->var_task &&
+			    msp->ms_start + msp->ms_size <= var->var_offset))
 				continue;
 			metaslab_disable(msp);
 			mutex_enter(&msp->ms_lock);
@@ -2952,7 +2971,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			 * when importing a pool with a rebalance in progress),
 			 * discard any state that we have already processed.
 			 */
-			if (var->var_offset > msp->ms_start) {
+			if (vart->vart_task < var->var_task ||
+			    (vart->vart_task == var->var_task &&
+			    var->var_offset > msp->ms_start)) {
 				zfs_range_tree_clear(rt, msp->ms_start,
 				    var->var_offset - msp->ms_start);
 			}
@@ -3098,8 +3119,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		 * raidz_reflow_sync() synctasks to be run.
 		 */
 		spa_history_log_internal(spa, "rebalance pause",
-		    NULL, "offset=%llu failed_offset=%lld",
+		    NULL, "offset=%llu failed_offset=%lld/%lld",
 		    (long long)var->var_offset,
+		    (long long)var->var_failed_task,
 		    (long long)var->var_failed_offset);
 		if (var->var_failed_offset != UINT64_MAX) {
 			/*
@@ -3107,7 +3129,9 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			 * after the point that something failed.
 			 */
 			var->var_offset = var->var_failed_offset;
+			var->var_task = var->var_failed_task;
 			var->var_failed_offset = UINT64_MAX;
+			var->var_failed_task = UINT64_MAX;
 			var->var_waiting_for_resilver = B_TRUE;
 		}
 	}

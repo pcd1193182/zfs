@@ -50,12 +50,16 @@ typedef struct vdev_anyraid_rebalance_task {
 	uint16_t	vart_source_off;
 	uint16_t	vart_dest_off;
 	uint32_t	vart_tile;
+	uint32_t	vart_task;
 } vdev_anyraid_rebalance_task_t;
 
 typedef struct vdev_anyraid_rebalance {
 	list_t 		var_list;
 	list_t 		var_done_list;
 	uint64_t	var_offset;
+	uint64_t	var_task;
+	uint64_t	var_synced_offset;
+	uint64_t	var_synced_task;
 	uint64_t	var_vd;
 
 	dsl_scan_state_t var_state;
@@ -65,8 +69,10 @@ typedef struct vdev_anyraid_rebalance {
 	uint64_t	var_outstanding_bytes;
 
 	uint64_t	var_failed_offset;
+	uint64_t	var_failed_task;
 	boolean_t	var_waiting_for_resilver;
 	uint64_t	var_offset_pertxg[TXG_SIZE];
+	uint64_t	var_task_pertxg[TXG_SIZE];
 	uint64_t	var_bytes_copied_pertxg[TXG_SIZE];
 
 	kmutex_t	var_lock;

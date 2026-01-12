@@ -84,6 +84,7 @@ typedef struct anyraid_move_arg {
 	zfs_locked_range_t	*ama_lr;
 	uint64_t		ama_txg;
 	uint64_t		ama_size;
+	uint32_t		ama_tid;
 } anyraid_move_arg_t;
 
 typedef struct rebalance_phys {
@@ -97,7 +98,7 @@ typedef struct rebalance_task_phys {
 	uint32_t	rtp_source_off;
 	uint32_t	rtp_dest_off;
 	uint32_t	rtp_tile;
-	uint32_t	rtp_pad;
+	uint32_t	rtp_task;
 	uint64_t	rtp_pad2;
 } rebalance_task_phys_t;
 
@@ -168,6 +169,7 @@ typedef struct rebalance_task_phys {
 #define	VART_DEST_DISK		"dest_disk"
 #define	VART_DEST_OFF		"dest_off"
 #define	VART_OFFSET		"offset"
+#define	VART_TASK		"task"
 /*
  * We store the pool guid to prevent disks being reused from an old pool from
  * causing any issues.
