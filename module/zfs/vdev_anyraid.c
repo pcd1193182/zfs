@@ -2179,6 +2179,7 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 			rtp->rtp_tile = t->vart_tile;
 			rtp->rtp_task = t->vart_task;
 			rtp->rtp_pad2 = 0;
+			zfs_dbgmsg("Writing task %d from %slist: %d %d %d %d %d", t->vart_task, i == 0 ? "done ": "", t->vart_source_disk, t->vart_source_off, t->vart_dest_disk, t->vart_dest_off, t->vart_tile);
 		}
 	}
 	dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
@@ -2223,6 +2224,7 @@ tasklist_read(vdev_t *vd)
 	dmu_buf_rele(dbp, FTAG);
 
 	mutex_enter(&var->var_lock);
+	ASSERT0(var->var_object);
 	var->var_object = object;
 	mutex_exit(&var->var_lock);
 	size_t buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
@@ -2261,6 +2263,7 @@ tasklist_read(vdev_t *vd)
 		vart->vart_dest_off = rtp->rtp_dest_off;
 		vart->vart_tile = rtp->rtp_tile;
 		vart->vart_task = rtp->rtp_task;
+		zfs_dbgmsg("Adding task %d to %slist: %d %d %d %d %d", vart->vart_task, i < done ? "done ": "", vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, vart->vart_tile);
 
 		rw_enter(&va->vd_lock, RW_WRITER);
 		anyraid_freelist_t *af =
@@ -2883,7 +2886,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
 		    ms_shift;
 		uint64_t starting_offset = var->var_offset; // TODO handle the fact that the offset doesn't increase monotonically
-		zfs_dbgmsg("Offset %llu tile %d start %llu", (u_longlong_t)var->var_offset, vart->vart_tile, (u_longlong_t)start);
+		zfs_dbgmsg("Offset %llu/%llu tile %d start %llu", (u_longlong_t)var->var_task,(u_longlong_t)var->var_offset, vart->vart_tile, (u_longlong_t)start);
 		uint64_t end = start + (va->vd_tile_size >> ms_shift);
 		for (uint64_t i = start; i < end && !zthr_iscancelled(zthr);
 		    i++) {
