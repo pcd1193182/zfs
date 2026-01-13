@@ -2365,7 +2365,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		kmem_free(task, sizeof (*task));
 	}
 
-	zfs_dbgmsg("scrub done %llu", (u_longlong_t)var->var_nonalloc);
+	zfs_dbgmsg("scrub done %llu %d", (u_longlong_t)var->var_nonalloc, (int)var->var_object);
 
 	objset_t *mos = spa->spa_meta_objset;
 	VERIFY0(dmu_object_free(mos, var->var_object, tx));
