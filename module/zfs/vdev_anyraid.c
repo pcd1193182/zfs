@@ -749,6 +749,7 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		vart->vart_tile = fnvlist_lookup_uint32(cur_task,
 		    VART_TILE);
 		vart->vart_task = varr->var_task;
+		zfs_dbgmsg("Creating tmp task %llu: %u", (u_longlong_t)varr->var_task, vart->vart_tile);
 		list_insert_head(&varr->var_list, vart);
 		var->vd_rebalance = varr;
 		spa->spa_anyraid_rebalance = varr;
@@ -1821,7 +1822,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		vdev_anyraid_rebalance_task_t *vart =
 		    list_head(&var->vd_rebalance->var_list);
 		if (vart) {
-			zfs_dbgmsg("Head task tile %u", vart->vart_tile);
+			zfs_dbgmsg("Head task %llu tile %u", (u_longlong_t)vart->vart_task, vart->vart_tile);
 			nvlist_t *rebal_task = fnvlist_alloc();
 			fnvlist_add_uint32(rebal_task, VART_TILE,
 			    vart->vart_tile);
