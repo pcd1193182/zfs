@@ -2315,6 +2315,7 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	 */
 	uint64_t old_offset = var->var_synced_offset;
 	uint64_t old_task = var->var_synced_task;
+	zfs_dbgmsg("ahem: %llu %llu %llu %llu", (u_longlong_t)var->var_task_pertxg[txgoff], (u_longlong_t)old_task, (u_longlong_t)var->var_offset_pertxg[txgoff], (u_longlong_t)old_offset);
 	ASSERT3U(var->var_task_pertxg[txgoff], >=, old_task);
 	ASSERT(var->var_task_pertxg[txgoff] > old_task ||
 	    var->var_offset_pertxg[txgoff] >= old_offset);
