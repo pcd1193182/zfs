@@ -2865,6 +2865,12 @@ anyraid_rt_physify(void *arg, uint64_t start, uint64_t size)
 	    (u_longlong_t)logical.rs_start, (u_longlong_t)logical.rs_end,
 	    (u_longlong_t)physical.rs_start, (u_longlong_t)physical.rs_end);
 	ASSERT3U(remain.rs_end, ==, remain.rs_start);
+	/*
+	 * This can happen if the tile has actually already been moved,
+	 * but the synced state hasn't caught up.
+	 */
+	if (physical.rs_end == physical.rs_start)
+		return;
 	ASSERT(physical.rs_end - physical.rs_start);
 	zfs_range_tree_add(rt, physical.rs_start,
 	    physical.rs_end - physical.rs_start);
