@@ -2906,8 +2906,10 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			    (int)i, (u_longlong_t)start, (int)vart->vart_tile);
 			if (vart->vart_task < var->var_task ||
 			    (vart->vart_task == var->var_task &&
-			    msp->ms_start + msp->ms_size <= var->var_offset))
+			    msp->ms_start + msp->ms_size <= var->var_offset)) {
+				zfs_dbgmsg("Skipping ms");
 				continue;
+			}
 			metaslab_disable(msp);
 			mutex_enter(&msp->ms_lock);
 
@@ -2986,6 +2988,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			if (vart->vart_task < var->var_task ||
 			    (vart->vart_task == var->var_task &&
 			    var->var_offset > msp->ms_start)) {
+				zfs_dbgmsg("Clearing rt from %llu to %llu", (u_longlong_t)msp->ms_start, (u_longlong_t)(var->var_offset - msp->ms_start));
 				zfs_range_tree_clear(rt, msp->ms_start,
 				    var->var_offset - msp->ms_start);
 			}
@@ -3091,7 +3094,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		}
 		IMPLY(!found, starting_offset >= end);
 		mutex_enter(&var->var_lock);
-		zfs_dbgmsg("Removing task %px", vart);
+		zfs_dbgmsg("Removing task %px %llu", vart,
+		    (u_longlong_t)vart->vart_task);
 		list_remove(&var->var_list, vart);
 		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
