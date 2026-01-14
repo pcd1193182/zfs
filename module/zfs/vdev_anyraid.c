@@ -2757,7 +2757,7 @@ anyraid_rebalance_read_done(zio_t *zio)
 
 static void
 anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
-    uint64_t offset, dmu_tx_t *tx)
+    uint64_t offset, uint64_t task, dmu_tx_t *tx)
 {
 	int txgoff = dmu_tx_get_txg(tx) & TXG_MASK;
 	spa_t *spa = dmu_tx_pool(tx)->dp_spa;
@@ -2775,6 +2775,7 @@ anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
 		    zfs_dbgmsg("Scheduling synctask");
 	}
 	var->var_offset_pertxg[txgoff] = offset;
+	var->var_task_pertxg[txgoff] = task;
 }
 
 static boolean_t
@@ -2809,7 +2810,8 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	ama->ama_size = size;
 	ama->ama_tid = vart->vart_task;
 
-	anyraid_rebalance_record_progress(var, offset + size, tx);
+	anyraid_rebalance_record_progress(var, offset + size, vart->vart_task,
+	    tx);
 
 	/*
 	 * SCL_STATE will be released when the read and write are done,
