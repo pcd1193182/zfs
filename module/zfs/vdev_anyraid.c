@@ -2323,7 +2323,7 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 	 */
 	uint64_t old_offset = var->var_synced_offset;
 	uint64_t old_task = var->var_synced_task;
-	zfs_dbgmsg("ahem: %llu %llu %llu %llu", (u_longlong_t)var->var_task_pertxg[txgoff], (u_longlong_t)old_task, (u_longlong_t)var->var_offset_pertxg[txgoff], (u_longlong_t)old_offset);
+
 	ASSERT3U(var->var_task_pertxg[txgoff], >=, old_task);
 	ASSERT(var->var_task_pertxg[txgoff] > old_task ||
 	    var->var_offset_pertxg[txgoff] >= old_offset);
@@ -2557,9 +2557,6 @@ rebal_try_move_one(vdev_anyraid_t *var, struct rebal_node *donor,
 		    &rvan->van_freelist);
 		task->vart_tile = donor->arr[i];
 		task->vart_task = (*tid)++;
-		zfs_dbgmsg("Moving %u %u to %u %u @ %lld (%u)", donor->cvd, i,
-		    receiver->cvd, task->vart_dest_off,
-		    (longlong_t)donor->arr[i], task->vart_task);
 		list_insert_tail(&var->vd_rebalance->var_list, task);
 		receiver->arr[task->vart_dest_off] = donor->arr[i];
 		donor->arr[i] = -1LL;
@@ -3115,13 +3112,10 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		}
 		IMPLY(!found, starting_offset >= end);
 		mutex_enter(&var->var_lock);
-		zfs_dbgmsg("Removing task %px %llu", vart,
-		    (u_longlong_t)vart->vart_task);
 		list_remove(&var->var_list, vart);
 		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
 	}
-	zfs_dbgmsg("Done with tasks %px", list_head(&var->var_list));
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 	mutex_exit(&var->var_lock);
 
@@ -3144,7 +3138,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		 * We are not being canceled or paused, so the reflow must be
 		 * complete. In that case also mark it as completed on disk.
 		 */
-		zfs_dbgmsg("a %llu", (u_longlong_t)var->var_failed_offset);
 		ASSERT3U(var->var_failed_offset, ==, UINT64_MAX);
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_rebalance_complete_sync, spa,
