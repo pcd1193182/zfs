@@ -2241,7 +2241,8 @@ tasklist_read(vdev_t *vd)
 	    total * sizeof (rebalance_task_phys_t));
 	rebalance_task_phys_t *buf = kmem_alloc(buflen, KM_SLEEP);
 	list_t *l = &var->var_list;
-	for (size_t i = 0; i < total; i++) {
+	size_t i;
+	for (i = 0; i < total; i++) {
 		size_t idx = i % (SPA_OLD_MAXBLOCKSIZE / sizeof (*buf));
 		if (idx == 0) {
 			size_t next_buflen = MIN(SPA_OLD_MAXBLOCKSIZE,
@@ -2262,6 +2263,7 @@ tasklist_read(vdev_t *vd)
 			l = &var->var_list;
 			vdev_anyraid_rebalance_task_t *vart =
 			    list_remove_head(l);
+			ASSERT(vart);
 			kmem_free(vart, sizeof (*vart));
 		}
 		vdev_anyraid_rebalance_task_t *vart =
@@ -2294,6 +2296,12 @@ tasklist_read(vdev_t *vd)
 		rw_exit(&va->vd_lock);
 
 		list_insert_tail(l, vart);
+	}
+	if (i == done) {
+		vdev_anyraid_rebalance_task_t *vart =
+		    list_remove_head(&var->var_list);
+		ASSERT(vart);
+		kmem_free(vart, sizeof (*vart));
 	}
 	kmem_free(buf, buflen);
 out:
