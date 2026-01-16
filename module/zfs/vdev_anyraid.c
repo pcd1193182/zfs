@@ -3001,7 +3001,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 				    vart->vart_task == var->var_task ?
 				    var->var_offset :
 				    (msp->ms_start + msp->ms_size);
-				zfs_dbgmsg("Clearing rt from %llu to %llu", (u_longlong_t)msp->ms_start, (u_longlong_t)end);
+				zfs_dbgmsg("Clearing rt %llu from %llu to %llu", (u_longlong_t)zfs_range_tree_space(rt), (u_longlong_t)msp->ms_start, (u_longlong_t)end);
 				zfs_range_tree_clear(rt, msp->ms_start,
 				    end - msp->ms_start); // THis failed somehow, after I believe rebalance -> pause -> export -> import -> export -> unset pause -> import
 			}
