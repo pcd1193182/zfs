@@ -2916,8 +2916,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		    i++) {
 			metaslab_t *msp = pvd->vdev_ms[i];
 
-			zfs_dbgmsg("msp %d %d %llu %d", (int)msp->ms_id,
-			    (int)i, (u_longlong_t)start, (int)vart->vart_tile);
+			zfs_dbgmsg("msp %d %llu %llu %d", (int)msp->ms_id,
+			    (u_longlong_t)msp->ms_start, (u_longlong_t)start, (int)vart->vart_tile);
 			if (vart->vart_task < var->var_task ||
 			    (vart->vart_task == var->var_task &&
 			    msp->ms_start + msp->ms_size <= var->var_offset)) {
