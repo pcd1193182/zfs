@@ -2838,11 +2838,15 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	    VDEV_ANYRAID_START_OFFSET(source_vd->vdev_ashift);
 	uint64_t dest_header =
 	    VDEV_ANYRAID_START_OFFSET(dest_vd->vdev_ashift);
+	uint64_t dest_off = dest_header +
+	    vart->vart_dest_off * va->vd_tile_size +
+	    ((offset - source_header) % va->vd_tile_size);
 	ama->ama_zio = zio_vdev_child_io(pio, NULL,
-	    dest_vd, dest_header + vart->vart_dest_off * va->vd_tile_size +
-	    ((offset - source_header) % va->vd_tile_size), abd, size,
+	    dest_vd, dest_off, abd, size,
 	    ZIO_TYPE_WRITE, ZIO_PRIORITY_REMOVAL,
 	    ZIO_FLAG_CANFAIL, anyraid_rebalance_write_done, ama);
+	zfs_dbgmsg("%llu -> %llu",
+	    (u_longlong_t)offset, (u_longlong_t)dest_off);
 
 	zio_nowait(zio_vdev_child_io(pio, NULL,
 	    vd->vdev_child[vart->vart_source_disk],
