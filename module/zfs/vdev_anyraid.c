@@ -2918,12 +2918,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 
 			zfs_dbgmsg("msp %d %llu %llu %d", (int)msp->ms_id,
 			    (u_longlong_t)msp->ms_start, (u_longlong_t)start, (int)vart->vart_tile);
-			if (vart->vart_task < var->var_task ||
-			    (vart->vart_task == var->var_task &&
-			    msp->ms_start + msp->ms_size <= var->var_offset)) {
-				zfs_dbgmsg("Skipping ms");
-				continue;
-			}
 			metaslab_disable(msp);
 			mutex_enter(&msp->ms_lock);
 
@@ -2999,16 +2993,13 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			 * when importing a pool with a rebalance in progress),
 			 * discard any state that we have already processed.
 			 */
-			if (vart->vart_task < var->var_task ||
-			    (vart->vart_task == var->var_task &&
-			    var->var_offset > msp->ms_start)) {
+			if (vart->vart_task <= var->var_task) {
 				uint64_t end =
 				    vart->vart_task == var->var_task ?
-				    var->var_offset :
-				    (msp->ms_start + msp->ms_size);
-				zfs_dbgmsg("Clearing rt %llu from %llu to %llu", (u_longlong_t)zfs_range_tree_space(phys), (u_longlong_t)msp->ms_start, (u_longlong_t)end);
-				zfs_range_tree_clear(phys, msp->ms_start,
-				    end - msp->ms_start); // THis failed somehow, after I believe rebalance -> pause -> export -> import -> export -> unset pause -> import
+				    var->var_offset : P2ALIGN_TYPED(UINT64_MAX,
+				    (1 << pvd->vdev_ashift), uint64_t);
+				zfs_dbgmsg("Clearing rt %llu from 0 to %llu", (u_longlong_t)zfs_range_tree_space(phys), (u_longlong_t)end);
+				zfs_range_tree_clear(phys, 0, end);
 			}
 
 			while (!zthr_iscancelled(zthr) &&
