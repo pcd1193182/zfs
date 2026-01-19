@@ -3002,6 +3002,8 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 				zfs_range_tree_clear(phys, 0, end);
 			}
 
+			zfs_dbgmsg("rt numsegs: %llu",
+			    (u_longlong_t)zfs_range_tree_numsegs(phys));
 			while (!zthr_iscancelled(zthr) &&
 			    !zfs_range_tree_is_empty(phys) &&
 			    var->var_failed_offset == UINT64_MAX) {
@@ -3104,6 +3106,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		IMPLY(!found, starting_offset >= end);
 		mutex_enter(&var->var_lock);
 		list_remove(&var->var_list, vart);
+		zfs_dbgmsg("Completing task %u", vart->vart_task);
 		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
 	}
