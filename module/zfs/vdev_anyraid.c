@@ -3084,6 +3084,13 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 			pvd = vdev_lookup_top(spa, var->var_vd);
 		}
+
+		if (zthr_iscancelled(zthr) ||
+		    var->var_failed_offset != UINT64_MAX) {
+			rw_exit(&va->vd_lock);
+			mutex_enter(&var->var_lock);
+			break;
+		}
 		rw_exit(&va->vd_lock);
 		rw_enter(&va->vd_lock, RW_WRITER);
 
