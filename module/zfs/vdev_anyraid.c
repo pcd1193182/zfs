@@ -2292,7 +2292,7 @@ tasklist_read(vdev_t *vd)
 				ASSERT(vd->vdev_ms);
 				metaslab_t *ms = vd->vdev_ms[m];
 				ASSERT(ms);
-				metaslab_disable(ms);
+				metaslab_disable_nowait(ms);
 				vart->vart_dis_ms++;
 			}
 		}
@@ -2952,7 +2952,7 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 
 			zfs_dbgmsg("msp %d %llu %llu %d", (int)msp->ms_id,
 			    (u_longlong_t)msp->ms_start, (u_longlong_t)start, (int)vart->vart_tile);
-			metaslab_disable(msp);
+			metaslab_disable_nowait(msp);
 			mutex_enter(&msp->ms_lock);
 
 			/*
