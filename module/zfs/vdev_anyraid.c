@@ -2277,7 +2277,23 @@ tasklist_read(vdev_t *vd)
 		vart->vart_task = rtp->rtp_task;
 		zfs_dbgmsg("Adding task %d to %slist: %d %d %d %d %d", vart->vart_task, i < done ? "done ": "", vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, vart->vart_tile);
 
-		// Need to disable some metaslabs here
+		/*
+		 * We need to disable metaslabs here; any metaslabs that are
+		 * after the first done task but before or containing the
+		 * resume offset.
+		 */
+		if (i >= done && vart->vart_task <= var->var_task) {
+			uint64_t ms_per_tile = va->vd_tile_size <<
+			    vd->vdev_ms_shift;
+			uint64_t start = vart->vart_tile * ms_per_tile;
+			uint64_t end = start + ms_per_tile;
+			for (int m = start; m < end; m++) {
+				// TODO be more precise here by using xlate to determine if specific metaslabs have to be disabled
+				metaslab_t *ms = vd->vdev_ms[m];
+				metaslab_disable(ms);
+				vart->vart_dis_ms++;
+			}
+		}
 
 		rw_enter(&va->vd_lock, RW_WRITER);
 		if (i < done) {
@@ -2945,6 +2961,10 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			if (msp->ms_new) {
 				mutex_exit(&msp->ms_lock);
 				metaslab_enable(msp, B_FALSE, B_FALSE);
+				if (vart->vart_dis_ms > 0) {
+					vart->vart_dis_ms--;
+					metaslab_enable(msp, B_FALSE, B_FALSE);
+				}
 				continue;
 			}
 
@@ -3094,6 +3114,10 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			spa_config_exit(spa, SCL_CONFIG, FTAG);
 
 			metaslab_enable(msp, B_FALSE, B_FALSE);
+			if (vart->vart_dis_ms > 0) {
+				vart->vart_dis_ms--;
+				metaslab_enable(msp, B_FALSE, B_FALSE);
+			}
 			zfs_range_tree_vacate(phys, NULL, NULL);
 			zfs_range_tree_destroy(phys);
 

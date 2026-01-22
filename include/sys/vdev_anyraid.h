@@ -51,6 +51,7 @@ typedef struct vdev_anyraid_rebalance_task {
 	uint16_t	vart_dest_off;
 	uint32_t	vart_tile;
 	uint32_t	vart_task;
+	uint32_t	vart_dis_ms; // Only used during resume
 } vdev_anyraid_rebalance_task_t;
 
 typedef struct vdev_anyraid_rebalance {
