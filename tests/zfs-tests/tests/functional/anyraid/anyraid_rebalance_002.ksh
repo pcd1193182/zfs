@@ -94,5 +94,7 @@ cap=$(zpool get -Hp -o value size $TESTPOOL)
 
 log_must check_pool_status $TESTPOOL state ONLINE true
 log_must is_pool_scrubbed $TESTPOOL true
+cksum_count=$(zpool status -v $TESTPOOL | grep ONLINE | awk 'NF > 2 && $5 != 0' | wc -l)
+[[ "$cksum_count" -eq 0 ]] || log_fail "checksum errors detected"
 
 log_pass "Anyraid rebalance works correctly"
