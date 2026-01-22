@@ -3876,10 +3876,6 @@ vdev_load(vdev_t *vd)
 		error = vdev_raidz_load(vd);
 		if (error != 0)
 			return (error);
-	} else if (vdev_is_anyraid(vd)) {
-		error = vdev_anyraid_load(vd);
-		if (error != 0)
-			return (error);
 	}
 
 	/*
@@ -4037,6 +4033,11 @@ vdev_load(vdev_t *vd)
 			vdev_set_state(vd, B_FALSE, VDEV_STATE_CANT_OPEN,
 			    VDEV_AUX_CORRUPT_DATA);
 			return (error);
+		}
+		if (vdev_is_anyraid(vd)) {
+			error = vdev_anyraid_load(vd);
+			if (error != 0)
+				return (error);
 		}
 
 		uint64_t checkpoint_sm_obj;
