@@ -45,6 +45,7 @@ verify_runnable "global"
 cleanup() {
 	zpool destroy $TESTPOOL
 	set_tunable64 ANYRAID_MIN_TILE_SIZE 1073741824
+	rm $TEST_BASE_DIR/vdev_file.{0,1,2,3,4,5}
 }
 
 log_onexit cleanup
