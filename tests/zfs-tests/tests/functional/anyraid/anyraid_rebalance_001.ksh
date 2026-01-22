@@ -64,10 +64,11 @@ cap=$(zpool get -Hp -o value size $TESTPOOL)
 	log_fail "Incorrect space for anyraid vdev: $cap"
 
 log_must zpool attach $TESTPOOL anymirror1-0 $TEST_BASE_DIR/vdev_file.5
+log_must zpool rebalance $TESTPOOL anymirror1-0
 cap=$(zpool get -Hp -o value size $TESTPOOL)
 [[ "$cap" -eq $((18 * 64 * 1024 * 1024)) ]] || \
 	log_fail "Incorrect space for anyraid vdev: $cap"
-log_must zpool wait -t rebalance $TESTPOOL
+log_must zpool wait -t anyraid_rebalance,scrub $TESTPOOL
 
 cap=$(zpool get -Hp -o value size $TESTPOOL)
 [[ "$cap" -eq $((35 * 64 * 1024 * 1024)) ]] || \

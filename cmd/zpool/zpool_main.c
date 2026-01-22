@@ -13635,7 +13635,7 @@ zpool_do_wait(int argc, char **argv)
 				static const char *const col_opts[] = {
 				    "discard", "free", "initialize", "replace",
 				    "remove", "resilver", "scrub", "trim",
-				    "raidz_expand" };
+				    "raidz_expand" , "anyraid_rebalance" };
 
 				for (i = 0; i < ARRAY_SIZE(col_opts); ++i)
 					if (strcmp(tok, col_opts[i]) == 0) {
