@@ -1160,6 +1160,9 @@ dsl_scan_done(dsl_scan_t *scn, boolean_t complete, dmu_tx_t *tx)
 		}
 	}
 
+	if (scn->scn_done)
+		scn->scn_done(spa, tx, scn->scn_done_arg);
+
 	if (DSL_SCAN_IS_SCRUB_RESILVER(scn)) {
 		spa->spa_scrub_active = B_FALSE;
 
@@ -1236,9 +1239,6 @@ dsl_scan_done(dsl_scan_t *scn, boolean_t complete, dmu_tx_t *tx)
 		    DSS_CANCELED;
 		scn->scn_phys.scn_end_time = gethrestime_sec();
 	}
-
-	if (scn->scn_done)
-		scn->scn_done(spa, tx, scn->scn_done_arg);
 
 	spa_notify_waiters(spa);
 
