@@ -2287,11 +2287,11 @@ tasklist_read(vdev_t *vd)
 			    vd->vdev_ms_shift;
 			uint64_t start = vart->vart_tile * ms_per_tile;
 			uint64_t end = start + ms_per_tile;
-			for (int m = start; m < end; m++) {
+			for (uint64_t m = start; m < end; m++) {
 				// TODO be more precise here by using xlate to determine if specific metaslabs have to be disabled
 				ASSERT(vd->vdev_ms);
 				metaslab_t *ms = vd->vdev_ms[m];
-				ASSERT(ms);
+				ASSERTF(ms, "%d %d %d %d", (int)m, (int)start, (int)end, (int)vd->vdev_ms_count);
 				metaslab_disable_nowait(ms);
 				vart->vart_dis_ms++;
 			}
