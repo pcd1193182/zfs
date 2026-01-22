@@ -2289,7 +2289,9 @@ tasklist_read(vdev_t *vd)
 			uint64_t end = start + ms_per_tile;
 			for (int m = start; m < end; m++) {
 				// TODO be more precise here by using xlate to determine if specific metaslabs have to be disabled
+				ASSERT(vd->vdev_ms);
 				metaslab_t *ms = vd->vdev_ms[m];
+				ASSERT(ms);
 				metaslab_disable(ms);
 				vart->vart_dis_ms++;
 			}
