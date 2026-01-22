@@ -2277,7 +2277,19 @@ tasklist_read(vdev_t *vd)
 		vart->vart_task = rtp->rtp_task;
 		zfs_dbgmsg("Adding task %d to %slist: %d %d %d %d %d", vart->vart_task, i < done ? "done ": "", vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, vart->vart_tile);
 
+		// Need to disable some metaslabs here
+
 		rw_enter(&va->vd_lock, RW_WRITER);
+		if (i < done) {
+			anyraid_tile_t search;
+			search.at_tile_id = vart->vart_tile;
+			anyraid_tile_t *at = avl_find(&va->vd_tile_map, &search, NULL);
+			int i = 0;
+			for (anyraid_tile_node_t *atn = list_head(&at->at_list);
+			    atn; atn = list_next(&at->at_list, atn)) {
+				zfs_dbgmsg("dl %d-%d: %d %d", vart->vart_tile, i, atn->atn_disk, atn->atn_offset);
+			}
+		}
 		anyraid_freelist_t *af =
 		    &va->vd_children[vart->vart_source_disk]->van_freelist;
 		boolean_t sourcefree = anyraid_freelist_isfree(af,
