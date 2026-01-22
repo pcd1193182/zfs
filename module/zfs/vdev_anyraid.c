@@ -2283,7 +2283,7 @@ tasklist_read(vdev_t *vd)
 		 * resume offset.
 		 */
 		if (i >= done && vart->vart_task <= var->var_task) {
-			uint64_t ms_per_tile = va->vd_tile_size <<
+			uint64_t ms_per_tile = va->vd_tile_size >>
 			    vd->vdev_ms_shift;
 			uint64_t start = vart->vart_tile * ms_per_tile;
 			uint64_t end = start + ms_per_tile;
