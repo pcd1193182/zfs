@@ -2288,10 +2288,20 @@ tasklist_read(vdev_t *vd)
 			uint64_t start = vart->vart_tile * ms_per_tile;
 			uint64_t end = start + ms_per_tile;
 			for (uint64_t m = start; m < end; m++) {
-				// TODO be more precise here by using xlate to determine if specific metaslabs have to be disabled
 				ASSERT(vd->vdev_ms);
 				metaslab_t *ms = vd->vdev_ms[m];
 				ASSERTF(ms, "%d %d %d %d", (int)m, (int)start, (int)end, (int)vd->vdev_ms_count);
+				if (vart->vart_task == var->var_task) {
+					zfs_range_seg64_t log, phys, rem;
+					log.rs_start = ms->ms_start;
+					log.rs_end = ms->ms_start + ms->ms_size;
+					vdev_xlate(vd->vdev_child[
+					    vart->vart_source_disk], &log,
+					    &phys, &rem);
+					if (phys.rs_start == phys.rs_end ||
+					    phys.rs_start > var->var_offset)
+						continue;
+				}
 				metaslab_disable_nowait(ms);
 				vart->vart_dis_ms++;
 			}
