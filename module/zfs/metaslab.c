@@ -5482,7 +5482,7 @@ top:
 
 		if (offset != -1ULL) {
 			if (spa->spa_anyraid_rebalance != NULL) {
-				zfs_dbgmsg("alloc during anyraid rebal: %d %llu %llu", (int)mg->mg_vd->vdev_id, (u_longlong_t)offset, (u_longlong_t)psize);
+				zfs_dbgmsg("alloc during anyraid rebal: %px %d %llu %llu", zal, (int)mg->mg_vd->vdev_id, (u_longlong_t)offset, (u_longlong_t)psize);
 			}
 			if (actual_psize)
 				*actual_psize = vdev_asize_to_psize_txg(vd,
