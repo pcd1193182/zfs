@@ -749,7 +749,6 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		vart->vart_tile = fnvlist_lookup_uint32(cur_task,
 		    VART_TILE);
 		vart->vart_task = varr->var_task;
-		zfs_dbgmsg("Creating tmp task %llu: %u", (u_longlong_t)varr->var_task, vart->vart_tile);
 		list_insert_head(&varr->var_list, vart);
 		var->vd_rebalance = varr;
 		spa->spa_anyraid_rebalance = varr;
@@ -1564,8 +1563,6 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 			break;
 	// The tile exists, but isn't stored on this child
 	if (atn == NULL) {
-		zfs_dbgmsg("Tile %d not found on child %d", (int)start_tile_id,
-		    (int)cvd->vdev_id);
 		physical_rs->rs_start = physical_rs->rs_end = 0;
 		return;
 	}
@@ -1832,7 +1829,6 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 				break;
 		}
 		ASSERT(vart);
-		zfs_dbgmsg("Head task %llu tile %u", (u_longlong_t)task, vart->vart_tile);
 		nvlist_t *rebal_task = fnvlist_alloc();
 		fnvlist_add_uint32(rebal_task, VART_TILE,
 		    vart->vart_tile);
@@ -2189,7 +2185,6 @@ tasklist_write(spa_t *spa, vdev_anyraid_rebalance_t *var, dmu_tx_t *tx)
 			rtp->rtp_tile = t->vart_tile;
 			rtp->rtp_task = t->vart_task;
 			rtp->rtp_pad2 = 0;
-			zfs_dbgmsg("Writing task %d from %slist: %d %d %d %d %d", t->vart_task, i == 0 ? "done ": "", t->vart_source_disk, t->vart_source_off, t->vart_dest_disk, t->vart_dest_off, t->vart_tile);
 		}
 	}
 	dmu_write(mos, obj, written * SPA_OLD_MAXBLOCKSIZE, buflen, buf, tx,
@@ -2275,7 +2270,6 @@ tasklist_read(vdev_t *vd)
 		vart->vart_dest_off = rtp->rtp_dest_off;
 		vart->vart_tile = rtp->rtp_tile;
 		vart->vart_task = rtp->rtp_task;
-		zfs_dbgmsg("Adding task %d to %slist: %d %d %d %d %d", vart->vart_task, i < done ? "done ": "", vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, vart->vart_tile);
 
 		/*
 		 * We need to disable metaslabs here; any metaslabs that are
@@ -2308,16 +2302,6 @@ tasklist_read(vdev_t *vd)
 		}
 
 		rw_enter(&va->vd_lock, RW_WRITER);
-		if (i < done) {
-			anyraid_tile_t search;
-			search.at_tile_id = vart->vart_tile;
-			anyraid_tile_t *at = avl_find(&va->vd_tile_map, &search, NULL);
-			int i = 0;
-			for (anyraid_tile_node_t *atn = list_head(&at->at_list);
-			    atn; atn = list_next(&at->at_list, atn)) {
-				zfs_dbgmsg("dl %d-%d: %d %d", vart->vart_tile, i, atn->atn_disk, atn->atn_offset);
-			}
-		}
 		anyraid_freelist_t *af =
 		    &va->vd_children[vart->vart_source_disk]->van_freelist;
 		boolean_t sourcefree = anyraid_freelist_isfree(af,
@@ -2397,9 +2381,6 @@ anyraid_rebalance_sync(void *arg, dmu_tx_t *tx)
 
 	tasklist_write(spa, var, tx);
 	mutex_exit(&var->var_lock);
-	zfs_dbgmsg("Executed synctask %llu %llu/%llu",
-	    (u_longlong_t)var->var_bytes_copied, (u_longlong_t)var->var_task,
-	    (u_longlong_t)var->var_offset);
 }
 
 struct anyraid_done_arg {
@@ -2417,16 +2398,12 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	for (vdev_anyraid_rebalance_task_t *task =
 	    list_head(&var->var_done_list); task;
 	    task = list_head(&var->var_done_list)) {
-		zfs_dbgmsg("freeing %d %d", task->vart_source_disk,
-		    task->vart_source_off);
 		anyraid_freelist_add(
 		    &va->vd_children[task->vart_source_disk]->van_freelist,
 		    task->vart_source_off);
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
-
-	zfs_dbgmsg("scrub done %llu %d", (u_longlong_t)var->var_nonalloc, (int)var->var_object);
 
 	objset_t *mos = spa->spa_meta_objset;
 	VERIFY0(dmu_object_free(mos, var->var_object, tx));
@@ -2703,7 +2680,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
 	ASSERT3U(vd->vdev_asize, >=, updated_asize);
 	vr->var_nonalloc = vd->vdev_asize - updated_asize;
-	zfs_dbgmsg("Adding nonalloc %llu", (u_longlong_t)vr->var_nonalloc);
 	vdev_update_nonallocating_space(vd, vr->var_nonalloc, B_TRUE);
 
 	objset_t *mos = vd->vdev_spa->spa_meta_objset;
@@ -2817,7 +2793,6 @@ anyraid_rebalance_record_progress(vdev_anyraid_rebalance_t *var,
 	if (var->var_offset_pertxg[txgoff] == 0) {
 		dsl_sync_task_nowait(dmu_tx_pool(tx), anyraid_rebalance_sync,
 		    spa, tx);
-		    zfs_dbgmsg("Scheduling synctask");
 	}
 	var->var_offset_pertxg[txgoff] = offset;
 	var->var_task_pertxg[txgoff] = task;
@@ -2842,8 +2817,6 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 
 	size = MIN(size, anyraid_rebalance_max_move_bytes);
 	size = MAX(size, 1 << ashift);
-	zfs_dbgmsg("Executing move for tile %d, %llu:%llu",
-	    vart->vart_tile, (u_longlong_t)offset, (u_longlong_t)size);
 
 	zfs_range_tree_remove(rt, offset, size);
 
@@ -2885,8 +2858,6 @@ anyraid_rebalance_impl(vdev_t *vd, vdev_anyraid_rebalance_t *var,
 	    dest_vd, dest_off, abd, size,
 	    ZIO_TYPE_WRITE, ZIO_PRIORITY_REMOVAL,
 	    ZIO_FLAG_CANFAIL, anyraid_rebalance_write_done, ama);
-	zfs_dbgmsg("%llu -> %llu",
-	    (u_longlong_t)offset, (u_longlong_t)dest_off);
 
 	zio_nowait(zio_vdev_child_io(pio, NULL,
 	    vd->vdev_child[vart->vart_source_disk],
@@ -2912,10 +2883,6 @@ anyraid_rt_physify(void *arg, uint64_t start, uint64_t size)
 	logical.rs_start = start;
 	logical.rs_end = start + size;
 	vdev_xlate(vd, &logical, &physical, &remain);
-	zfs_dbgmsg("%llu:%llu %llu:%llu %llu:%llu", (u_longlong_t)start,
-	    (u_longlong_t)size,
-	    (u_longlong_t)logical.rs_start, (u_longlong_t)logical.rs_end,
-	    (u_longlong_t)physical.rs_start, (u_longlong_t)physical.rs_end);
 	ASSERT3U(remain.rs_end, ==, remain.rs_start);
 	/*
 	 * This can happen if the tile has actually already been moved,
@@ -2953,15 +2920,12 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		uint16_t ms_shift = pvd->vdev_ms_shift;
 		uint64_t start = (vart->vart_tile * va->vd_tile_size) >>
 		    ms_shift;
-		uint64_t starting_offset = var->var_offset; // TODO handle the fact that the offset doesn't increase monotonically
-		zfs_dbgmsg("Offset %llu/%llu tile %d start %llu", (u_longlong_t)var->var_task,(u_longlong_t)var->var_offset, vart->vart_tile, (u_longlong_t)start);
+		uint64_t starting_offset = var->var_offset;
 		uint64_t end = start + (va->vd_tile_size >> ms_shift);
 		for (uint64_t i = start; i < end && !zthr_iscancelled(zthr);
 		    i++) {
 			metaslab_t *msp = pvd->vdev_ms[i];
 
-			zfs_dbgmsg("msp %d %llu %llu %d", (int)msp->ms_id,
-			    (u_longlong_t)msp->ms_start, (u_longlong_t)start, (int)vart->vart_tile);
 			metaslab_disable_nowait(msp);
 			mutex_enter(&msp->ms_lock);
 
@@ -3014,9 +2978,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 			struct physify_arg pa;
 			pa.rt = phys;
 			pa.vd = source_vd;
-			zfs_dbgmsg("physifying ms %d (tile %d) w/ vdev %d",
-			    (int)msp->ms_id, vart->vart_tile,
-			    vart->vart_source_disk);
 			zfs_range_tree_walk(rt, anyraid_rt_physify, &pa);
 			zfs_range_tree_vacate(rt, NULL, NULL);
 			zfs_range_tree_destroy(rt);
@@ -3046,12 +3007,10 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 				    vart->vart_task == var->var_task ?
 				    var->var_offset : P2ALIGN_TYPED(UINT64_MAX,
 				    (1 << pvd->vdev_ashift), uint64_t);
-				zfs_dbgmsg("Clearing rt %llu from 0 to %llu", (u_longlong_t)zfs_range_tree_space(phys), (u_longlong_t)end);
 				zfs_range_tree_clear(phys, 0, end);
 			}
 
-			zfs_dbgmsg("rt numsegs: %llu",
-			    (u_longlong_t)zfs_range_tree_numsegs(phys));
+
 			while (!zthr_iscancelled(zthr) &&
 			    !zfs_range_tree_is_empty(phys) &&
 			    var->var_failed_offset == UINT64_MAX) {
@@ -3165,7 +3124,6 @@ spa_anyraid_rebalance_thread(void *arg, zthr_t *zthr)
 		IMPLY(!found, starting_offset >= end);
 		mutex_enter(&var->var_lock);
 		list_remove(&var->var_list, vart);
-		zfs_dbgmsg("Completing task %u", vart->vart_task);
 		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
 	}
