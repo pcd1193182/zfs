@@ -2438,7 +2438,7 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
 	for (int i = 0; i < TXG_SIZE; i++) {
-		// VERIFY0(var->var_offset_pertxg[i]);
+		VERIFY0(var->var_offset_pertxg[i]);
 	}
 
 	rw_enter(&va->vd_lock, RW_WRITER);
@@ -2449,11 +2449,6 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 	vdev_config_dirty(vd);
 
 	var->var_end_time = gethrestime_sec();
-
-/*	uint64_t end_time = var->var_end_time;
-	VERIFY0(zap_update(spa->spa_meta_objset,
-	    vd->vdev_top_zap, VDEV_TOP_ZAP_RAIDZ_EXPAND_END_TIME,
-	    sizeof (end_time), 1, &end_time, tx));*/
 
 	spa_history_log_internal(spa, "anyraid relocate completed",  tx,
 	    "%s vdev %llu", spa_name(spa),
@@ -2467,7 +2462,6 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 
 	spa_notify_waiters(spa);
 
-	// TODO expand the vdev here
 	/*
 	 * While we're in syncing context take the opportunity to
 	 * setup a scrub. All the data has been sucessfully copied
