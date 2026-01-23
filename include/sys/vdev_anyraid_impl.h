@@ -79,7 +79,7 @@ typedef struct anyraid_tile {
 } anyraid_tile_t;
 
 typedef struct anyraid_move_arg {
-	vdev_anyraid_rebalance_t *ama_var;
+	vdev_anyraid_relocate_t *ama_var;
 	zio_t			*ama_zio;
 	zfs_locked_range_t	*ama_lr;
 	uint64_t		ama_txg;
@@ -87,12 +87,12 @@ typedef struct anyraid_move_arg {
 	uint32_t		ama_tid;
 } anyraid_move_arg_t;
 
-typedef struct rebalance_phys {
+typedef struct relocate_phys {
 	uint64_t	rp_done;
 	uint64_t	rp_total;
-} rebalance_phys_t;
+} relocate_phys_t;
 
-typedef struct rebalance_task_phys {
+typedef struct relocate_task_phys {
 	uint32_t	rtp_source_disk;
 	uint32_t	rtp_dest_disk;
 	uint32_t	rtp_source_off;
@@ -100,7 +100,7 @@ typedef struct rebalance_task_phys {
 	uint32_t	rtp_tile;
 	uint32_t	rtp_task;
 	uint64_t	rtp_pad2;
-} rebalance_task_phys_t;
+} relocate_task_phys_t;
 
 /*
  * The ondisk structure of the anyraid tile map is VDEV_ANYRAID_MAP_COPIES

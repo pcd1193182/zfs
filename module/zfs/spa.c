@@ -2144,9 +2144,9 @@ spa_destroy_aux_threads(spa_t *spa)
 		zthr_destroy(spa->spa_raidz_expand_zthr);
 		spa->spa_raidz_expand_zthr = NULL;
 	}
-	if (spa->spa_anyraid_rebalance_zthr != NULL) {
-		zthr_destroy(spa->spa_anyraid_rebalance_zthr);
-		spa->spa_anyraid_rebalance_zthr = NULL;
+	if (spa->spa_anyraid_relocate_zthr != NULL) {
+		zthr_destroy(spa->spa_anyraid_relocate_zthr);
+		spa->spa_anyraid_relocate_zthr = NULL;
 	}
 }
 
@@ -2427,7 +2427,7 @@ spa_unload(spa_t *spa)
 	}
 
 	spa->spa_raidz_expand = NULL;
-	spa->spa_anyraid_rebalance = NULL;
+	spa->spa_anyraid_relocate = NULL;
 	spa->spa_checkpoint_txg = 0;
 
 	spa_config_exit(spa, SCL_ALL, spa);
@@ -3568,7 +3568,7 @@ spa_spawn_aux_threads(spa_t *spa)
 	ASSERT(spa_writeable(spa));
 
 	spa_start_raidz_expansion_thread(spa);
-	spa_start_anyraid_rebalance_thread(spa);
+	spa_start_anyraid_relocate_thread(spa);
 	spa_start_indirect_condensing_thread(spa);
 	spa_start_livelist_destroy_thread(spa);
 	spa_start_livelist_condensing_thread(spa);
@@ -9938,7 +9938,7 @@ spa_async_suspend(spa_t *spa)
 	if (raidz_expand_thread != NULL)
 		zthr_cancel(raidz_expand_thread);
 
-	zthr_t *anyraid_rebalance_thread = spa->spa_anyraid_rebalance_zthr;
+	zthr_t *anyraid_rebalance_thread = spa->spa_anyraid_relocate_zthr;
 	if (anyraid_rebalance_thread != NULL)
 		zthr_cancel(anyraid_rebalance_thread);
 
@@ -11571,7 +11571,7 @@ spa_activity_in_progress(spa_t *spa, zpool_wait_activity_t activity,
 	}
 	case ZPOOL_WAIT_ANYRAID_REBALANCE:
 	{
-		vdev_anyraid_rebalance_t *var = spa->spa_anyraid_rebalance;
+		vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
 		*in_progress = (var != NULL && var->var_state == DSS_SCANNING);
 		break;
 	}
@@ -11715,7 +11715,7 @@ spa_check_start_rebalance(void *arg, dmu_tx_t *tx) {
 	vdev_t *vd = (vdev_t *)arg;
 	if (!vdev_is_anyraid(vd))
 		return (SET_ERROR(EINVAL));
-	if (vdev_anyraid_rebalance_status(vd) != NULL)
+	if (vdev_anyraid_relocate_status(vd) != NULL)
 		return (SET_ERROR(EALREADY));
 	(void) tx;
 	return (0);

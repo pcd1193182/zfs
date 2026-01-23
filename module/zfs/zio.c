@@ -4348,7 +4348,7 @@ again:
 	error = metaslab_alloc(spa, mc, zio->io_size, bp,
 	    zio->io_prop.zp_copies, zio->io_txg, NULL, flags,
 	    &zio->io_alloc_list, zio->io_allocator, zio);
-	if (error == 0 && spa->spa_anyraid_rebalance != NULL) {
+	if (error == 0 && spa->spa_anyraid_relocate != NULL) {
 		zfs_dbgmsg("zb during anyraid rebal: %px %llu %llu %llu %llu", &zio->io_alloc_list, (u_longlong_t)zio->io_bookmark.zb_objset, (u_longlong_t)zio->io_bookmark.zb_object, (u_longlong_t)(u_longlong_t)zio->io_bookmark.zb_level, (u_longlong_t)zio->io_bookmark.zb_blkid);
 	}
 

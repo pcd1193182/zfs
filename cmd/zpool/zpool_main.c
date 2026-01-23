@@ -10352,7 +10352,7 @@ print_raidz_expand_status(zpool_handle_t *zhp, pool_raidz_expand_stat_t *pres)
  */
 static void
 print_anyraid_rebalance_status(zpool_handle_t *zhp,
-    pool_anyraid_rebalance_stat_t *pars)
+    pool_anyraid_relocate_stat_t *pars)
 {
 	char copied_buf[7];
 
@@ -10369,14 +10369,14 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 	uint_t children;
 	verify(nvlist_lookup_nvlist_array(nvroot, ZPOOL_CONFIG_CHILDREN,
 	    &child, &children) == 0);
-	assert(pars->pars_rebalancing_vdev < children);
+	assert(pars->pars_relocating_vdev < children);
 
 	printf_color(ANSI_BOLD, gettext("rebalance: "));
 
 	time_t start = pars->pars_start_time;
 	time_t end = pars->pars_end_time;
 	char *vname =
-	    zpool_vdev_name(g_zfs, zhp, child[pars->pars_rebalancing_vdev], 0);
+	    zpool_vdev_name(g_zfs, zhp, child[pars->pars_relocating_vdev], 0);
 	zfs_nicenum(pars->pars_moved, copied_buf, sizeof (copied_buf));
 
 	/*
@@ -10387,7 +10387,7 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 		secs_to_dhms(end - start, time_buf);
 
 		(void) printf(gettext("rebalanced %s-%u moved %s in %s, "
-		    "on %s"), vname, (int)pars->pars_rebalancing_vdev,
+		    "on %s"), vname, (int)pars->pars_relocating_vdev,
 		    copied_buf, time_buf, ctime((time_t *)&end));
 	} else {
 		char examined_buf[7], total_buf[7], rate_buf[7];
@@ -10401,7 +10401,7 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 		 */
 		(void) printf(gettext(
 		    "rebalance of %s-%u in progress since %s"),
-		    vname, (int)pars->pars_rebalancing_vdev, ctime(&start));
+		    vname, (int)pars->pars_relocating_vdev, ctime(&start));
 
 		copied = pars->pars_moved > 0 ? pars->pars_moved : 1;
 		total = pars->pars_to_move;
@@ -11186,9 +11186,9 @@ status_callback(zpool_handle_t *zhp, void *data)
 		    ZPOOL_CONFIG_RAIDZ_EXPAND_STATS, (uint64_t **)&pres, &c);
 		print_raidz_expand_status(zhp, pres);
 
-		pool_anyraid_rebalance_stat_t *pars = NULL;
+		pool_anyraid_relocate_stat_t *pars = NULL;
 		(void) nvlist_lookup_uint64_array(nvroot,
-		    ZPOOL_CONFIG_ANYRAID_REBALANCE_STATS, (uint64_t **)&pars,
+		    ZPOOL_CONFIG_ANYRAID_RELOCATE_STATS, (uint64_t **)&pars,
 		    &c);
 		print_anyraid_rebalance_status(zhp, pars);
 
@@ -13418,7 +13418,7 @@ print_wait_status_row(wait_data_t *wd, zpool_handle_t *zhp, int row)
 	pool_scan_stat_t *pss = NULL;
 	pool_removal_stat_t *prs = NULL;
 	pool_raidz_expand_stat_t *pres = NULL;
-	pool_anyraid_rebalance_stat_t *pars = NULL;
+	pool_anyraid_relocate_stat_t *pars = NULL;
 	const char *const headers[] = {"DISCARD", "FREE", "INITIALIZE",
 	    "REPLACE", "REMOVE", "RESILVER", "SCRUB", "TRIM", "RAIDZ_EXPAND",
 	    "ANYRAID_REBALANCE"};
@@ -13491,7 +13491,7 @@ print_wait_status_row(wait_data_t *wd, zpool_handle_t *zhp, int row)
 	}
 
 	(void) nvlist_lookup_uint64_array(nvroot,
-	    ZPOOL_CONFIG_ANYRAID_REBALANCE_STATS, (uint64_t **)&pars, &c);
+	    ZPOOL_CONFIG_ANYRAID_RELOCATE_STATS, (uint64_t **)&pars, &c);
 	if (pars != NULL && pars->pars_state == DSS_SCANNING) {
 		int64_t rem = pars->pars_to_move - pars->pars_moved;
 		bytes_rem[ZPOOL_WAIT_ANYRAID_REBALANCE] = rem;

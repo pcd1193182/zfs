@@ -778,7 +778,7 @@ typedef struct zpool_load_policy {
 #define	ZPOOL_CONFIG_VDEV_STATS		"vdev_stats"	/* not stored on disk */
 #define	ZPOOL_CONFIG_INDIRECT_SIZE	"indirect_size"	/* not stored on disk */
 /* not on disk */
-#define	ZPOOL_CONFIG_ANYRAID_REBALANCE_STATS	"anyraid_rebalance_stats"
+#define	ZPOOL_CONFIG_ANYRAID_RELOCATE_STATS	"anyraid_rebalance_stats"
 
 /* container nvlist of extended stats */
 #define	ZPOOL_CONFIG_VDEV_STATS_EX	"vdev_stats_ex"
@@ -1252,15 +1252,15 @@ typedef struct pool_raidz_expand_stat {
 	uint64_t pres_waiting_for_resilver;
 } pool_raidz_expand_stat_t;
 
-typedef struct pool_anyraid_rebalance_stat {
+typedef struct pool_anyraid_relocate_stat {
 	uint64_t pars_state; /* dsl_scan_state_t */
-	uint64_t pars_rebalancing_vdev;
+	uint64_t pars_relocating_vdev;
 	uint64_t pars_start_time;
 	uint64_t pars_end_time;
 	uint64_t pars_to_move; /* bytes that need to be moved */
 	uint64_t pars_moved; /* bytes moved so far */
 	uint64_t pars_waiting_for_resilver;
-} pool_anyraid_rebalance_stat_t;
+} pool_anyraid_relocate_stat_t;
 
 typedef enum dsl_scan_state {
 	DSS_NONE,

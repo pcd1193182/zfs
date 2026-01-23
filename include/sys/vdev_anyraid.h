@@ -43,7 +43,7 @@ typedef enum vdev_anyraid_parity_type {
 	VAP_TYPES,
 } vdev_anyraid_parity_type_t;
 
-typedef struct vdev_anyraid_rebalance_task {
+typedef struct vdev_anyraid_relocate_task {
 	list_node_t	vart_node;
 	uint8_t		vart_source_disk;
 	uint8_t		vart_dest_disk;
@@ -52,9 +52,9 @@ typedef struct vdev_anyraid_rebalance_task {
 	uint32_t	vart_tile;
 	uint32_t	vart_task;
 	uint32_t	vart_dis_ms; // Only used during resume
-} vdev_anyraid_rebalance_task_t;
+} vdev_anyraid_relocate_task_t;
 
-typedef struct vdev_anyraid_rebalance {
+typedef struct vdev_anyraid_relocate {
 	list_t 		var_list;
 	list_t 		var_done_list;
 	uint64_t	var_offset;
@@ -80,7 +80,7 @@ typedef struct vdev_anyraid_rebalance {
 	kcondvar_t	var_cv;
 	uint64_t	var_nonalloc;
 	uint64_t	var_object;
-} vdev_anyraid_rebalance_t;
+} vdev_anyraid_relocate_t;
 
 typedef struct vdev_anyraid {
 	vdev_anyraid_parity_type_t vd_parity_type;
@@ -99,7 +99,7 @@ typedef struct vdev_anyraid {
 	uint32_t	vd_checkpoint_tile;
 	vdev_anyraid_node_t **vd_children;
 	/* non-null iff there's a rebalance in progress */
-	vdev_anyraid_rebalance_t *vd_rebalance;
+	vdev_anyraid_relocate_t *vd_relocate;
 	zfs_rangelock_t	vd_rangelock;
 } vdev_anyraid_t;
 
@@ -117,13 +117,13 @@ extern void vdev_anyraid_expand(vdev_t *tvd, vdev_t *newvd);
 extern boolean_t vdev_anyraid_mapped(vdev_t *vd, uint64_t offset);
 uint64_t vdev_anyraid_child_num_tiles(vdev_t *vd, vdev_t *cvd);
 uint64_t vdev_anyraid_child_capacity(vdev_t *vd, vdev_t *cvd);
-int spa_anyraid_rebalance_get_stats(spa_t *spa,
-    pool_anyraid_rebalance_stat_t *pars);
+int spa_anyraid_relocate_get_stats(spa_t *spa,
+    pool_anyraid_relocate_stat_t *pars);
 int vdev_anyraid_load(vdev_t *vd);
 
-vdev_anyraid_rebalance_t *vdev_anyraid_rebalance_status(vdev_t *vd);
+vdev_anyraid_relocate_t *vdev_anyraid_relocate_status(vdev_t *vd);
 void vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx);
-void spa_start_anyraid_rebalance_thread(spa_t *spa);
+void spa_start_anyraid_relocate_thread(spa_t *spa);
 
 #ifdef	__cplusplus
 }
