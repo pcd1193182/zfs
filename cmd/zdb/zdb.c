@@ -9590,38 +9590,38 @@ print_separator_line(int cols, int colwidth, boolean_t *print, boolean_t *final)
 static void
 zdb_print_anyraid_tile_layout(vdev_t *vd)
 {
-	vdev_anyraid_t *var = vd->vdev_tsd;
+	vdev_anyraid_t *va = vd->vdev_tsd;
 	int cols = vd->vdev_children;
-	int textwidth = MAX(8, numlen(avl_numnodes(&var->vd_tile_map)) +
-	    var->vd_nparity > 0 ? numlen(var->vd_width) + 1 : 0);
+	int textwidth = MAX(8, numlen(avl_numnodes(&va->vd_tile_map)) +
+	    va->vd_nparity > 0 ? numlen(va->vd_width) + 1 : 0);
 	int colwidth = textwidth + 2;
 
 	// Create and populate table with all the values we need to print.
 	char ***table = malloc(sizeof (*table) * cols);
 	for (int i = 0; i < cols; i++) {
-		table[i] = calloc(var->vd_children[i]->van_capacity + 1,
+		table[i] = calloc(va->vd_children[i]->van_capacity + 1,
 		    sizeof (**table));
 	}
 
-	anyraid_tile_t *cur = avl_first(&var->vd_tile_map);
+	anyraid_tile_t *cur = avl_first(&va->vd_tile_map);
 	while (cur) {
 		int p = 0;
 		for (anyraid_tile_node_t *node = list_head(&cur->at_list);
 		    node; node = list_next(&cur->at_list, node)) {
-			ASSERT3U(p, <=, var->vd_nparity + 1);
+			ASSERT3U(p, <=, va->vd_nparity + 1);
 			char **next =
 			    &(table[node->atn_disk][node->atn_offset]);
 			*next = malloc(textwidth + 1);
 			int len = snprintf(*next, textwidth, "%d",
 			    cur->at_tile_id);
-			if (var->vd_nparity > 0) {
+			if (va->vd_nparity > 0) {
 				(void) snprintf((*next) + len, textwidth - len,
 				    "-%d", p);
 			}
 			p++;
 		}
-		ASSERT3U(p, ==, var->vd_nparity + var->vd_ndata);
-		cur = AVL_NEXT(&var->vd_tile_map, cur);
+		ASSERT3U(p, ==, va->vd_nparity + va->vd_ndata);
+		cur = AVL_NEXT(&va->vd_tile_map, cur);
 	}
 
 	// These are needed to generate the separator lines
@@ -9645,7 +9645,7 @@ zdb_print_anyraid_tile_layout(vdev_t *vd)
 		for (int v = 0; v < cols; v++) {
 			if (final[v]) {
 				ASSERT3U(i, >=,
-				    var->vd_children[v]->van_capacity + 1);
+				    va->vd_children[v]->van_capacity + 1);
 				int extra_width = 0;
 				if (v == 0 || !printed[v - 1])
 					extra_width++;
@@ -9654,7 +9654,7 @@ zdb_print_anyraid_tile_layout(vdev_t *vd)
 				printed[v] = B_FALSE;
 				continue;
 			}
-			if (i + 1 == var->vd_children[v]->van_capacity + 1)
+			if (i + 1 == va->vd_children[v]->van_capacity + 1)
 				final[v] = B_TRUE;
 			if (v - 1 != last_printed)
 				(void) printf("│");
@@ -9671,7 +9671,7 @@ zdb_print_anyraid_tile_layout(vdev_t *vd)
 	}
 	(void) printf("\n");
 	for (int i = 0; i < cols; i++) {
-		for (int j = 0; j < var->vd_children[i]->van_capacity + 1; j++)
+		for (int j = 0; j < va->vd_children[i]->van_capacity + 1; j++)
 			if (table[i][j])
 				free(table[i][j]);
 		free(table[i]);
@@ -9695,7 +9695,7 @@ static void
 print_anyraid_mapping(vdev_t *vd, int child, int mapping, int verbosity,
     anyraid_header_t *header)
 {
-	vdev_anyraid_t *var = vd->vdev_tsd;
+	vdev_anyraid_t *va = vd->vdev_tsd;
 	vdev_t *cvd = vd->vdev_child[child];
 	uint64_t ashift = cvd->vdev_ashift;
 	spa_t *spa = vd->vdev_spa;
@@ -9839,7 +9839,7 @@ print_anyraid_mapping(vdev_t *vd, int child, int mapping, int verbosity,
 				}
 				(void) printf("\td%u o%u,", amle_get_disk(amle),
 				    amle_get_offset(amle));
-				par_cnt = (par_cnt + 1) % (var->vd_nparity + 1);
+				par_cnt = (par_cnt + 1) % (va->vd_nparity + 1);
 				if (par_cnt == 0)
 					(void) printf("\n");
 				break;
@@ -9855,7 +9855,7 @@ print_anyraid_mapping(vdev_t *vd, int child, int mapping, int verbosity,
 	if (map_buf)
 		abd_return_buf(map_abds[map], map_buf, SPA_MAXBLOCKSIZE);
 
-	var->vd_tile_size = tile_size;
+	va->vd_tile_size = tile_size;
 
 	for (; i >= 0; i--)
 		abd_free(map_abds[i]);
@@ -9928,16 +9928,16 @@ zdb_print_anyraid_ondisk_maps(vdev_t *vd, int verbosity)
 static void
 zdb_dump_anyraid_map_vdev(vdev_t *vd, int verbosity)
 {
-	vdev_anyraid_t *var = vd->vdev_tsd;
+	vdev_anyraid_t *va = vd->vdev_tsd;
 
 	(void) printf("\t%-5s%11llu   %s %#16llx\n",
 	    "vdev", (u_longlong_t)vd->vdev_id,
-	    "tile_size", (u_longlong_t)var->vd_tile_size);
+	    "tile_size", (u_longlong_t)va->vd_tile_size);
 	(void) printf("\t%-8s%8llu", "tiles",
-	    (u_longlong_t)avl_numnodes(&var->vd_tile_map));
-	if (var->vd_checkpoint_tile != UINT32_MAX) {
+	    (u_longlong_t)avl_numnodes(&va->vd_tile_map));
+	if (va->vd_checkpoint_tile != UINT32_MAX) {
 		(void) printf(".  %-12s %10u\n", "checkpoint tile",
-		    var->vd_checkpoint_tile);
+		    va->vd_checkpoint_tile);
 	} else {
 		(void) printf("\n");
 	}
@@ -9945,7 +9945,7 @@ zdb_dump_anyraid_map_vdev(vdev_t *vd, int verbosity)
 	(void) printf("\t%16s   %12s   %13s\n", "----------------",
 	    "------------", "-------------");
 
-	anyraid_tile_t *cur = avl_first(&var->vd_tile_map);
+	anyraid_tile_t *cur = avl_first(&va->vd_tile_map);
 	anyraid_tile_node_t *curn = cur != NULL ?
 	    list_head(&cur->at_list) : NULL;
 	while (cur) {
@@ -9955,7 +9955,7 @@ zdb_dump_anyraid_map_vdev(vdev_t *vd, int verbosity)
 		    "disk", (u_longlong_t)curn->atn_disk);
 		curn = list_next(&cur->at_list, curn);
 		if (curn == NULL) {
-			cur = AVL_NEXT(&var->vd_tile_map, cur);
+			cur = AVL_NEXT(&va->vd_tile_map, cur);
 			curn = cur != NULL ? list_head(&cur->at_list) : NULL;
 		}
 	}

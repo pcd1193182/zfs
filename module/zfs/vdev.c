@@ -6799,16 +6799,16 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 			case VDEV_PROP_ANYRAID_TILE_SIZE:
 			{
 				vdev_t *pvd = vd->vdev_parent;
-				vdev_anyraid_t *var = NULL;
+				vdev_anyraid_t *va = NULL;
 				if (vdev_is_anyraid(vd)) {
-					var = vd->vdev_tsd;
+					va = vd->vdev_tsd;
 				} else if (pvd && vdev_is_anyraid(pvd)) {
-					var = pvd->vdev_tsd;
+					va = pvd->vdev_tsd;
 				} else {
 					continue;
 				}
 				vdev_prop_add_list(outnvl, propname,
-				    NULL, var->vd_tile_size, ZPROP_SRC_NONE);
+				    NULL, va->vd_tile_size, ZPROP_SRC_NONE);
 				continue;
 			}
 			default:
