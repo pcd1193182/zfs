@@ -5916,3 +5916,56 @@ zpool_rebalance(zpool_handle_t *zhp, char **vdev_names, int count)
 	}
 	return (ret);
 }
+
+int
+zpool_contract(zpool_handle_t *zhp, const char *anyraid_vdev_name,
+    const char *leaf_vdev_name)
+{
+	int ret = 0;
+	uint64_t avd_guid, lvd_guid;
+	char errbuf[ERRBUFLEN];
+
+	(void) snprintf(errbuf, sizeof (errbuf), dgettext(TEXT_DOMAIN,
+	    "cannot perform contraction for vdev(s) on '%s'"), zhp->zpool_name);
+	libzfs_handle_t *hdl = zhp->zpool_hdl;
+	if (!(strstarts(anyraid_vdev_name, VDEV_TYPE_ANYMIRROR) ||
+	    strstarts(anyraid_vdev_name, VDEV_TYPE_ANYRAIDZ))) {
+		zfs_error_fmt(hdl, EZFS_BADDEV, dgettext(TEXT_DOMAIN,
+		    "non-anyraid device specified"));
+	}
+
+	if ((ret = zpool_vdev_guid(zhp, anyraid_vdev_name, &avd_guid)) != 0)
+		return (ret);
+
+	if ((ret = zpool_vdev_guid(zhp, leaf_vdev_name, &lvd_guid)) != 0)
+		return (ret);
+	
+	ret = lzc_pool_contract(zpool_get_name(zhp), avd_guid, lvd_guid);
+
+	switch (ret) {
+		case ENOENT:
+			zfs_error_fmt(hdl, EZFS_NOENT,
+			    dgettext(TEXT_DOMAIN, "no anyraid vdev found"));
+			break;
+		case EINVAL:
+			zfs_error_fmt(hdl, EZFS_BADDEV,
+			    dgettext(TEXT_DOMAIN,
+			    "non-anyaid device specified"));
+			break;
+		case ENXIO:
+			zfs_error_fmt(hdl, EZFS_INVALCONFIG,
+			    dgettext(TEXT_DOMAIN,
+			    "%s is not a child of %s"), leaf_vdev_name,
+			    anyraid_vdev_name);
+			break;
+			
+		case 0:
+			break;
+		default:
+		{
+			libzfs_handle_t *hdl = zhp->zpool_hdl;
+			(void) zpool_standard_error(hdl, errno, errbuf);
+		}
+	}
+	return (ret);
+}

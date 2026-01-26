@@ -11774,6 +11774,42 @@ spa_rebalance_all(spa_t *spa)
 	return (lasterror);
 }
 
+static int
+spa_check_start_contract(void *arg, dmu_tx_t *tx) {
+	vdev_t *vd = (vdev_t *)arg;
+	if (!vdev_is_anyraid(vd))
+		return (SET_ERROR(EINVAL));
+	if (vdev_anyraid_relocate_status(vd) != NULL)
+		return (SET_ERROR(EALREADY));
+	
+	// TODO check if we have enough free tiles to do the thing
+	(void) tx;
+	return (0);
+}
+
+static void
+spa_sync_start_contract(void *arg, dmu_tx_t *tx) {
+	vdev_t *vd = (vdev_t *)arg;
+	ASSERT(vdev_is_anyraid(vd));
+	(void) tx;
+	//vdev_anyraid_setup_contract(vd, tx);
+}
+
+int
+spa_contract_vdev(spa_t *spa, uint64_t anyraid_vdev, uint64_t leaf_vdev)
+{
+	vdev_t *avd = spa_lookup_by_guid(spa, anyraid_vdev, B_FALSE);
+	vdev_t *lvd = spa_lookup_by_guid(spa, leaf_vdev, B_FALSE);
+	if (avd == NULL || lvd == NULL)
+		return (SET_ERROR(ENOENT));
+	if (!vdev_is_anyraid(avd))
+		return (SET_ERROR(EINVAL));
+	if (lvd->vdev_top != avd)
+		return (SET_ERROR(ENXIO));
+	return (dsl_sync_task(spa->spa_name, spa_check_start_contract,
+	    spa_sync_start_contract, lvd, 6, ZFS_SPACE_CHECK_NORMAL)); // TODO check blocks written
+}
+
 /* state manipulation functions */
 EXPORT_SYMBOL(spa_open);
 EXPORT_SYMBOL(spa_open_rewind);

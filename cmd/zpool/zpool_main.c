@@ -135,6 +135,7 @@ static int zpool_do_wait(int, char **);
 static int zpool_do_ddt_prune(int, char **);
 
 static int zpool_do_rebalance(int, char **);
+static int zpool_do_contract(int, char **);
 
 static int zpool_do_help(int argc, char **argv);
 
@@ -205,6 +206,7 @@ typedef enum {
 	HELP_REOPEN,
 	HELP_VERSION,
 	HELP_REBALANCE,
+	HELP_CONTRACT,
 	HELP_WAIT
 } zpool_help_t;
 
@@ -437,6 +439,7 @@ static zpool_command_t command_table[] = {
 	{ NULL },
 	{ "ddtprune",	zpool_do_ddt_prune,	HELP_DDT_PRUNE		},
 	{ "rebalance",	zpool_do_rebalance,	HELP_REBALANCE		},
+	{ "contract",	zpool_do_contract,	HELP_CONTRACT		},
 };
 
 #define	NCOMMAND	(ARRAY_SIZE(command_table))
@@ -560,6 +563,9 @@ get_usage(zpool_help_t idx)
 		return (gettext("\tddtprune -d|-p <amount> <pool>\n"));
 	case HELP_REBALANCE:
 		return (gettext("\trebalance <pool> [vdev]\n"));
+	case HELP_CONTRACT:
+		return (gettext("\tcontract <pool> <anyraid vdev> "
+		    "<leaf vdev>\n"));
 	default:
 		__builtin_unreachable();
 	}
@@ -13862,6 +13868,47 @@ zpool_do_rebalance(int argc, char **argv)
 		return (-1);
 
 	int error = zpool_rebalance(zhp, argv, argc);
+
+	zpool_close(zhp);
+
+	return (error);
+}
+
+/*
+ * zpool contract <pool> <anyraid vdev> <leaf vdev>
+ *
+ * Contract anyraid vdev by removing a specific leaf vdev.
+ */
+int
+zpool_do_contract(int argc, char **argv)
+{
+	zpool_handle_t *zhp;
+	int c;
+
+	while ((c = getopt(argc, argv, "")) != -1) {
+		switch (c) {
+		case '?':
+			(void) fprintf(stderr, gettext("invalid option '%c'\n"),
+			    optopt);
+			usage(B_FALSE);
+		}
+	}
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 3) {
+		(void) fprintf(stderr, gettext("incorrect arguments\n"));
+		usage(B_FALSE);
+	}
+	char *poolname = argv[0];
+	char *anyraid_vdev = argv[1];
+	char *leaf_vdev = argv[2];
+
+	zhp = zpool_open(g_zfs, poolname);
+	if (zhp == NULL)
+		return (-1);
+
+	int error = zpool_contract(zhp, anyraid_vdev, leaf_vdev);
 
 	zpool_close(zhp);
 
