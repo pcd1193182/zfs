@@ -2750,18 +2750,18 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	struct rebal_node *node;
 	void *cookie = NULL;
 	while ((node = avl_destroy_nodes(&ft, &cookie)) != NULL) {
-		kmem_free(node->arr, sizeof (*node->arr) *
-		    (node->free + node->alloc));
+/*		kmem_free(node->arr, sizeof (*node->arr) *
+		    (node->free + node->alloc));*/
 		kmem_free(node, sizeof (*node));
 	}
-	avl_destroy (&ft);
+	avl_destroy(&ft);
 	cookie = NULL;
 	while ((node = avl_destroy_nodes(&at, &cookie)) != NULL) {
-		kmem_free(node->arr, sizeof (*node->arr) *
-		    (node->free + node->alloc));
+/*		kmem_free(node->arr, sizeof (*node->arr) *
+		    (node->free + node->alloc));*/
 		kmem_free(node, sizeof (*node));
 	}
-	avl_destroy (&at);
+	avl_destroy(&at);
 	zthr_wakeup(vd->vdev_spa->spa_anyraid_relocate_zthr);
 }
 
