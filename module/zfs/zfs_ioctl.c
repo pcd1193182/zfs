@@ -7402,8 +7402,7 @@ zfs_ioc_pool_contract(const char *pool, nvlist_t *innvl, nvlist_t *outnvl)
 {
 	(void) outnvl;
 	spa_t *spa;
-
-	int err = 0;
+	int err;
 	if ((err = spa_open(pool, &spa, FTAG)) != 0)
 		return (err);
 

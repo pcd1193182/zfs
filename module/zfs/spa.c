@@ -11776,23 +11776,24 @@ spa_rebalance_all(spa_t *spa)
 
 static int
 spa_check_start_contract(void *arg, dmu_tx_t *tx) {
-	vdev_t *vd = (vdev_t *)arg;
-	if (!vdev_is_anyraid(vd))
+	vdev_t *lvd = (vdev_t *)arg;
+	vdev_t *tvd = lvd->vdev_top;
+	if (!vdev_is_anyraid(tvd))
 		return (SET_ERROR(EINVAL));
-	if (vdev_anyraid_relocate_status(vd) != NULL)
+	if (vdev_anyraid_relocate_status(tvd) != NULL)
 		return (SET_ERROR(EALREADY));
 	
-	// TODO check if we have enough free tiles to do the thing
-	(void) tx;
-	return (0);
+	// TODO check for checkpoint, can't do it
+
+	return (vdev_anyraid_check_contract(tvd, lvd, tx));
 }
 
 static void
 spa_sync_start_contract(void *arg, dmu_tx_t *tx) {
-	vdev_t *vd = (vdev_t *)arg;
-	ASSERT(vdev_is_anyraid(vd));
-	(void) tx;
-	//vdev_anyraid_setup_contract(vd, tx);
+	vdev_t *lvd = (vdev_t *)arg;
+	vdev_t *tvd = lvd->vdev_top;
+	ASSERT(vdev_is_anyraid(tvd));
+	vdev_anyraid_setup_contract(tvd, tx);
 }
 
 int

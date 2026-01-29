@@ -5958,7 +5958,19 @@ zpool_contract(zpool_handle_t *zhp, const char *anyraid_vdev_name,
 			    "%s is not a child of %s"), leaf_vdev_name,
 			    anyraid_vdev_name);
 			break;
-			
+		case ENOSPC:
+			zfs_error_fmt(hdl, EZFS_NOSPC,
+			    dgettext(TEXT_DOMAIN, "insufficient free tiles to "
+			    "remove %s from %s"), leaf_vdev_name,
+			    anyraid_vdev_name);
+			break;
+		case EXFULL:
+			zfs_error_fmt(hdl, EZFS_NOSPC,
+			    dgettext(TEXT_DOMAIN, "could not find valid "
+			    "relocation target for all tiles when "
+			    "removing %s from %s"), leaf_vdev_name,
+			    anyraid_vdev_name);
+			break;
 		case 0:
 			break;
 		default:
