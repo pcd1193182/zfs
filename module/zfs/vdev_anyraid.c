@@ -979,7 +979,9 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	    offsetof(struct tile_count, node));
 	for (int c = 0; c < vd->vdev_children; c++) {
 		if (num_tiles[c] == 0) {
-			ASSERT(vd->vdev_child[c]->vdev_open_error);
+			ASSERT(vd->vdev_child[c]->vdev_open_error ||
+			    (va->vd_relocate &&
+			    va->vd_relocate->var_contracting_leaf == c));
 			continue;
 		}
 		struct tile_count *rc = kmem_alloc(sizeof (*rc), KM_SLEEP);
