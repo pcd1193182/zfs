@@ -2415,6 +2415,7 @@ struct anyraid_done_arg {
 static void
 anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 {
+	ASSERT(spa_config_held(spa, SCL_ALL, RW_WRITER) != 0);
 	(void) tx;
 	struct anyraid_done_arg *ada = arg;
 	vdev_anyraid_t *va = ada->vd->vdev_tsd;
@@ -2441,6 +2442,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		vdev_t *vd = ada->vd;
 		ASSERT3S(var->var_contracting_leaf, >=, 0);
 		vdev_t *lvd = vd->vdev_child[var->var_contracting_leaf];
+		//spa_vdev_detach_enter(spa, lvd->vdev_guid);
 		// TODO probably need to be holding the whole vdev config for this
 		/*
 		 * Note: copying from spa_vdev_detach, hopefully we can reuse
@@ -2456,6 +2458,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		vdev_dirty(vd, VDD_DTL, lvd, dmu_tx_get_txg(tx));
 		spa_event_notify(spa, lvd, NULL, ESC_ZFS_VDEV_REMOVE);
 		spa_notify_waiters(spa);
+		//spa_vdev_config_exit(spa, vd, dmu_tx_get_txg(tx), 0, NULL);
 	}
 
 	list_destroy(&var->var_list);
@@ -2467,12 +2470,12 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	kmem_free(var, sizeof (*var));
 	rw_exit(&va->vd_lock);
 
-	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
+	//spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
 	ada->vd->vdev_expanding = B_TRUE;
 	vdev_reopen(ada->vd);
 	spa->spa_ccw_fail_time = 0;
 	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
-	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
+	//spa_config_exit(spa, SCL_STATE_ALL, FTAG);
 	vdev_config_dirty(ada->vd);
 	kmem_free(ada, sizeof (*ada));
 }
