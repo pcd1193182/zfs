@@ -3397,7 +3397,6 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 			receiver->free--;
 			receiver->alloc++;
 			avl_add(&ft, receiver);
-			num_tiles[receiver->cvd]--;
 			break;
 		}
 		if (!moved) {
