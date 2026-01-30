@@ -11569,7 +11569,7 @@ spa_activity_in_progress(spa_t *spa, zpool_wait_activity_t activity,
 		*in_progress = (vre != NULL && vre->vre_state == DSS_SCANNING);
 		break;
 	}
-	case ZPOOL_WAIT_ANYRAID_REBALANCE:
+	case ZPOOL_WAIT_ANYRAID_RELOCATE:
 	{
 		vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
 		*in_progress = (var != NULL && var->var_state == DSS_SCANNING);

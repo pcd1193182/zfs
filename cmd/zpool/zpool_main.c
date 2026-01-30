@@ -13500,7 +13500,7 @@ print_wait_status_row(wait_data_t *wd, zpool_handle_t *zhp, int row)
 	    ZPOOL_CONFIG_ANYRAID_RELOCATE_STATS, (uint64_t **)&pars, &c);
 	if (pars != NULL && pars->pars_state == DSS_SCANNING) {
 		int64_t rem = pars->pars_to_move - pars->pars_moved;
-		bytes_rem[ZPOOL_WAIT_ANYRAID_REBALANCE] = rem;
+		bytes_rem[ZPOOL_WAIT_ANYRAID_RELOCATE] = rem;
 	}
 
 	bytes_rem[ZPOOL_WAIT_INITIALIZE] =
@@ -13641,7 +13641,7 @@ zpool_do_wait(int argc, char **argv)
 				static const char *const col_opts[] = {
 				    "discard", "free", "initialize", "replace",
 				    "remove", "resilver", "scrub", "trim",
-				    "raidz_expand" , "anyraid_rebalance" };
+				    "raidz_expand" , "anyraid_relocate" };
 
 				for (i = 0; i < ARRAY_SIZE(col_opts); ++i)
 					if (strcmp(tok, col_opts[i]) == 0) {
