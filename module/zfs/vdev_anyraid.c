@@ -989,6 +989,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		rc->disk = c;
 		rc->remaining = num_tiles[c] -
 		    anyraid_freelist_alloc(&va->vd_children[c]->van_freelist);
+		zfs_dbgmsg("disk %d rem %d", c, rc->remaining);
 		avl_add(&t, rc);
 	}
 
