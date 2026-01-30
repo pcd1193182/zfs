@@ -3302,7 +3302,10 @@ vdev_anyraid_check_contract_fast(vdev_t *tvd, vdev_t *lvd)
 		vdev_anyraid_node_t *van = va->vd_children[lvd->vdev_id];
 		free += van->van_capacity -
 		    anyraid_freelist_alloc(&van->van_freelist);
+		zfs_dbgmsg("%d %d %u %d", i, (int)lvd->vdev_id, free, van->van_capacity -
+		    anyraid_freelist_alloc(&van->van_freelist));
 	}
+	zfs_dbgmsg("%u %u", alloced, free);
 	rw_exit(&va->vd_lock);
 	return (free >= alloced ? 0 : ENOSPC);
 }
