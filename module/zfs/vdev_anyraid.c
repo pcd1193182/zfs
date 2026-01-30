@@ -3475,18 +3475,22 @@ vdev_anyraid_setup_contract(vdev_t *tvd, dmu_tx_t *tx)
 	vdev_anyraid_t *va = tvd->vdev_tsd;
 	vdev_anyraid_relocate_t *var = va->vd_relocate;
 	ASSERT(MUTEX_HELD(&var->var_lock));
+	spa_t *spa = tvd->vdev_spa;
 
-	objset_t *mos = tvd->vdev_spa->spa_meta_objset;
+	objset_t *mos = spa->spa_meta_objset;
 	var->var_object = dmu_object_alloc(mos, DMU_OTN_UINT32_METADATA,
 	    SPA_OLD_MAXBLOCKSIZE, DMU_OTN_UINT64_METADATA,
 	    sizeof (relocate_phys_t), tx);
 	VERIFY0(zap_add(mos, DMU_POOL_DIRECTORY_OBJECT, DMU_POOL_RELOCATE_OBJ,
 	    sizeof (uint64_t), 1, &var->var_object, tx));
 
-	tasklist_write(tvd->vdev_spa, var, tx);
+	tasklist_write(spa, var, tx);
 	mutex_exit(&var->var_lock);
+	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
 	vdev_reopen(tvd);
-	zthr_wakeup(tvd->vdev_spa->spa_anyraid_relocate_zthr);
+	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
+	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
+	zthr_wakeup(spa->spa_anyraid_relocate_zthr);
 }
 
 ZFS_MODULE_PARAM(zfs_anyraid, zfs_anyraid_, min_tile_size, U64, ZMOD_RW,
