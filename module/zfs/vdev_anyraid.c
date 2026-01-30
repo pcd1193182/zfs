@@ -636,7 +636,7 @@ vdev_anyraid_pick_best_mapping(vdev_t *cvd, uint64_t *out_txg,
 }
 
 static int
-anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
+anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 	vdev_t *cvd = vd->vdev_child[child];
@@ -699,9 +699,10 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 		return (SET_ERROR(EINVAL));
 	}
 
-	*child_capacities = kmem_alloc(sizeof (*caps) * count, KM_SLEEP);
+	*child_capacities = kmem_alloc(sizeof (**child_capacities) * count,
+	    KM_SLEEP);
 	for (int i = 0; i < count; i++)
-		(*child_capacities[i]) = caps[i] + 1;
+		(*child_capacities)[i] = caps[i] + 1;
 	if (vd->vdev_reopening) {
 		free_header(&header, header_size);
 		return (0);
@@ -1056,7 +1057,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		return (lasterror);
 	}
 
-	uint16_t *child_capacities = NULL;
+	uint32_t *child_capacities = NULL;
 	if (vd->vdev_reopening) {
 		child_capacities = kmem_alloc(sizeof (*child_capacities) *
 		    vd->vdev_children, KM_SLEEP);
@@ -1098,7 +1099,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 			    VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
 		} else {
 			ASSERT(child_capacities);
-			casize = (child_capacities[c] + 1) * va->vd_tile_size;
+			casize = child_capacities[c] * va->vd_tile_size;
 		}
 
 		num_tiles[c] = casize / va->vd_tile_size;
@@ -1120,7 +1121,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 			cmasize = MIN(max_size, cvd->vdev_max_asize -
 			    VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
 		} else {
-			cmasize = (child_capacities[c] + 1) * va->vd_tile_size;
+			cmasize = child_capacities[c] * va->vd_tile_size;
 		}
 
 		num_tiles[c] = cmasize / va->vd_tile_size;
