@@ -978,6 +978,7 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	avl_create(&t, rc_compar, sizeof (struct tile_count),
 	    offsetof(struct tile_count, node));
 	for (int c = 0; c < vd->vdev_children; c++) {
+		zfs_dbgmsg("disk %d nt %llu", c, (u_longlong_t)num_tiles[c]);
 		if (num_tiles[c] == 0) {
 			ASSERT(vd->vdev_child[c]->vdev_open_error ||
 			    (va->vd_relocate &&
@@ -996,17 +997,19 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	struct tile_count **cur = kmem_alloc(sizeof (*cur) * map_width,
 	    KM_SLEEP);
 	for (;;) {
+		zfs_dbgmsg("top of loop");
 		/* Grab the nparity + 1 children with the most free capacity */
 		for (int c = 0; c < map_width; c++) {
 			struct tile_count *rc = avl_first(&t);
 			ASSERT(rc);
+			zfs_dbgmsg("Grabbing %d %d", rc->disk, rc->remaining);
 			cur[c] = rc;
 			avl_remove(&t, rc);
 		}
 		struct tile_count *rc = cur[map_width - 1];
 		struct tile_count *next = avl_first(&t);
 		uint64_t next_rem = next == NULL ? 0 : next->remaining;
-		ASSERT3U(next_rem, <=, rc->remaining);
+		ASSERT3UF(next_rem, <=, rc->remaining, "next %d", next ? next->disk : -1);
 		/* If one of the top N + 1 has no capacity left, we're done */
 		if (rc->remaining == 0)
 			break;
