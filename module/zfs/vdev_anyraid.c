@@ -700,7 +700,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint16_t **child_capacities)
 	}
 
 	*child_capacities = kmem_alloc(sizeof (*caps) * count, KM_SLEEP);
-	memcpy(*child_capacities, caps, sizeof (*caps) * count);
+	for (int i = 0; i < count; i++)
+		(*child_capacities[i]) = caps[i] + 1;
 	if (vd->vdev_reopening) {
 		free_header(&header, header_size);
 		return (0);
@@ -1106,7 +1107,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		 * We store the capacity minus 1, since a vdev can never have 0
 		 * and they can have (which would overflow a uint16_t).
 		 */
-		va->vd_children[c]->van_capacity = num_tiles[c] - 1;
+		va->vd_children[c]->van_capacity = num_tiles[c];
 		avl_add(&va->vd_children_tree, va->vd_children[c]);
 	}
 	*asize = calculate_asize(vd, num_tiles);
@@ -1794,7 +1795,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 	for (uint64_t i = 0; i < anyraidvd->vdev_children; i++) {
 		if (anyraidvd->vdev_child[i] == vd)
 			disk_id = i;
-		sizes[i] = va->vd_children[i]->van_capacity;
+		sizes[i] = va->vd_children[i]->van_capacity - 1;
 	}
 	ASSERT3U(disk_id, <, anyraidvd->vdev_children);
 	nvlist_t *header = fnvlist_alloc();
@@ -1888,7 +1889,7 @@ vdev_anyraid_min_asize(vdev_t *pvd, vdev_t *cvd)
 
 	rw_enter(&va->vd_lock, RW_READER);
 	uint64_t size = VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift) +
-	    (va->vd_children[cvd->vdev_id]->van_capacity + 1) *
+	    va->vd_children[cvd->vdev_id]->van_capacity *
 	    va->vd_tile_size;
 	rw_exit(&va->vd_lock);
 	return (size);
@@ -1911,7 +1912,7 @@ vdev_anyraid_expand(vdev_t *tvd, vdev_t *newvd)
 	uint64_t max_size = VDEV_ANYRAID_MAX_TPD * va->vd_tile_size;
 	newchild->van_capacity = (MIN(max_size, (newvd->vdev_asize -
 	    VDEV_ANYRAID_TOTAL_MAP_SIZE(newvd->vdev_ashift))) /
-	    va->vd_tile_size) - 1;
+	    va->vd_tile_size);
 	rw_enter(&va->vd_lock, RW_WRITER);
 	memcpy(nc, va->vd_children, old_children * sizeof (*nc));
 	kmem_free(va->vd_children, old_children * sizeof (*nc));
@@ -2050,11 +2051,11 @@ vdev_anyraid_child_capacity(vdev_t *vd, vdev_t *cvd)
 	rw_enter(&va->vd_lock, RW_READER);
 	if (cvd != NULL) {
 		vdev_anyraid_node_t *n = va->vd_children[cvd->vdev_id];
-		total = n->van_capacity + 1;
+		total = n->van_capacity;
 	} else {
 		for (int i = 0; i < vd->vdev_children; i++) {
 			vdev_anyraid_node_t *n = va->vd_children[i];
-			total += n->van_capacity + 1;
+			total += n->van_capacity;
 		}
 	}
 	rw_exit(&va->vd_lock);
@@ -2539,7 +2540,7 @@ rebal_try_move_one(vdev_anyraid_t *va, struct rebal_node *donor,
 
 	for (int i = 0; i < dvan->van_freelist.af_next_off; i++) {
 		ASSERT3U(dvan->van_freelist.af_next_off, <=,
-		    dvan->van_capacity + 1);
+		    dvan->van_capacity);
 		if (donor->arr[i] == -1LL)
 			continue;
 		boolean_t found = B_FALSE;
@@ -2562,7 +2563,7 @@ rebal_try_move_one(vdev_anyraid_t *va, struct rebal_node *donor,
 		task->vart_source_disk = (uint8_t)donor->cvd;
 		task->vart_dest_disk = (uint8_t)receiver->cvd;
 		task->vart_source_off = i;
-		ASSERT(rvan->van_capacity -
+		ASSERT((rvan->van_capacity - 1) -
 		    anyraid_freelist_alloc(&rvan->van_freelist));
 		task->vart_dest_off = anyraid_freelist_pop(
 		    &rvan->van_freelist);
@@ -2614,13 +2615,13 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	uint64_t *num_tiles = kmem_zalloc(vd->vdev_children *
 	    sizeof (*num_tiles), KM_SLEEP);
 	for (int c = 0; c < vd->vdev_children; c++)
-		num_tiles[c] = (va->vd_children[c]->van_capacity + 1); 
+		num_tiles[c] = va->vd_children[c]->van_capacity; 
 
 	for (int i = 0; i < vd->vdev_children; i++) {
 		struct rebal_node *rn = kmem_zalloc(sizeof (*rn), KM_SLEEP);
 		rn->cvd = i;
 		vdev_anyraid_node_t *n = va->vd_children[i];
-		uint32_t cap = n->van_capacity + 1;
+		uint32_t cap = n->van_capacity;
 		rn->alloc = anyraid_freelist_alloc(&n->van_freelist);
 		rn->free = cap - rn->alloc;
 		rn->arr = kmem_alloc(sizeof (*rn->arr) * cap, KM_SLEEP);

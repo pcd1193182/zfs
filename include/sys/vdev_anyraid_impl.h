@@ -63,7 +63,7 @@ typedef struct vdev_anyraid_node {
 	uint8_t		van_id;
 	anyraid_freelist_t	van_freelist;
 	// Note: store capacity - 1 for rollover reasons
-	uint16_t	van_capacity;
+	uint32_t	van_capacity;
 } vdev_anyraid_node_t;
 
 typedef struct anyraid_tile_node {
