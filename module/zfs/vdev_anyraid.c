@@ -3299,7 +3299,7 @@ vdev_anyraid_check_contract_fast(vdev_t *tvd, vdev_t *lvd)
 	for (int i = 0; i < tvd->vdev_children; i++) {
 		if (i == lvd->vdev_id)
 			continue;
-		vdev_anyraid_node_t *van = va->vd_children[lvd->vdev_id];
+		vdev_anyraid_node_t *van = va->vd_children[i];
 		free += van->van_capacity -
 		    anyraid_freelist_alloc(&van->van_freelist);
 		zfs_dbgmsg("%d %d %u %d", i, (int)lvd->vdev_id, free, van->van_capacity -
