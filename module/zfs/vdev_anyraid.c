@@ -2583,7 +2583,7 @@ create_reloc_task(vdev_anyraid_t *va, struct rebal_node *donor, uint16_t offset,
 	task->vart_dest_disk = (uint8_t)receiver->cvd;
 	task->vart_source_off = offset;
 	zfs_dbgmsg("receiver %d: cap %d alloc %d", receiver->cvd, rvan->van_capacity, anyraid_freelist_alloc(&rvan->van_freelist));
-	ASSERT((rvan->van_capacity - 1) -
+	ASSERT(rvan->van_capacity -
 	    anyraid_freelist_alloc(&rvan->van_freelist));
 	task->vart_dest_off = anyraid_freelist_pop(
 	    &rvan->van_freelist);
