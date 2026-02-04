@@ -1843,14 +1843,16 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		list_t *l = &va->vd_relocate->var_done_list;
 		for (vart = list_head(l);;
 		    vart = list_next(l, vart)) {
+			zfs_dbgmsg("task %d vart: %px %d", (int)task, vart, vart ? (int)vart->vart_task : -1);
 			if (vart == NULL) {
 				l = &va->vd_relocate->var_list;
 				vart = list_head(l);
 			}
+			ASSERTF(vart, "%llu", (u_longlong_t)task);
 			if (vart->vart_task == task)
 				break;
 		}
-		ASSERT(vart);
+		ASSERTF(vart, "%llu", (u_longlong_t)task);
 		nvlist_t *rebal_task = fnvlist_alloc();
 		fnvlist_add_uint32(rebal_task, VART_TILE,
 		    vart->vart_tile);
@@ -2573,7 +2575,7 @@ create_reloc_task(vdev_anyraid_t *va, struct rebal_node *donor, uint16_t offset,
 	task->vart_source_disk = (uint8_t)donor->cvd;
 	task->vart_dest_disk = (uint8_t)receiver->cvd;
 	task->vart_source_off = offset;
-	zfs_dbgmsg("receiver %d: cap %d alloc %d", receiver->cvd, rvan->van_capacity, anyraid_freelist_alloc(&rvan->van_freelist));
+	zfs_dbgmsg("task %d receiver %d: cap %d alloc %d", (int)*tid, receiver->cvd, rvan->van_capacity, anyraid_freelist_alloc(&rvan->van_freelist));
 	ASSERT(rvan->van_capacity -
 	    anyraid_freelist_alloc(&rvan->van_freelist));
 	task->vart_dest_off = anyraid_freelist_pop(
