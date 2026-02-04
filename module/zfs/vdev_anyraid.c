@@ -2415,8 +2415,6 @@ struct anyraid_done_arg {
 static void
 anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 {
-	ASSERT(spa_config_held(spa, SCL_ALL, RW_WRITER) != 0);
-	(void) tx;
 	struct anyraid_done_arg *ada = arg;
 	vdev_anyraid_t *va = ada->vd->vdev_tsd;
 	vdev_anyraid_relocate_t *var = va->vd_relocate;
@@ -2439,26 +2437,10 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		vdev_update_nonallocating_space(ada->vd, var->var_nonalloc,
 		    B_FALSE);
 	} else {
-		vdev_t *vd = ada->vd;
-		ASSERT3S(var->var_contracting_leaf, >=, 0);
-		vdev_t *lvd = vd->vdev_child[var->var_contracting_leaf];
-		//spa_vdev_detach_enter(spa, lvd->vdev_guid);
-		// TODO probably need to be holding the whole vdev config for this
-		/*
-		 * Note: copying from spa_vdev_detach, hopefully we can reuse
-		 * some code
-		 */
-		(void) vdev_label_init(vd, 0, VDEV_LABEL_REMOVE);
-		vdev_remove_child(vd, lvd);
-		vdev_compact_children(vd);
-		vdev_propagate_state(vd->vdev_child[0]);
-		for (int t = 0; t < TXG_SIZE; t++)
-			(void) txg_list_remove_this(&vd->vdev_dtl_list, lvd, t);
-		vd->vdev_detached = B_TRUE;
-		vdev_dirty(vd, VDD_DTL, lvd, dmu_tx_get_txg(tx));
-		spa_event_notify(spa, lvd, NULL, ESC_ZFS_VDEV_REMOVE);
-		spa_notify_waiters(spa);
-		//spa_vdev_config_exit(spa, vd, dmu_tx_get_txg(tx), 0, NULL);
+		spa_async_request(spa, SPA_ASYNC_RESILVER_DONE);
+		rw_exit(&va->vd_lock);
+		kmem_free(ada, sizeof (*ada));
+		return;
 	}
 
 	list_destroy(&var->var_list);
@@ -2470,12 +2452,12 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	kmem_free(var, sizeof (*var));
 	rw_exit(&va->vd_lock);
 
-	//spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
+	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
 	ada->vd->vdev_expanding = B_TRUE;
 	vdev_reopen(ada->vd);
 	spa->spa_ccw_fail_time = 0;
 	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
-	//spa_config_exit(spa, SCL_STATE_ALL, FTAG);
+	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
 	vdev_config_dirty(ada->vd);
 	kmem_free(ada, sizeof (*ada));
 }
@@ -3325,7 +3307,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 {
 	vdev_anyraid_t *va = tvd->vdev_tsd;
 	int error = 0;
-
+ // TODO forbid if checkpointed
 	if (!dmu_tx_is_syncing(tx))
 		return (vdev_anyraid_check_contract_fast(tvd, lvd));
 
