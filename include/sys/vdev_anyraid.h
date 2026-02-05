@@ -62,7 +62,6 @@ typedef struct vdev_anyraid_relocate {
 	uint64_t	var_synced_offset;
 	uint64_t	var_synced_task;
 	uint64_t	var_vd;
-	int32_t		var_contracting_leaf;
 
 	dsl_scan_state_t var_state;
 	uint64_t	var_start_time;
@@ -101,6 +100,7 @@ typedef struct vdev_anyraid {
 	vdev_anyraid_node_t **vd_children;
 	/* non-null iff there's a rebalance in progress */
 	vdev_anyraid_relocate_t *vd_relocate;
+	int32_t		vd_contracting_leaf;
 	zfs_rangelock_t	vd_rangelock;
 } vdev_anyraid_t;
 
@@ -122,6 +122,7 @@ int spa_anyraid_relocate_get_stats(spa_t *spa,
     pool_anyraid_relocate_stat_t *pars);
 int vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx);
 void vdev_anyraid_setup_contract(vdev_t *tvd, dmu_tx_t *tx);
+void vdev_anyraid_compact_children(vdev_t *vd);
 int vdev_anyraid_load(vdev_t *vd);
 
 vdev_anyraid_relocate_t *vdev_anyraid_relocate_status(vdev_t *vd);

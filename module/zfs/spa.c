@@ -9440,6 +9440,111 @@ out:
 	return (error);
 }
 
+static void
+spa_vdev_contraction_done(spa_t *spa)
+{
+	vdev_t *rvd = spa->spa_root_vdev;
+	vdev_t *avd = NULL;
+	for (int c = 0; c < rvd->vdev_children; c++) {
+		vdev_t *tvd = rvd->vdev_child[c];
+		if (!vdev_is_anyraid(tvd))
+			continue;
+		vdev_anyraid_t *va = tvd->vdev_tsd;
+		if (va->vd_contracting_leaf == -1)
+			continue;
+		avd = tvd;
+		break;
+	}
+	ASSERT(avd);
+	vdev_anyraid_t *va = avd->vdev_tsd;
+	uint64_t avd_guid = avd->vdev_guid;
+	vdev_t *lvd = avd->vdev_child[va->vd_contracting_leaf];
+
+	uint64_t txg = spa_vdev_detach_enter(spa, lvd->vdev_guid);
+
+	/*
+	 * Erase the disk labels so the disk can be used for other things.
+	 * This must be done after all other error cases are handled,
+	 * but before we disembowel vd (so we can still do I/O to it).
+	 * But if we can't do it, don't treat the error as fatal --
+	 * it may be that the unwritability of the disk is the reason
+	 * it's being detached!
+	 */
+	(void) vdev_label_init(lvd, 0, VDEV_LABEL_REMOVE);
+
+	rw_enter(&va->vd_lock, RW_WRITER);
+
+	/*
+	 * Remove vd from its parent and compact the parent's children.
+	 */
+	vdev_remove_child(avd, lvd);
+	vdev_compact_children(avd);
+	
+	ASSERT3S(va->vd_contracting_leaf, ==, lvd->vdev_id);
+	vdev_anyraid_compact_children(avd);
+	va->vd_contracting_leaf = -1;
+	rw_exit(&va->vd_lock);
+
+	/*
+	 * Remember one of the remaining children so we can get tvd below.
+	 */
+	vdev_t *cvd = avd->vdev_child[avd->vdev_children - 1];
+
+	ASSERT3P(avd->vdev_parent, ==, spa->spa_root_vdev);
+
+	/*
+	 * Reevaluate the parent vdev state.
+	 */
+	vdev_propagate_state(cvd);
+
+	/*
+	 * If the 'autoexpand' property is set on the pool then automatically
+	 * try to expand the size of the pool. For example if the device we
+	 * just detached was smaller than the others, it may be possible to
+	 * add metaslabs (i.e. grow the pool). We need to reopen the vdev
+	 * first so that we can obtain the updated sizes of the leaf vdevs.
+	 */
+	if (spa->spa_autoexpand) {
+		vdev_reopen(avd);
+		vdev_expand(avd, txg);
+	}
+
+	vdev_config_dirty(avd);
+
+	/*
+	 * Mark vd's DTL as dirty in this txg.  vdev_dtl_sync() will see that
+	 * vd->vdev_detached is set and free vd's DTL object in syncing context.
+	 * But first make sure we're not on any *other* txg's DTL list, to
+	 * prevent vd from being accessed after it's freed.
+	 */
+	char *vdpath = spa_strdup(lvd->vdev_path ? lvd->vdev_path : "none");
+	for (int t = 0; t < TXG_SIZE; t++)
+		(void) txg_list_remove_this(&avd->vdev_dtl_list, lvd, t);
+	lvd->vdev_detached = B_TRUE;
+	vdev_dirty(avd, VDD_DTL, lvd, txg);
+
+	spa_event_notify(spa, lvd, NULL, ESC_ZFS_VDEV_REMOVE);
+	spa_notify_waiters(spa);
+
+	/* hang on to the spa before we release the lock */
+	spa_open_ref(spa, FTAG);
+
+	VERIFY0(spa_vdev_exit(spa, lvd, txg, 0)); // TODO
+
+	spa_history_log_internal(spa, "detach", NULL,
+	    "vdev=%s", vdpath);
+	spa_strfree(vdpath);
+
+	txg_wait_synced(spa->spa_dsl_pool, txg);
+	avd = spa_lookup_by_guid(spa, avd_guid, B_FALSE);
+	va = avd->vdev_tsd;
+	va->vd_contracting_leaf = -1;
+	/* all done with the spa; OK to release */
+	spa_namespace_enter(FTAG);
+	spa_close(spa, FTAG);
+	spa_namespace_exit(FTAG);
+}
+
 /*
  * Find any device that's done replacing, or a vdev marked 'unspare' that's
  * currently spared, so we can detach it.
@@ -9520,87 +9625,6 @@ spa_vdev_resilver_done_hunt(vdev_t *vd)
 	}
 
 	return (NULL);
-}
-
-static void
-spa_vdev_contraction_done(spa_t *spa)
-{
-	vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
-	vdev_t *avd = vdev_lookup_top(spa, var->var_vd);
-	vdev_t *lvd = avd->vdev_child[var->var_contracting_leaf];
-
-	uint64_t txg = spa_vdev_detach_enter(spa, lvd->vdev_guid);
-
-	/*
-	 * Erase the disk labels so the disk can be used for other things.
-	 * This must be done after all other error cases are handled,
-	 * but before we disembowel vd (so we can still do I/O to it).
-	 * But if we can't do it, don't treat the error as fatal --
-	 * it may be that the unwritability of the disk is the reason
-	 * it's being detached!
-	 */
-	(void) vdev_label_init(lvd, 0, VDEV_LABEL_REMOVE);
-
-	/*
-	 * Remove vd from its parent and compact the parent's children.
-	 */
-	vdev_remove_child(avd, lvd);
-	vdev_compact_children(avd);
-
-	/*
-	 * Remember one of the remaining children so we can get tvd below.
-	 */
-	vdev_t *cvd = avd->vdev_child[avd->vdev_children - 1];
-
-	ASSERT3P(avd->vdev_parent, ==, spa->spa_root_vdev);
-
-	/*
-	 * Reevaluate the parent vdev state.
-	 */
-	vdev_propagate_state(cvd);
-
-	/*
-	 * If the 'autoexpand' property is set on the pool then automatically
-	 * try to expand the size of the pool. For example if the device we
-	 * just detached was smaller than the others, it may be possible to
-	 * add metaslabs (i.e. grow the pool). We need to reopen the vdev
-	 * first so that we can obtain the updated sizes of the leaf vdevs.
-	 */
-	if (spa->spa_autoexpand) {
-		vdev_reopen(avd);
-		vdev_expand(avd, txg);
-	}
-
-	vdev_config_dirty(avd);
-
-	/*
-	 * Mark vd's DTL as dirty in this txg.  vdev_dtl_sync() will see that
-	 * vd->vdev_detached is set and free vd's DTL object in syncing context.
-	 * But first make sure we're not on any *other* txg's DTL list, to
-	 * prevent vd from being accessed after it's freed.
-	 */
-	char *vdpath = spa_strdup(lvd->vdev_path ? lvd->vdev_path : "none");
-	for (int t = 0; t < TXG_SIZE; t++)
-		(void) txg_list_remove_this(&avd->vdev_dtl_list, lvd, t);
-	lvd->vdev_detached = B_TRUE;
-	vdev_dirty(avd, VDD_DTL, lvd, txg);
-
-	spa_event_notify(spa, lvd, NULL, ESC_ZFS_VDEV_REMOVE);
-	spa_notify_waiters(spa);
-
-	/* hang on to the spa before we release the lock */
-	spa_open_ref(spa, FTAG);
-
-	VERIFY0(spa_vdev_exit(spa, lvd, txg, 0)); // TODO
-
-	spa_history_log_internal(spa, "detach", NULL,
-	    "vdev=%s", vdpath);
-	spa_strfree(vdpath);
-
-	/* all done with the spa; OK to release */
-	spa_namespace_enter(FTAG);
-	spa_close(spa, FTAG);
-	spa_namespace_exit(FTAG);
 }
 
 static void
