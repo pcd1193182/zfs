@@ -9879,6 +9879,9 @@ spa_async_thread(void *arg)
 	mutex_exit(&spa->spa_async_lock);
 
 	zfs_dbgmsg("Executing async %x", tasks);
+
+	if (tasks & SPA_ASYNC_CONTRACTION_DONE)
+		spa_vdev_contraction_done(spa);
 	/*
 	 * See if the config needs to be updated.
 	 */
@@ -9961,9 +9964,6 @@ spa_async_thread(void *arg)
 	    tasks & SPA_ASYNC_DETACH_SPARE) {
 		spa_vdev_resilver_done(spa);
 	}
-
-	if (tasks & SPA_ASYNC_CONTRACTION_DONE)
-		spa_vdev_contraction_done(spa);
 
 	/*
 	 * Kick off a resilver.

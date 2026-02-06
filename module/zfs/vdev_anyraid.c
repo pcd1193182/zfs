@@ -1082,6 +1082,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 
 	uint32_t *child_capacities = NULL;
 	if (vd->vdev_reopening) {
+		zfs_dbgmsg("reopening %d", va->vd_contracting_leaf);
 		child_capacities = kmem_alloc(sizeof (*child_capacities) *
 		    vd->vdev_children, KM_SLEEP);
 		for (uint64_t c = 0; c < vd->vdev_children; c++) {
@@ -1118,7 +1119,9 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		vdev_t *cvd = vd->vdev_child[c];
 
 		uint64_t casize;
-		if (cvd->vdev_open_error == 0) {
+		if (va->vd_contracting_leaf == c) {
+			casize = 0;
+		} else if (cvd->vdev_open_error == 0) {
 			vdev_set_min_asize(cvd);
 			casize = MIN(max_size, cvd->vdev_asize -
 			    VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
@@ -1142,7 +1145,9 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		vdev_t *cvd = vd->vdev_child[c];
 
 		uint64_t cmasize;
-		if (cvd->vdev_open_error == 0) {
+		if (va->vd_contracting_leaf == c) {
+			cmasize = 0;
+		} else if (cvd->vdev_open_error == 0) {
 			cmasize = MIN(max_size, cvd->vdev_max_asize -
 			    VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
 		} else {
