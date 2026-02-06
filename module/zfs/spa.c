@@ -9518,6 +9518,7 @@ spa_vdev_contraction_done(spa_t *spa)
 	/* hang on to the spa before we release the lock */
 	spa_open_ref(spa, FTAG);
 
+	zfs_dbgmsg("Shrink reopen %px", avd);
 	avd->vdev_shrinking = B_TRUE;
 	vdev_reopen(avd);
 	VERIFY0(spa_vdev_exit(spa, lvd, txg, 0)); // TODO

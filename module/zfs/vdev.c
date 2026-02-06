@@ -2168,6 +2168,7 @@ vdev_ashift_optimize(vdev_t *vd)
 int
 vdev_open(vdev_t *vd)
 {
+	zfs_dbgmsg("Shrinking a %px %d %d %llu", vd, vdev_is_anyraid(vd), vd->vdev_shrinking, (u_longlong_t)vd->vdev_asize);
 	spa_t *spa = vd->vdev_spa;
 	int error;
 	uint64_t osize = 0;
@@ -2205,6 +2206,8 @@ vdev_open(vdev_t *vd)
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_OFFLINE, VDEV_AUX_NONE);
 		return (SET_ERROR(ENXIO));
 	}
+
+	zfs_dbgmsg("help %px", vd);
 
 	error = vd->vdev_ops->vdev_op_open(vd, &osize, &max_osize,
 	    &logical_ashift, &physical_ashift);
@@ -2252,6 +2255,8 @@ vdev_open(vdev_t *vd)
 
 	vd->vdev_removed = B_FALSE;
 
+	zfs_dbgmsg("help %px", vd);
+
 	/*
 	 * Recheck the faulted flag now that we have confirmed that
 	 * the vdev is accessible.  If we're faulted, bail.
@@ -2287,6 +2292,8 @@ vdev_open(vdev_t *vd)
 		}
 	}
 
+	zfs_dbgmsg("help %px", vd);
+
 	osize = P2ALIGN_TYPED(osize, sizeof (vdev_label_t), uint64_t);
 	max_osize = P2ALIGN_TYPED(max_osize, sizeof (vdev_label_t), uint64_t);
 
@@ -2321,6 +2328,7 @@ vdev_open(vdev_t *vd)
 
 	vd->vdev_psize = psize;
 
+	zfs_dbgmsg("help %px", vd);
 	/*
 	 * Make sure the allocatable size hasn't shrunk too much.
 	 */
@@ -2342,6 +2350,7 @@ vdev_open(vdev_t *vd)
 	vd->vdev_logical_ashift = MAX(logical_ashift,
 	    vd->vdev_logical_ashift);
 	
+	zfs_dbgmsg("Shrinking b %px %d %d %llu -> %llu", vd, vdev_is_anyraid(vd), vd->vdev_shrinking, (u_longlong_t)vd->vdev_asize, (u_longlong_t)asize);
 	if (vd->vdev_shrinking) {
 		vd->vdev_asize = asize;
 		vd->vdev_max_asize = max_asize;
@@ -2901,9 +2910,16 @@ vdev_reopen(vdev_t *vd)
 	ASSERT3U(spa_config_held(spa, SCL_STATE_ALL, RW_WRITER), ==,
 	SCL_STATE_ALL);
 
+	boolean_t log = B_FALSE;
+	if (vd->vdev_shrinking)
+		log = B_TRUE;
+	if (log)
+		zfs_dbgmsg("Shrink reopen");
 	/* set the reopening flag unless we're taking the vdev offline */
 	vd->vdev_reopening = !vd->vdev_offline;
 	vdev_close(vd);
+	if (log)
+		zfs_dbgmsg("Shrink reopen 2 %d", vd->vdev_shrinking);
 	(void) vdev_open(vd);
 
 	/*
