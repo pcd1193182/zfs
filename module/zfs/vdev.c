@@ -1688,7 +1688,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	for (uint64_t m = newc; m < oldc; m++) {
 		ASSERT(shrinking);
 		metaslab_t *msp = vd->vdev_ms[m];
-		ASSERT(msp->ms_disabled);
+		ASSERTF(msp->ms_disabled, "%d", (int)m);
 		metaslab_fini(msp);
 	}
 

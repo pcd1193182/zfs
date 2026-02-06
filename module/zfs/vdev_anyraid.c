@@ -2335,6 +2335,7 @@ tasklist_read(vdev_t *vd)
 					    phys.rs_start > var->var_offset)
 						continue;
 				}
+				zfs_dbgmsg("Disabling %d", (int)m);
 				metaslab_disable_nowait(ms);
 				vart->vart_dis_ms++;
 			}
