@@ -9460,6 +9460,7 @@ spa_vdev_contraction_done(spa_t *spa)
 	uint64_t avd_guid = avd->vdev_guid;
 	vdev_t *lvd = avd->vdev_child[va->vd_contracting_leaf];
 
+	zfs_dbgmsg("contraction done, removing child %d %s",  va->vd_contracting_leaf, lvd->vdev_path);
 	uint64_t txg = spa_vdev_detach_enter(spa, lvd->vdev_guid);
 
 	/*
@@ -9876,6 +9877,7 @@ spa_async_thread(void *arg)
 	spa->spa_async_tasks = 0;
 	mutex_exit(&spa->spa_async_lock);
 
+	zfs_dbgmsg("Executing async %x", tasks);
 	/*
 	 * See if the config needs to be updated.
 	 */
