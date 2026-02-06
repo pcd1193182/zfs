@@ -424,6 +424,7 @@ vdev_get_min_asize(vdev_t *vd)
 	 */
 	if (vd == vd->vdev_top) {
 		if (vd->vdev_shrinking) {
+			zfs_dbgmsg("min_asize when shrinking");
 			/*
 			 * Find the last metaslab with anything in it, and
 			 * declare the end of that metaslab to be the smallest
