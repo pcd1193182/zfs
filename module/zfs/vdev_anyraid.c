@@ -1158,6 +1158,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 	}
 	*max_asize = calculate_asize(vd, num_tiles);
 
+	// TODO we probably need to disable metaslabs here if we aren't reopening and we have a contraction going on
 	if (child_capacities) {
 		kmem_free(child_capacities, sizeof (*child_capacities) *
 		    vd->vdev_children);
@@ -3434,6 +3435,14 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 		 */
 		error = SET_ERROR(EDOM);
 		goto out;
+	}
+
+	/*
+	 * Step 4: Disable all the metaslabs that will become unusable
+	 */
+	for (uint64_t m = ((highest_tile + 1) * va->vd_tile_size) >>
+	    tvd->vdev_ms_shift; m < tvd->vdev_ms_count; m++) {
+		metaslab_disable_nowait(tvd->vdev_ms[m]);
 	}
 
 	va->vd_children[lvd->vdev_id]->van_capacity = 0;
