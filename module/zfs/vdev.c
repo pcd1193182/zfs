@@ -422,9 +422,29 @@ vdev_get_min_asize(vdev_t *vd)
 	 * The top-level vdev just returns the allocatable size rounded
 	 * to the nearest metaslab.
 	 */
-	if (vd == vd->vdev_top)
+	if (vd == vd->vdev_top) {
+		if (vd->vdev_shrinking) {
+			/*
+			 * Find the last metaslab with anything in it, and
+			 * declare the end of that metaslab to be the smallest
+			 * size the disk can take on.
+			 */
+			for (uint64_t m = vd->vdev_ms_count - 1; m >= 0; m--) {
+				metaslab_t *ms = vd->vdev_ms[m];
+				if (ms->ms_size ==
+				    zfs_range_tree_space(ms->ms_allocatable)) {
+					return ((m + 1) << vd->vdev_ms_shift);
+				}
+			}
+			/*
+			 * If the vdev is totally empty, we still probably
+			 * don't want to shrink it to size 0.
+			 */
+			return (1ULL << vd->vdev_ms_shift);
+		}
 		return (P2ALIGN_TYPED(vd->vdev_asize, 1ULL << vd->vdev_ms_shift,
 		    uint64_t));
+	}
 
 	return (pvd->vdev_ops->vdev_op_min_asize(pvd, vd));
 }
@@ -2328,7 +2348,7 @@ vdev_open(vdev_t *vd)
 
 	vd->vdev_psize = psize;
 
-	zfs_dbgmsg("help %px", vd);
+	zfs_dbgmsg("help %px %llu", vd, vd->vdev_min_asize);
 	/*
 	 * Make sure the allocatable size hasn't shrunk too much.
 	 */
