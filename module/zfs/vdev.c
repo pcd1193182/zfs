@@ -2341,8 +2341,12 @@ vdev_open(vdev_t *vd)
 	    MAX(physical_ashift, vd->vdev_physical_ashift);
 	vd->vdev_logical_ashift = MAX(logical_ashift,
 	    vd->vdev_logical_ashift);
-
-	if (vd->vdev_asize == 0) {
+	
+	if (vd->vdev_shrinking) {
+		vd->vdev_asize = asize;
+		vd->vdev_max_asize = max_asize;
+		vd->vdev_shrinking = B_FALSE;
+	} else if (vd->vdev_asize == 0) {
 		/*
 		 * This is the first-ever open, so use the computed values.
 		 * For compatibility, a different ashift can be requested.

@@ -9498,18 +9498,6 @@ spa_vdev_contraction_done(spa_t *spa)
 	 */
 	vdev_propagate_state(cvd);
 
-	/*
-	 * If the 'autoexpand' property is set on the pool then automatically
-	 * try to expand the size of the pool. For example if the device we
-	 * just detached was smaller than the others, it may be possible to
-	 * add metaslabs (i.e. grow the pool). We need to reopen the vdev
-	 * first so that we can obtain the updated sizes of the leaf vdevs.
-	 */
-	if (spa->spa_autoexpand) {
-		vdev_reopen(avd);
-		vdev_expand(avd, txg);
-	}
-
 	vdev_config_dirty(avd);
 
 	/*
@@ -9530,6 +9518,7 @@ spa_vdev_contraction_done(spa_t *spa)
 	/* hang on to the spa before we release the lock */
 	spa_open_ref(spa, FTAG);
 
+	avd->vdev_shrinking = B_TRUE;
 	vdev_reopen(avd);
 	VERIFY0(spa_vdev_exit(spa, lvd, txg, 0)); // TODO
 
