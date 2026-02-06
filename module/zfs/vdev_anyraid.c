@@ -3318,6 +3318,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	vdev_anyraid_t *va = tvd->vdev_tsd;
 	int error = 0;
  // TODO forbid if checkpointed
+ // TODO forbid if we're it would make nchildren < width
 	if (!dmu_tx_is_syncing(tx))
 		return (vdev_anyraid_check_contract_fast(tvd, lvd));
 

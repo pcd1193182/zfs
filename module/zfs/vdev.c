@@ -429,7 +429,7 @@ vdev_get_min_asize(vdev_t *vd)
 			 * declare the end of that metaslab to be the smallest
 			 * size the disk can take on.
 			 */
-			for (uint64_t m = vd->vdev_ms_count - 1; m >= 0; m--) {
+			for (uint64_t m = vd->vdev_ms_count - 1; m > 0; m--) {
 				metaslab_t *ms = vd->vdev_ms[m];
 				if (ms->ms_size ==
 				    zfs_range_tree_space(ms->ms_allocatable)) {
@@ -1667,6 +1667,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	metaslab_t **mspp;
 	int error;
 	boolean_t expanding = (oldc != 0);
+	boolean_t shrinking = vd->vdev_shrinking;
 
 	ASSERT(txg == 0 || spa_config_held(spa, SCL_ALLOC, RW_WRITER));
 
@@ -1678,12 +1679,18 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 
 	ASSERT(!vd->vdev_ishole);
 
-	ASSERT(oldc <= newc);
+	ASSERT(shrinking || oldc <= newc);
 
 	mspp = vmem_zalloc(newc * sizeof (*mspp), KM_SLEEP);
 
+	for (uint64_t m = newc; m < oldc; m++) {
+		ASSERT(shrinking);
+		metaslab_t *msp = vd->vdev_ms[m];
+		metaslab_fini(msp);
+	}
+
 	if (expanding) {
-		memcpy(mspp, vd->vdev_ms, oldc * sizeof (*mspp));
+		memcpy(mspp, vd->vdev_ms, MIN(oldc, newc) * sizeof (*mspp));
 		vmem_free(vd->vdev_ms, oldc * sizeof (*mspp));
 	}
 
@@ -2348,7 +2355,7 @@ vdev_open(vdev_t *vd)
 
 	vd->vdev_psize = psize;
 
-	zfs_dbgmsg("help %px %llu", vd, vd->vdev_min_asize);
+	zfs_dbgmsg("help %px %llu", vd, (u_longlong_t)vd->vdev_min_asize);
 	/*
 	 * Make sure the allocatable size hasn't shrunk too much.
 	 */
