@@ -432,7 +432,7 @@ vdev_get_min_asize(vdev_t *vd)
 			 */
 			for (uint64_t m = vd->vdev_ms_count - 1; m > 0; m--) {
 				metaslab_t *ms = vd->vdev_ms[m];
-				if (ms->ms_size ==
+				if (ms->ms_size !=
 				    zfs_range_tree_space(ms->ms_allocatable)) {
 					return ((m + 1) << vd->vdev_ms_shift);
 				}
@@ -2382,7 +2382,6 @@ vdev_open(vdev_t *vd)
 	if (vd->vdev_shrinking) {
 		vd->vdev_asize = asize;
 		vd->vdev_max_asize = max_asize;
-		vd->vdev_shrinking = B_FALSE;
 	} else if (vd->vdev_asize == 0) {
 		/*
 		 * This is the first-ever open, so use the computed values.

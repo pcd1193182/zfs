@@ -1386,7 +1386,7 @@ vdev_anyraid_io_start(zio_t *zio)
 	if (tile == NULL) {
 		ASSERT3U(zio->io_type, ==, ZIO_TYPE_WRITE);
 		zfs_dbgmsg("Allocating tile %llu for zio %px",
-		    (u_longlong_t)start_tile_id, zio);
+		    (u_longlong_t)start_tile_id, zio); // TODO make sure we can't allocate from a contracting vdev
 		tile = kmem_alloc(sizeof (*tile), KM_SLEEP);
 		tile->at_tile_id = start_tile_id;
 		list_create(&tile->at_list, sizeof (anyraid_tile_node_t),

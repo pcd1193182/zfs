@@ -9522,6 +9522,7 @@ spa_vdev_contraction_done(spa_t *spa)
 	avd->vdev_shrinking = B_TRUE;
 	vdev_reopen(avd);
 	vdev_metaslab_init(avd, txg);
+	avd->vdev_shrinking = B_FALSE;
 	VERIFY0(spa_vdev_exit(spa, lvd, txg, 0)); // TODO
 
 	spa_history_log_internal(spa, "detach", NULL,
