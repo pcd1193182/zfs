@@ -1688,10 +1688,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	for (uint64_t m = newc; m < oldc; m++) {
 		ASSERT(shrinking);
 		metaslab_t *msp = vd->vdev_ms[m];
-		mutex_enter(&msp->ms_lock);
-		metaslab_passivate(msp, metaslab_weight(msp, B_TRUE) &
-		    ~METASLAB_ACTIVE_MASK);
-		mutex_exit(&msp->ms_lock);
+		ASSERT(msp->ms_disabled);
 		metaslab_fini(msp);
 	}
 
