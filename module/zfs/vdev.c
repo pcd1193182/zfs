@@ -1681,12 +1681,17 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	ASSERT(!vd->vdev_ishole);
 
 	ASSERT(shrinking || oldc <= newc);
+	ASSERT(newc);
 
 	mspp = vmem_zalloc(newc * sizeof (*mspp), KM_SLEEP);
 
 	for (uint64_t m = newc; m < oldc; m++) {
 		ASSERT(shrinking);
 		metaslab_t *msp = vd->vdev_ms[m];
+		mutex_enter(&msp->ms_lock);
+		metaslab_passivate(msp, metaslab_weight(msp, B_TRUE) &
+		    ~METASLAB_ACTIVE_MASK);
+		mutex_exit(&msp->ms_lock);
 		metaslab_fini(msp);
 	}
 
@@ -1703,7 +1708,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	 * vdev. In order to ensure that all weights are correct at all times,
 	 * we need to recalculate here.
 	 */
-	for (uint64_t m = 0; m < oldc; m++) {
+	for (uint64_t m = 0; m < MIN(oldc, newc); m++) {
 		metaslab_t *msp = vd->vdev_ms[m];
 		mutex_enter(&msp->ms_lock);
 		metaslab_recalculate_weight_and_sort(msp);
