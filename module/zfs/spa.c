@@ -9530,6 +9530,7 @@ spa_vdev_contraction_done(spa_t *spa)
 	/* hang on to the spa before we release the lock */
 	spa_open_ref(spa, FTAG);
 
+	vdev_reopen(avd);
 	VERIFY0(spa_vdev_exit(spa, lvd, txg, 0)); // TODO
 
 	spa_history_log_internal(spa, "detach", NULL,
