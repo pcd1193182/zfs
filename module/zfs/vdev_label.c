@@ -517,6 +517,7 @@ vdev_config_generate(spa_t *spa, vdev_t *vd, boolean_t getstats,
 		fnvlist_add_uint64(nv, ZPOOL_CONFIG_METASLAB_SHIFT,
 		    vd->vdev_ms_shift);
 		fnvlist_add_uint64(nv, ZPOOL_CONFIG_ASHIFT, vd->vdev_ashift);
+		zfs_dbgmsg("generating config w/ asize %llu", (u_longlong_t)vd->vdev_asize);
 		fnvlist_add_uint64(nv, ZPOOL_CONFIG_ASIZE,
 		    vd->vdev_asize);
 		fnvlist_add_uint64(nv, ZPOOL_CONFIG_MIN_ALLOC,
