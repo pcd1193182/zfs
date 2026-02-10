@@ -2463,6 +2463,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
+	ASSERT(list_is_empty(&var->var_list));
 
 	objset_t *mos = spa->spa_meta_objset;
 	VERIFY0(dmu_object_free(mos, var->var_object, tx));
@@ -2605,7 +2606,7 @@ create_reloc_task(vdev_anyraid_t *va, struct rebal_node *donor, uint16_t offset,
 	task->vart_source_disk = (uint8_t)donor->cvd;
 	task->vart_dest_disk = (uint8_t)receiver->cvd;
 	task->vart_source_off = offset;
-	zfs_dbgmsg("task %d receiver %d: cap %d alloc %d", (int)*tid, receiver->cvd, rvan->van_capacity, anyraid_freelist_alloc(&rvan->van_freelist));
+	zfs_dbgmsg("task %d: %d receiver %d: cap %d alloc %d", (int)*tid, (int)donor->arr[offset], receiver->cvd, rvan->van_capacity, anyraid_freelist_alloc(&rvan->van_freelist));
 	ASSERT(rvan->van_capacity -
 	    anyraid_freelist_alloc(&rvan->van_freelist));
 	task->vart_dest_off = anyraid_freelist_pop(
