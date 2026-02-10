@@ -1119,9 +1119,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		vdev_t *cvd = vd->vdev_child[c];
 
 		uint64_t casize;
-		if (va->vd_contracting_leaf == c) {
-			casize = 0;
-		} else if (cvd->vdev_open_error == 0) {
+		if (cvd->vdev_open_error == 0) {
 			vdev_set_min_asize(cvd);
 			casize = MIN(max_size, cvd->vdev_asize -
 			    VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
@@ -1132,11 +1130,10 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 
 		num_tiles[c] = casize / va->vd_tile_size;
 		avl_remove(&va->vd_children_tree, va->vd_children[c]);
-		/*
-		 * We store the capacity minus 1, since a vdev can never have 0
-		 * and they can have 65536 (which would overflow a uint16_t).
-		 */
-		va->vd_children[c]->van_capacity = num_tiles[c];
+		if (va->vd_contracting_leaf == c)
+			va->vd_children[c]->van_capacity = 0;
+		else
+			va->vd_children[c]->van_capacity = num_tiles[c];
 		avl_add(&va->vd_children_tree, va->vd_children[c]);
 	}
 	*asize = calculate_asize(vd, num_tiles);
@@ -1145,9 +1142,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		vdev_t *cvd = vd->vdev_child[c];
 
 		uint64_t cmasize;
-		if (va->vd_contracting_leaf == c) {
-			cmasize = 0;
-		} else if (cvd->vdev_open_error == 0) {
+		if (cvd->vdev_open_error == 0) {
 			cmasize = MIN(max_size, cvd->vdev_max_asize -
 			    VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
 		} else {
@@ -2369,6 +2364,34 @@ tasklist_read(vdev_t *vd)
 		kmem_free(vart, sizeof (*vart));
 	}
 	kmem_free(buf, buflen);
+
+	uint64_t *num_tiles = kmem_zalloc(sizeof (*num_tiles) *
+	    vd->vdev_children, KM_SLEEP);
+	rw_enter(&va->vd_lock, RW_READER);
+	for (int c = 0; c < vd->vdev_children; c++) {
+		vdev_anyraid_node_t *van = va->vd_children[c];
+		if (va->vd_contracting_leaf == c) {
+			num_tiles[c] = 0;
+			continue;
+		}
+		num_tiles[c] = van->van_capacity -
+		    anyraid_freelist_alloc(&van->van_freelist);
+	}
+	uint64_t updated_asize = calculate_asize(vd, num_tiles);
+	rw_exit(&va->vd_lock);
+	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
+	var->var_nonalloc = vd->vdev_asize - updated_asize;
+	vdev_update_nonallocating_space(vd, var->var_nonalloc, B_TRUE);
+	if (va->vd_contracting_leaf != -1) {
+		uint64_t start = MIN(vd->vdev_ms_count,
+		    updated_asize >> vd->vdev_ms_shift);
+		uint64_t end = updated_asize >> vd->vdev_ms_shift;
+		for (uint64_t m = start; m < end; m++) {
+			metaslab_t *ms = vd->vdev_ms[m];
+			zfs_dbgmsg("Disabling %d", (int)m);
+			metaslab_disable_nowait(ms);
+		}
+	}
 out:
 	if (error) {
 		// TODO free tasklist
