@@ -770,8 +770,10 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		    (uint32_t *)&va->vd_contracting_leaf);
 		if (error != 0)
 			va->vd_contracting_leaf = -1;
-		else
+		else {
+			zfs_dbgmsg("startup detected contraction but no tasks %llu", (u_longlong_t)txg);
 			spa_async_request(spa, SPA_ASYNC_CONTRACTION_DONE);
+		}
 	}
 
 	va->vd_checkpoint_tile = UINT32_MAX;
@@ -1875,6 +1877,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		mutex_exit(&va->vd_relocate->var_lock);
 	}
 	if (va->vd_contracting_leaf != -1) {
+		zfs_dbgmsg("Adding contracting %llu", (u_longlong_t)txg);
 		fnvlist_add_uint32(header,
 		    VDEV_ANYRAID_HEADER_CONTRACTING_LEAF,
 		    va->vd_contracting_leaf);
@@ -3005,6 +3008,7 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 	    list_head(&var->var_list);
 	    vart != NULL && !zthr_iscancelled(zthr);
 	    vart = list_head(&var->var_list)) {
+		zfs_dbgmsg("Starting task %u", vart->vart_task);
 		mutex_exit(&var->var_lock);
 		vdev_t *source_vd = pvd->vdev_child[vart->vart_source_disk];
 		rw_enter(&va->vd_lock, RW_READER);
@@ -3222,6 +3226,7 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
 	}
+	zfs_dbgmsg("Finishing relocate");
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 	mutex_exit(&var->var_lock);
 
