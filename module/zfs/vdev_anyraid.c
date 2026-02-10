@@ -987,7 +987,6 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	avl_create(&t, rc_compar, sizeof (struct tile_count),
 	    offsetof(struct tile_count, node));
 	for (int c = 0; c < vd->vdev_children; c++) {
-		zfs_dbgmsg("disk %d nt %llu", c, (u_longlong_t)num_tiles[c]);
 		if (num_tiles[c] == 0) {
 			ASSERT(vd->vdev_child[c]->vdev_open_error ||
 			    va->vd_contracting_leaf == c);
@@ -997,7 +996,6 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 		rc->disk = c;
 		rc->remaining = num_tiles[c] -
 		    anyraid_freelist_alloc(&va->vd_children[c]->van_freelist);
-		zfs_dbgmsg("disk %d rem %d", c, rc->remaining);
 		avl_add(&t, rc);
 	}
 
@@ -1006,12 +1004,10 @@ calculate_asize(vdev_t *vd, uint64_t *num_tiles)
 	struct tile_count **cur = kmem_alloc(sizeof (*cur) * map_width,
 	    KM_SLEEP);
 	for (;;) {
-		zfs_dbgmsg("top of loop");
 		/* Grab the nparity + 1 children with the most free capacity */
 		for (int c = 0; c < map_width; c++) {
 			struct tile_count *rc = avl_first(&t);
 			ASSERT(rc);
-			zfs_dbgmsg("Grabbing %d %d", rc->disk, rc->remaining);
 			cur[c] = rc;
 			avl_remove(&t, rc);
 		}
@@ -3204,12 +3200,16 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search,
 		    NULL);
 		boolean_t found = B_FALSE;
+		int count = 0;
 		for (anyraid_tile_node_t *atn = list_head(&tile->at_list); atn;
 		    atn = list_next(&tile->at_list, atn)) {
 			ASSERT(atn);
-			if (atn->atn_disk != vart->vart_source_disk)
+			if (atn->atn_disk != vart->vart_source_disk) {
+				count++;
 				continue;
+			}
 			ASSERT3U(atn->atn_offset, ==, vart->vart_source_off);
+			zfs_dbgmsg("relocating %d %d-%d: %d/%d-> %d/%d", vart->vart_task, tile->at_tile_id, count, atn->atn_disk, atn->atn_offset, vart->vart_dest_disk, vart->vart_dest_off);
 			atn->atn_disk = vart->vart_dest_disk;
 			atn->atn_offset = vart->vart_dest_off;
 			found = B_TRUE;
@@ -3540,11 +3540,13 @@ vdev_anyraid_compact_children(vdev_t *vd)
 
 	for (anyraid_tile_t *at = avl_first(&va->vd_tile_map); at;
 	    at = AVL_NEXT(&va->vd_tile_map, at)) {
+		int count = 0;
 		for (anyraid_tile_node_t *atn = list_head(&at->at_list);
 		    atn; atn = list_next(&at->at_list, atn)) {
-			ASSERT3U(atn->atn_disk, !=, va->vd_contracting_leaf);
+			ASSERT3UF(atn->atn_disk, !=, va->vd_contracting_leaf, "tile %d child %d disk %d", at->at_tile_id, count, atn->atn_disk);
 			if (atn->atn_disk > va->vd_contracting_leaf)
 				atn->atn_disk--;
+			count++;
 		}
 	}
 }
