@@ -2374,8 +2374,7 @@ tasklist_read(vdev_t *vd)
 			num_tiles[c] = 0;
 			continue;
 		}
-		num_tiles[c] = van->van_capacity -
-		    anyraid_freelist_alloc(&van->van_freelist);
+		num_tiles[c] = van->van_capacity;
 	}
 	uint64_t updated_asize = calculate_asize(vd, num_tiles);
 	rw_exit(&va->vd_lock);
