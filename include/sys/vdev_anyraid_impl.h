@@ -161,7 +161,7 @@ typedef struct relocate_task_phys {
 #define	VDEV_ANYRAID_HEADER_CHECKPOINT	"checkpoint_txg"
 #define	VDEV_ANYRAID_HEADER_DISK_SIZES	"sizes"
 #define	VDEV_ANYRAID_HEADER_CUR_TASK	"cur_task"
-#define	VDEV_ANYRAID_HEADER_CONTRACTING_LEAF	"cur_task"
+#define	VDEV_ANYRAID_HEADER_CONTRACTING_LEAF	"contracting_leaf"
 
 #define	VART_TILE		"tile"
 #define	VART_SOURCE_DISK	"source_disk"
