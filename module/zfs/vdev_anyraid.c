@@ -1394,6 +1394,7 @@ vdev_anyraid_io_start(zio_t *zio)
 			vans[i] = avl_first(&va->vd_children_tree);
 			avl_remove(&va->vd_children_tree, vans[i]);
 
+			ASSERT3UF(vans[i]->van_id, !=, va->vd_contracting_leaf, "%u", vans[i]->van_capacity);
 			anyraid_tile_node_t *atn =
 			    kmem_alloc(sizeof (*atn), KM_SLEEP);
 			atn->atn_disk = vans[i]->van_id;
