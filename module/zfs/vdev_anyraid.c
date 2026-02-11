@@ -289,8 +289,10 @@ anyraid_child_compare(const void *p1, const void *p2)
 	const vdev_anyraid_node_t *van1 = p1, *van2 = p2;
 
 	int cmp = TREE_CMP(
-	    van2->van_capacity - anyraid_freelist_alloc(&van2->van_freelist),
-	    van1->van_capacity - anyraid_freelist_alloc(&van1->van_freelist));
+	    (int64_t)van2->van_capacity -
+	    anyraid_freelist_alloc(&van2->van_freelist),
+	    (int64_t)van1->van_capacity -
+	    anyraid_freelist_alloc(&van1->van_freelist));
 	if (cmp != 0)
 		return (cmp);
 
