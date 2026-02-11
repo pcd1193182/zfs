@@ -2387,7 +2387,7 @@ tasklist_read(vdev_t *vd)
 	if (va->vd_contracting_leaf != -1) {
 		uint64_t start = MIN(vd->vdev_ms_count,
 		    updated_asize >> vd->vdev_ms_shift);
-		uint64_t end = updated_asize >> vd->vdev_ms_shift;
+		uint64_t end = vd->vdev_asize >> vd->vdev_ms_shift;
 		zfs_dbgmsg("disabling end of disk: %llu %llu", (u_longlong_t)start, (u_longlong_t)end);
 		for (uint64_t m = start; m < end; m++) {
 			metaslab_t *ms = vd->vdev_ms[m];
