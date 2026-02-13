@@ -5971,6 +5971,22 @@ zpool_contract(zpool_handle_t *zhp, const char *anyraid_vdev_name,
 			    "removing %s from %s"), leaf_vdev_name,
 			    anyraid_vdev_name);
 			break;
+		case EBUSY:
+			zfs_error_fmt(hdl, EZFS_CHECKPOINT_EXISTS,
+			    dgettext(TEXT_DOMAIN, "cannot perform contraction "
+			    "while a checkpoint exists"));
+			break;
+		case EALREADY:
+			zfs_error_fmt(hdl, EZFS_ANYRAID_RELOCATE_IN_PROGRESS,
+			    dgettext(TEXT_DOMAIN, "another anyraid relocate "
+			    "operation is already in progress"));
+			break;
+		case ENODEV:
+			zfs_error_fmt(hdl, EZFS_CONTRACT_BELOW_WIDTH,
+			    dgettext(TEXT_DOMAIN, "cannot contract %s because "
+			    "its child count is equal to its logical width"),
+			    anyraid_vdev_name);
+			break;
 		case 0:
 			break;
 		default:

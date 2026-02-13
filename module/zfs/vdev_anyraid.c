@@ -1154,7 +1154,6 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 	}
 	*max_asize = calculate_asize(vd, num_tiles);
 
-	// TODO we probably need to disable metaslabs here if we aren't reopening and we have a contraction going on
 	if (child_capacities) {
 		kmem_free(child_capacities, sizeof (*child_capacities) *
 		    vd->vdev_children);
@@ -1219,6 +1218,22 @@ vdev_anyraid_close(vdev_t *vd)
 		}
 		kmem_free(tile, sizeof (*tile));
 	}
+	if (va->vd_relocate) {
+		vdev_anyraid_relocate_t *var = va->vd_relocate;
+		vdev_anyraid_relocate_task_t *vart;
+		while (vart = list_remove_head(&var->var_list))
+			kmem_free(vart, sizeof (*vart));
+		while (vart = list_remove_head(&var->var_done_list))
+			kmem_free(vart, sizeof (*vart));
+		mutex_destroy(&var->var_lock);
+		cv_destroy(&var->var_cv);
+		list_destroy(&var->var_list);
+		list_destroy(&var->var_done_list);
+		va->vd_relocate = NULL;
+		vd->vdev_spa->spa_anyraid_relocate = NULL;
+		kmem_free(var, sizeof (*var));
+	}
+	// free relocate info
 }
 
 /*
@@ -1383,7 +1398,7 @@ vdev_anyraid_io_start(zio_t *zio)
 	if (tile == NULL) {
 		ASSERT3U(zio->io_type, ==, ZIO_TYPE_WRITE);
 		zfs_dbgmsg("Allocating tile %llu for zio %px",
-		    (u_longlong_t)start_tile_id, zio); // TODO make sure we can't allocate from a contracting vdev
+		    (u_longlong_t)start_tile_id, zio);
 		tile = kmem_alloc(sizeof (*tile), KM_SLEEP);
 		tile->at_tile_id = start_tile_id;
 		list_create(&tile->at_list, sizeof (anyraid_tile_node_t),
@@ -1975,7 +1990,6 @@ vdev_anyraid_mapped(vdev_t *vd, uint64_t offset)
 }
 
 /*
- * TODO: Look into this for raidz parity
  * Return the maximum asize for a rebuild zio in the provided range
  * given the following constraints.  An anyraid chunk may not:
  *
@@ -2031,10 +2045,10 @@ vdev_anyraid_asize(vdev_t *vd, uint64_t psize, uint64_t txg)
 static uint64_t
 vdev_anyraid_psize(vdev_t *vd, uint64_t asize, uint64_t txg)
 {
+	(void) txg;
 	vdev_anyraid_t *va = vd->vdev_tsd;
 	ASSERT(vdev_is_anyraid(vd));
-	if (va->vd_parity_type == VAP_MIRROR)
-		return (vdev_default_psize(vd, asize, txg));
+	ASSERT3U(va->vd_parity_type, ==, VAP_RAIDZ);
 
 	uint64_t ashift = vd->vdev_top->vdev_ashift;
 	uint64_t nparity = va->vd_nparity;
@@ -2105,7 +2119,7 @@ vdev_ops_t vdev_anymirror_ops = {
 	.vdev_op_open = vdev_anyraid_open,
 	.vdev_op_close = vdev_anyraid_close,
 	.vdev_op_psize_to_asize = vdev_anyraid_asize,
-	.vdev_op_asize_to_psize = vdev_anyraid_psize, // TODO
+	.vdev_op_asize_to_psize = vdev_default_psize, // 
 	.vdev_op_min_asize = vdev_anyraid_min_asize,
 	.vdev_op_min_attach_size = vdev_anyraid_min_attach_size,
 	.vdev_op_min_alloc = NULL,
@@ -2133,7 +2147,7 @@ vdev_ops_t vdev_anyraidz_ops = {
 	.vdev_op_open = vdev_anyraid_open,
 	.vdev_op_close = vdev_anyraid_close,
 	.vdev_op_psize_to_asize = vdev_anyraid_asize,
-	.vdev_op_asize_to_psize = vdev_anyraid_psize, // TODO
+	.vdev_op_asize_to_psize = vdev_anyraid_psize,
 	.vdev_op_min_asize = vdev_anyraid_min_asize,
 	.vdev_op_min_attach_size = vdev_anyraid_min_attach_size,
 	.vdev_op_min_alloc = NULL,
@@ -2145,7 +2159,7 @@ vdev_ops_t vdev_anyraidz_ops = {
 	.vdev_op_rele = NULL,
 	.vdev_op_remap = NULL,
 	.vdev_op_xlate = vdev_anyraid_xlate,
-	.vdev_op_rebuild_asize = vdev_anyraid_rebuild_asize,
+	.vdev_op_rebuild_asize = NULL,
 	.vdev_op_metaslab_init = NULL,
 	.vdev_op_config_generate = vdev_anyraid_config_generate,
 	.vdev_op_nparity = vdev_anyraid_nparity,
@@ -2288,8 +2302,9 @@ tasklist_read(vdev_t *vd)
 			error = dmu_read(mos, var->var_object,
 			    i * sizeof (*buf), buflen, buf, DMU_READ_PREFETCH);
 			if (error) {
+				// The task lists will be freed when we fini vd
 				kmem_free(buf, buflen);
-				goto out;
+				return (error);
 			}
 		}
 		if (i == done) {
@@ -2395,11 +2410,7 @@ tasklist_read(vdev_t *vd)
 			metaslab_disable_nowait(ms);
 		}
 	}
-out:
-	if (error) {
-		// TODO free tasklist
-	}
-	return (error);
+	return (0);
 }
 
 static void
@@ -3352,8 +3363,14 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 {
 	vdev_anyraid_t *va = tvd->vdev_tsd;
 	int error = 0;
- // TODO forbid if checkpointed
- // TODO forbid if we're it would make nchildren < width
+	spa_t *spa = tvd->vdev_spa;
+	if (spa_has_checkpoint(spa))
+		return (SET_ERROR(EBUSY));
+	if (spa->spa_anyraid_relocate != NULL)
+		return (SET_ERROR(EALREADY));
+	if (tvd->vdev_children == va->vd_width)
+		return (SET_ERROR(ENODEV));
+
 	if (!dmu_tx_is_syncing(tx))
 		return (vdev_anyraid_check_contract_fast(tvd, lvd));
 
@@ -3485,6 +3502,23 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	 * process to happen in the _sync function, aside from some cleanup.
 	 */
 out:
+	if (error != 0) {
+		vdev_anyraid_relocate_task_t *vart;
+		while (vart = list_remove_head(&var->var_list)) {
+			vdev_anyraid_node_t *van =
+			    va->vd_children[vart->vart_dest_disk];
+			anyraid_freelist_add(&van->van_freelist,
+			    vart->vart_dest_off);
+			kmem_free(vart, sizeof (*vart));
+		}
+		mutex_destroy(&var->var_lock);
+		cv_destroy(&var->var_cv);
+		list_destroy(&var->var_list);
+		list_destroy(&var->var_done_list);
+		va->vd_relocate = NULL;
+		vd->vdev_spa->spa_anyraid_relocate = NULL;
+		kmem_free(var, sizeof (*var));
+	}
 	rw_exit(&va->vd_lock);
 
 	kmem_free(num_tiles, tvd->vdev_children * sizeof (*num_tiles));
@@ -3497,14 +3531,6 @@ out:
 		kmem_free(node, sizeof (*node));
 	}
 	avl_destroy (&ft);
-	if (error != 0) {
-		// TODO cleanup:
-		// Iterate over task list
-		// Free dest tiles on task list
-		// Destroy task list
-		// free var
-		mutex_exit(&var->var_lock);
-	}
 	return (error);
 }
 

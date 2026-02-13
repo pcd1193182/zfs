@@ -10041,9 +10041,9 @@ spa_async_suspend(spa_t *spa)
 	if (raidz_expand_thread != NULL)
 		zthr_cancel(raidz_expand_thread);
 
-	zthr_t *anyraid_rebalance_thread = spa->spa_anyraid_relocate_zthr;
-	if (anyraid_rebalance_thread != NULL)
-		zthr_cancel(anyraid_rebalance_thread);
+	zthr_t *anyraid_relocate_thread = spa->spa_anyraid_relocate_zthr;
+	if (anyraid_relocate_thread != NULL)
+		zthr_cancel(anyraid_relocate_thread);
 
 	zthr_t *discard_thread = spa->spa_checkpoint_discard_zthr;
 	if (discard_thread != NULL)
@@ -10074,6 +10074,10 @@ spa_async_resume(spa_t *spa)
 	zthr_t *raidz_expand_thread = spa->spa_raidz_expand_zthr;
 	if (raidz_expand_thread != NULL)
 		zthr_resume(raidz_expand_thread);
+
+	zthr_t *anyraid_relocate_thread = spa->spa_anyraid_relocate_zthr;
+	if (anyraid_relocate_thread != NULL)
+		zthr_resume(anyraid_relocate_thread);
 
 	zthr_t *discard_thread = spa->spa_checkpoint_discard_zthr;
 	if (discard_thread != NULL)
