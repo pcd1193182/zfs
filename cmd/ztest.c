@@ -173,6 +173,24 @@ typedef enum {
 	RAIDZ_EXPAND_CHECKED,		/* Pool scrub verification done	*/
 } raidz_expand_test_state_t;
 
+/* Dedicated Anyraid rebalance test states */
+typedef enum {
+	ANYRAID_REBAL_NONE,		/* Default is none, must opt-in	*/
+	ANYRAID_REBAL_REQUESTED,	/* The '-X' option was used	*/
+	ANYRAID_REBAL_STARTED,		/* Testing has commenced	*/
+	ANYRAID_REBAL_KILLED,		/* Reached the proccess kill	*/
+	ANYRAID_REBAL_CHECKED,		/* Pool scrub verification done	*/
+} anyraid_rebalance_test_state_t;
+
+/* Dedicated Anyraid contraction test states */
+typedef enum {
+	ANYRAID_CONTRACT_NONE,		/* Default is none, must opt-in	*/
+	ANYRAID_CONTRACT_REQUESTED,	/* The '-X' option was used	*/
+	ANYRAID_CONTRACT_STARTED,	/* Testing has commenced	*/
+	ANYRAID_CONTRACT_KILLED,	/* Reached the proccess kill	*/
+	ANYRAID_CONTRACT_CHECKED,	/* Pool scrub verification done	*/
+} anyraid_contraction_test_state_t;
+
 
 #define	ZO_GVARS_MAX_ARGLEN	((size_t)64)
 #define	ZO_GVARS_MAX_COUNT	((size_t)10)
@@ -203,6 +221,8 @@ typedef struct ztest_shared_opts {
 	uint64_t zo_maxloops;
 	uint64_t zo_metaslab_force_ganging;
 	raidz_expand_test_state_t zo_raidz_expand_test;
+	anyraid_rebalance_test_state_t zo_anyraid_rebal_test;
+	anyraid_contraction_test_state_t zo_anyraid_contract_test;
 	int zo_mmp_test;
 	int zo_special_vdevs;
 	int zo_dump_dbgmsg;
@@ -265,6 +285,8 @@ static const ztest_shared_opts_t ztest_opts_defaults = {
 	.zo_special_vdevs = ZTEST_VDEV_CLASS_RND,
 	.zo_gvars_count = 0,
 	.zo_raidz_expand_test = RAIDZ_EXPAND_NONE,
+	.zo_anyraid_rebal_test = ANYRAID_REBAL_NONE,
+	.zo_anyraid_contract_test = ANYRAID_CONTRACT_NONE,
 };
 
 extern uint64_t metaslab_force_ganging;
@@ -277,6 +299,7 @@ extern uint_t dmu_object_alloc_chunk_shift;
 extern boolean_t zfs_force_some_double_word_sm_entries;
 extern unsigned long zfs_reconstruct_indirect_damage_fraction;
 extern uint64_t raidz_expand_max_reflow_bytes;
+extern uint64_t anyraid_relocate_max_bytes_pause;
 extern uint_t raidz_expand_pause_point;
 extern boolean_t ddt_prune_artificial_age;
 extern boolean_t ddt_dump_prune_histogram;
@@ -824,6 +847,10 @@ static ztest_option_t option_table[] = {
 	    NO_DEFAULT, NULL},
 	{ 'h',	"help",	NULL, "Show this help",
 	    NO_DEFAULT, NULL},
+	{ 'b', "anyraid-rebalance", NULL,
+	    "Perform a dedicated anyraid rebalance test", NO_DEFAULT, NULL},
+	{ 'c', "anyraid-contraction", NULL,
+	    "Perform a dedicated anyraid contraction test", NO_DEFAULT, NULL},
 	{0, 0, 0, 0, 0, 0}
 };
 
@@ -1058,6 +1085,19 @@ process_options(int argc, char **argv)
 			break;
 		case 'X':
 			zo->zo_raidz_expand_test = RAIDZ_EXPAND_REQUESTED;
+			zo->zo_anyraid_contract_test = ANYRAID_CONTRACT_NONE;
+			zo->zo_anyraid_rebal_test = ANYRAID_REBAL_NONE;
+			break;
+		case 'c':
+			zo->zo_anyraid_contract_test =
+			    ANYRAID_CONTRACT_REQUESTED;
+			zo->zo_raidz_expand_test = RAIDZ_EXPAND_NONE;
+			zo->zo_anyraid_rebal_test = ANYRAID_REBAL_NONE;
+			break;
+		case 'b':
+			zo->zo_anyraid_rebal_test = ANYRAID_REBAL_REQUESTED;
+			zo->zo_raidz_expand_test = RAIDZ_EXPAND_NONE;
+			zo->zo_anyraid_contract_test = ANYRAID_CONTRACT_NONE;
 			break;
 		case 'E':
 			zo->zo_init = 0;
@@ -1118,6 +1158,14 @@ process_options(int argc, char **argv)
 		zo->zo_vdev_size = DEFAULT_VDEV_SIZE * 2;
 		zo->zo_raid_do_expand = B_FALSE;
 		raid_kind = "raidz";
+	} else if (zo->zo_anyraid_contract_test == ANYRAID_CONTRACT_REQUESTED) {
+		zo->zo_mmp_test = 0;
+		zo->zo_mirrors = 0;
+		raid_kind = "anymirror";
+	} else if (zo->zo_anyraid_rebal_test == ANYRAID_REBAL_REQUESTED) {
+		zo->zo_mmp_test = 0;
+		zo->zo_mirrors = 0;
+		raid_kind = "anymirror";
 	}
 
 	if (strcmp(raid_kind, "random") == 0) {
@@ -8383,6 +8431,208 @@ ztest_raidz_expand_run(ztest_shared_t *zs, spa_t *spa) // TODO this but rebalanc
 }
 
 static void
+ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
+{
+	int threads = ztest_opts.zo_threads;
+	kthread_t **run_threads;
+	ztest_expand_io_t *thread_args;
+
+	/* Setup a 1 MiB buffer of random data */
+	uint64_t bufsize = 1024 * 1024;
+	void *buffer = umem_alloc(bufsize, UMEM_NOFAIL);
+	random_get_pseudo_bytes((uint8_t *)buffer, bufsize);
+
+	/*
+	 * Put some data in the pool and then attach a vdev to initiate
+	 * reflow.
+	 */
+	run_threads = umem_zalloc(threads * sizeof (kthread_t *), UMEM_NOFAIL);
+	thread_args = umem_zalloc(threads * sizeof (ztest_expand_io_t),
+	    UMEM_NOFAIL);
+	uint64_t free_space = metaslab_class_get_space(spa_normal_class(spa)) -
+	    metaslab_class_get_alloc(spa_normal_class(spa));
+	uint_t target = ztest_random(8);
+	uint64_t alloc_goal = (free_space * target) / 10;
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("adding data to pool '%s', goal %llu bytes\n",
+		    ztest_opts.zo_pool, (u_longlong_t)alloc_goal);
+	}
+
+	/*
+	 * Kick off all the I/O generators that run in parallel.
+	 */
+	for (int t = 0; t < threads; t++) {
+		if (t < ztest_opts.zo_datasets && ztest_dataset_open(t) != 0) {
+			umem_free(run_threads, threads * sizeof (kthread_t *));
+			umem_free(buffer, bufsize);
+			return;
+		}
+		thread_args[t].rzx_id = t;
+		thread_args[t].rzx_amount = alloc_goal / threads;
+		thread_args[t].rzx_bufsize = bufsize;
+		thread_args[t].rzx_buffer = buffer;
+		thread_args[t].rzx_alloc_max = alloc_goal;
+		thread_args[t].rzx_spa = spa;
+		run_threads[t] = thread_create(NULL, 0, ztest_rzx_thread,
+		    &thread_args[t], 0, NULL, TS_RUN | TS_JOINABLE,
+		    defclsyspri);
+	}
+
+	/*
+	 * Wait for all of the writers to complete.
+	 */
+	for (int t = 0; t < threads; t++)
+		VERIFY0(thread_join(run_threads[t]));
+
+	/*
+	 * Close all datasets. This must be done after all the threads
+	 * are joined so we can be sure none of the datasets are in-use
+	 * by any of the threads.
+	 */
+	for (int t = 0; t < ztest_opts.zo_threads; t++) {
+		if (t < ztest_opts.zo_datasets)
+			ztest_dataset_close(t);
+	}
+
+	txg_wait_synced(spa_get_dsl(spa), 0);
+
+	zs->zs_alloc = metaslab_class_get_alloc(spa_normal_class(spa));
+	zs->zs_space = metaslab_class_get_space(spa_normal_class(spa));
+
+	umem_free(buffer, bufsize);
+	umem_free(run_threads, threads * sizeof (kthread_t *));
+	umem_free(thread_args, threads * sizeof (ztest_expand_io_t));
+}
+
+static void
+ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
+{
+	nvlist_t *root;
+	pool_anyraid_relocate_stat_t arr_stats;
+	pool_anyraid_relocate_stat_t *pars = &arr_stats;
+	vdev_t *cvd, *arvd = spa->spa_root_vdev->vdev_child[0];
+	uint64_t csize;
+	int error;
+
+	ASSERT3U(ztest_opts.zo_anyraid_rebal_test, !=, ANYRAID_REBAL_NONE);
+	ASSERT(vdev_is_anyraid(arvd));
+	ztest_opts.zo_anyraid_rebal_test = ANYRAID_REBAL_STARTED;
+
+	ztest_write_some_data(zs, spa);
+
+	/* Set our reflow target to 25%, 50% or 75% of allocated size */
+	uint_t multiple = ztest_random(3) + 1;
+	uint64_t rebal_max = (arvd->vdev_stat.vs_alloc * multiple) / 4;
+	anyraid_relocate_max_bytes_pause = rebal_max;
+
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("running anyraid_rebalance test, killing when "
+		    "rebalance reaches %llu bytes (%u/4 of allocated space)\n",
+		    (u_longlong_t)rebal_max, multiple);
+	}
+
+	/* XXX - do we want some I/O load during the rebalance? */
+
+	cvd = arvd->vdev_child[0];
+	csize = vdev_get_min_asize(cvd);
+	uint_t new_mult = ztest_random(5) + 1;
+	csize = (csize * new_mult) / 2;
+	/*
+	 * Path to vdev to be attached
+	 */
+	char *newpath = umem_alloc(MAXPATHLEN, UMEM_NOFAIL);
+	(void) snprintf(newpath, MAXPATHLEN, ztest_dev_template,
+	    ztest_opts.zo_dir, ztest_opts.zo_pool, arvd->vdev_children);
+	/*
+	 * Build the nvlist describing newpath.
+	 */
+	root = make_vdev_root(newpath, NULL, NULL, csize, ztest_get_ashift(),
+	    NULL, 0, 0, 1);
+	/*
+	 * Expand the anyraid vdev by attaching the new disk
+	 */
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("rebalancing anyraid: %d wide to %d wide with "
+		    "'%s'\n", (int)arvd->vdev_children, (int)arvd->vdev_children + 1,
+		    newpath);
+	}
+	error = spa_vdev_attach(spa, arvd->vdev_guid, root, B_FALSE, B_FALSE);
+	nvlist_free(root);
+	if (error != 0) {
+		fatal(0, "anyraid rebalance: attach (%s %llu) returned %d",
+		    newpath, (long long)csize, error);
+	}
+
+	/*
+	 * Add some more data to the pool to make rebalance more interesting.
+	 */
+	ztest_write_some_data(zs, spa); // TODO tune value second time
+
+	/*
+	 * Wait for reflow to begin
+	 */
+	while (spa->spa_anyraid_relocate == NULL) {
+		txg_wait_synced(spa_get_dsl(spa), 0);
+		(void) poll(NULL, 0, 100); /* wait 1/10 second */
+	}
+	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+	(void) spa_anyraid_relocate_get_stats(spa, pars);
+	spa_config_exit(spa, SCL_CONFIG, FTAG);
+	while (pars->pars_state != DSS_SCANNING) {
+		txg_wait_synced(spa_get_dsl(spa), 0);
+		(void) poll(NULL, 0, 100); /* wait 1/10 second */
+		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+		(void) spa_anyraid_relocate_get_stats(spa, pars);
+		spa_config_exit(spa, SCL_CONFIG, FTAG);
+	}
+
+	ASSERT3U(pars->pars_state, ==, DSS_SCANNING);
+	ASSERT3U(pars->pars_to_move, !=, 0);
+	/*
+	 * Set so when we are killed we go to anyraid checking rather than
+	 * restarting test.
+	 */
+	ztest_shared_opts->zo_anyraid_rebal_test = ANYRAID_REBAL_KILLED;
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("anyraid rebalance movement started, waiting for "
+		    "%llu bytes to be copied\n", (u_longlong_t)rebal_max);
+	}
+
+	/*
+	 * Wait for rebal maximum to be reached and then kill the test
+	 */
+	while (pars->pars_moved < rebal_max) {
+		txg_wait_synced(spa_get_dsl(spa), 0);
+		(void) poll(NULL, 0, 100); /* wait 1/10 second */
+		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+		(void) spa_anyraid_relocate_get_stats(spa, pars);
+		spa_config_exit(spa, SCL_CONFIG, FTAG);
+	}
+
+	/* Reset the rebalance pause before killing */
+	anyraid_relocate_max_bytes_pause = 0;
+
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("killing anyraid rebalance test after move "
+		    "reached %llu bytes\n", (u_longlong_t)pars->pars_moved);
+	}
+
+	/*
+	 * Kill ourself to simulate a panic during a rebalance.  Our parent will
+	 * restart the test and the changed flag value will drive the test
+	 * through the scrub/check code to verify the pool is not corrupted.
+	 */
+	ztest_kill(zs);
+}
+
+static void
+ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
+{
+	(void) zs;
+	(void) spa;
+}
+
+static void
 ztest_generic_run(ztest_shared_t *zs, spa_t *spa)
 {
 	kthread_t **run_threads;
@@ -8588,6 +8838,11 @@ ztest_run(ztest_shared_t *zs)
 
 	if (ztest_opts.zo_raidz_expand_test == RAIDZ_EXPAND_REQUESTED)
 		ztest_raidz_expand_run(zs, spa);
+	else if (ztest_opts.zo_anyraid_rebal_test == ANYRAID_REBAL_REQUESTED)
+		ztest_anyraid_rebal_run(zs, spa);
+	else if (ztest_opts.zo_anyraid_contract_test ==
+	    ANYRAID_CONTRACT_REQUESTED)
+		ztest_anyraid_contract_run(zs, spa);
 	else if (ztest_opts.zo_raidz_expand_test == RAIDZ_EXPAND_KILLED)
 		ztest_raidz_expand_check(spa);
 	else

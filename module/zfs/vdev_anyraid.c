@@ -135,7 +135,7 @@ int anyraid_disk_shift = 6;
  * Maximum amount of copy io's outstanding at once.
  */
 #ifdef _ILP32
-static unsigned long anyraid_relocat_max_move_bytes = SPA_MAXBLOCKSIZE;
+static unsigned long anyraid_relocate_max_move_bytes = SPA_MAXBLOCKSIZE;
 #else
 static unsigned long anyraid_relocate_max_move_bytes = SPA_MAXBLOCKSIZE;
 #endif
@@ -1221,9 +1221,9 @@ vdev_anyraid_close(vdev_t *vd)
 	if (va->vd_relocate) {
 		vdev_anyraid_relocate_t *var = va->vd_relocate;
 		vdev_anyraid_relocate_task_t *vart;
-		while ((vart = list_remove_head(&var->var_list)) != NULL)
+		while ((vart = list_remove_head(&var->var_list)))
 			kmem_free(vart, sizeof (*vart));
-		while ((vart = list_remove_head(&var->var_done_list)) != NULL)
+		while ((vart = list_remove_head(&var->var_done_list)))
 			kmem_free(vart, sizeof (*vart));
 		mutex_destroy(&var->var_lock);
 		cv_destroy(&var->var_cv);
@@ -3550,7 +3550,7 @@ out:
 		list_destroy(&var->var_list);
 		list_destroy(&var->var_done_list);
 		va->vd_relocate = NULL;
-		vd->vdev_spa->spa_anyraid_relocate = NULL;
+		tvd->vdev_spa->spa_anyraid_relocate = NULL;
 		kmem_free(var, sizeof (*var));
 	}
 	rw_exit(&va->vd_lock);
