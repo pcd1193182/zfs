@@ -2472,6 +2472,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	vdev_anyraid_t *va = ada->vd->vdev_tsd;
 	vdev_anyraid_relocate_t *var = va->vd_relocate;
 	rw_enter(&va->vd_lock, RW_WRITER);
+	boolean_t noop = (list_head(&var->var_done_list) == NULL);
 	for (vdev_anyraid_relocate_task_t *task =
 	    list_head(&var->var_done_list); task;
 	    task = list_head(&var->var_done_list)) {
@@ -2484,9 +2485,12 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	ASSERT(list_is_empty(&var->var_list));
 
 	objset_t *mos = spa->spa_meta_objset;
-	VERIFY0(dmu_object_free(mos, var->var_object, tx));
-	VERIFY0(zap_remove(mos, DMU_POOL_DIRECTORY_OBJECT,
-	    DMU_POOL_RELOCATE_OBJ, tx));
+	if (!noop) {
+		VERIFY0(dmu_object_free(mos, var->var_object, tx));
+		VERIFY0(zap_remove(mos, DMU_POOL_DIRECTORY_OBJECT,
+		    DMU_POOL_RELOCATE_OBJ, tx));
+	}
+
 	if (va->vd_contracting_leaf == -1) {
 		vdev_update_nonallocating_space(ada->vd, var->var_nonalloc,
 		    B_FALSE);
@@ -2561,7 +2565,8 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 		.done_arg = ada,
 	};
 	if (zfs_scrub_after_relocate &&
-	    dsl_scan_setup_check(&setup_sync_arg.func, tx) == 0) {
+	    dsl_scan_setup_check(&setup_sync_arg.func, tx) == 0 &&
+	    list_head(&var->var_done_list) != NULL) {
 		dsl_scan_setup_sync(&setup_sync_arg, tx);
 	} else {
 		anyraid_scrub_done(spa, tx, ada);
@@ -2772,6 +2777,35 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		if (donor == NULL || donor->alloc == 0)
 			break;
 	}
+
+	/*
+	 * It's already balanced; clean up the state and report success
+	 * immediately.
+	 */
+	if (tid == 0) {
+		rw_exit(&va->vd_lock);
+		kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
+
+		struct rebal_node *node;
+		void *cookie = NULL;
+		while ((node = avl_destroy_nodes(&ft, &cookie)) != NULL)
+			;
+		avl_destroy(&ft);
+		cookie = NULL;
+		while ((node = avl_destroy_nodes(&at, &cookie)) != NULL) {
+			kmem_free(node->arr, sizeof (*node->arr) *
+			    (node->free + node->alloc));
+			kmem_free(node, sizeof (*node));
+		}
+		avl_destroy(&at);
+
+		var->var_nonalloc = 0;
+		var->var_state = DSS_FINISHED;
+		mutex_exit(&var->var_lock);
+		anyraid_relocate_complete_sync(vd->vdev_spa, tx);
+		return;
+	}
+
 	uint64_t updated_asize = calculate_asize(vd, num_tiles);
 	rw_exit(&va->vd_lock);
 	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
@@ -3541,8 +3575,14 @@ vdev_anyraid_setup_contract(vdev_t *tvd, dmu_tx_t *tx)
 	vdev_anyraid_relocate_t *var = va->vd_relocate;
 	ASSERT(MUTEX_HELD(&var->var_lock));
 	spa_t *spa = tvd->vdev_spa;
+	if (list_head(&var->var_list) == NULL) {
+		mutex_exit(&var->var_lock);
+		anyraid_relocate_complete_sync(spa, tx);
+		return;
+	}
 
 	objset_t *mos = spa->spa_meta_objset;
+	
 	var->var_object = dmu_object_alloc(mos, DMU_OTN_UINT32_METADATA,
 	    SPA_OLD_MAXBLOCKSIZE, DMU_OTN_UINT64_METADATA,
 	    sizeof (relocate_phys_t), tx);
