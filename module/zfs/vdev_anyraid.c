@@ -1221,9 +1221,9 @@ vdev_anyraid_close(vdev_t *vd)
 	if (va->vd_relocate) {
 		vdev_anyraid_relocate_t *var = va->vd_relocate;
 		vdev_anyraid_relocate_task_t *vart;
-		while (vart = list_remove_head(&var->var_list))
+		while ((vart = list_remove_head(&var->var_list)) != NULL)
 			kmem_free(vart, sizeof (*vart));
-		while (vart = list_remove_head(&var->var_done_list))
+		while ((vart = list_remove_head(&var->var_done_list)) != NULL)
 			kmem_free(vart, sizeof (*vart));
 		mutex_destroy(&var->var_lock);
 		cv_destroy(&var->var_cv);
@@ -3538,7 +3538,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 out:
 	if (error != 0) {
 		vdev_anyraid_relocate_task_t *vart;
-		while (vart = list_remove_head(&var->var_list)) {
+		while ((vart = list_remove_head(&var->var_list))) {
 			vdev_anyraid_node_t *van =
 			    va->vd_children[vart->vart_dest_disk];
 			anyraid_freelist_add(&van->van_freelist,

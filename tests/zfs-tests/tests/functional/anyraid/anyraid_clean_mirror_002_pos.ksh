@@ -63,7 +63,7 @@ clean_mirror_spec_cases "anymirror2 $disk0 $disk1 $disk2 $disk3" \
 	"\"$disk1 $disk3\"" \
 	"\"$disk2 $disk3\""
 
-clean_mirror_spec_cases "anyraid2:2 $disk0 $disk1 $disk2 $disk3" \
+clean_mirror_spec_cases "anyraidz2:2 $disk0 $disk1 $disk2 $disk3" \
 	"$disk0" \
 	"$disk1" \
 	"$disk2" \
@@ -75,7 +75,7 @@ clean_mirror_spec_cases "anyraid2:2 $disk0 $disk1 $disk2 $disk3" \
 	"\"$disk1 $disk3\"" \
 	"\"$disk2 $disk3\""
 
-clean_mirror_spec_cases "anyraid2:2 $disk0 $disk1 $disk2 $disk3 $disk4" \
+clean_mirror_spec_cases "anyraidz2:2 $disk0 $disk1 $disk2 $disk3 $disk4" \
 	"$disk0" \
 	"$disk1" \
 	"$disk2" \

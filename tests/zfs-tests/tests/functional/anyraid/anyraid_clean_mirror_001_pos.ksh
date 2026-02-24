@@ -52,7 +52,7 @@ clean_mirror_spec_cases "anymirror1 $disk0 $disk1 $disk2" \
 	"$disk1" \
 	"$disk2"
 
-clean_mirror_spec_cases "anyraidz1:2 $disk0 $disk $disk2" \
+clean_mirror_spec_cases "anyraidz1:2 $disk0 $disk1 $disk2" \
 	"$disk0" \
 	"$disk1" \
 	"$disk2"
