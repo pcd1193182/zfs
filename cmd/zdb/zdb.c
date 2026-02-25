@@ -8562,6 +8562,8 @@ dump_mos_leaks(spa_t *spa)
 		mos_obj_refd(vim->vim_phys->vimp_counts_object);
 		vdev_indirect_mapping_close(vim);
 	}
+	if (spa->spa_anyraid_relocate)
+		mos_obj_refd(spa->spa_anyraid_relocate->var_object);
 	deleted_livelists_dump_mos(spa);
 
 	if (dp->dp_origin_snap != NULL) {
