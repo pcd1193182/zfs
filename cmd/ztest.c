@@ -2712,7 +2712,7 @@ ztest_lookup(ztest_ds_t *zd, ztest_od_t *od, int count)
 			dmu_object_info_t doi;
 
 			ASSERT3U(od->od_object, !=, 0);
-			ASSERT0(missing);	/* there should be no gaps */
+			ASSERT0F(missing, "%d %s", i, od->od_name);	/* there should be no gaps */
 
 			ztest_object_lock(zd, od->od_object, ZTRL_READER);
 			VERIFY0(dmu_bonus_hold(zd->zd_os, od->od_object,
