@@ -414,7 +414,7 @@ vdev_anyraid_config_generate(vdev_t *vd, nvlist_t *nv)
  * Add an entry to the tile map for the provided tile.
  */
 static void
-create_tile_entry(vdev_anyraid_t *va, anyraid_map_loc_entry_t *amle,
+create_tile_entry(spa_t *spa, vdev_anyraid_t *va, anyraid_map_loc_entry_t *amle,
     uint8_t *pat_cnt, anyraid_tile_t **out_at, uint32_t *cur_tile)
 {
 	uint8_t disk = amle_get_disk(amle);
@@ -424,6 +424,7 @@ create_tile_entry(vdev_anyraid_t *va, anyraid_map_loc_entry_t *amle,
 	if (*pat_cnt == 0) {
 		at = kmem_alloc(sizeof (*at), KM_SLEEP);
 		at->at_tile_id = *cur_tile;
+		at->at_synced = spa_current_txg(spa);
 		avl_add(&va->vd_tile_map, at);
 		list_create(&at->at_list,
 		    sizeof (anyraid_tile_node_t),
@@ -861,8 +862,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 			case AMET_LOC: {
 				anyraid_map_loc_entry_t *amle =
 				    &entry->ame_u.ame_amle;
-				create_tile_entry(va, amle, &pat_cnt, &at,
-				    &cur_tile);
+				create_tile_entry(vd->vdev_spa, va, amle,
+				    &pat_cnt, &at, &cur_tile);
 				break;
 			}
 			default:
@@ -1975,7 +1976,7 @@ vdev_anyraid_expand(vdev_t *tvd, vdev_t *newvd)
 }
 
 boolean_t
-vdev_anyraid_mapped(vdev_t *vd, uint64_t offset)
+vdev_anyraid_mapped(vdev_t *vd, uint64_t offset, uint64_t txg)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 	anyraid_tile_t search;
@@ -1983,7 +1984,8 @@ vdev_anyraid_mapped(vdev_t *vd, uint64_t offset)
 
 	rw_enter(&va->vd_lock, RW_READER);
 	anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search, NULL);
-	boolean_t result = tile != NULL;
+	boolean_t result = tile != NULL && tile->at_synced +
+	    VDEV_ANYRAID_MAP_COPIES <= txg;
 	rw_exit(&va->vd_lock);
 
 	return (result);

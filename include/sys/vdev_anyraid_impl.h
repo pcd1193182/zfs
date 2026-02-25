@@ -75,6 +75,7 @@ typedef struct anyraid_tile {
 	avl_node_t	at_node;
 	uint32_t	at_tile_id;
 	list_t		at_list;
+	uint64_t	at_synced;
 } anyraid_tile_t;
 
 typedef struct anyraid_move_arg {

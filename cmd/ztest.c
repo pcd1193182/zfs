@@ -8450,7 +8450,7 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
 	thread_args = umem_zalloc(threads * sizeof (ztest_expand_io_t),
 	    UMEM_NOFAIL);
 	uint64_t free_space = metaslab_class_get_space(spa_normal_class(spa)) -
-	    metaslab_class_get_alloc(spa_normal_class(spa));
+	    metaslab_class_get_alloc(spa_normal_class(spa)); // TODO group instead of class? Force writes here somehow?
 	uint_t target = ztest_random(8);
 	uint64_t alloc_goal = (free_space * target) / 10;
 	if (ztest_opts.zo_verbose >= 1) {
