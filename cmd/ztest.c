@@ -7772,6 +7772,7 @@ typedef struct ztest_raidz_expand_io {
 	uint64_t	rzx_bufsize;
 	const void	*rzx_buffer;
 	uint64_t	rzx_alloc_max;
+	boolean_t	rzx_removes;
 	spa_t		*rzx_spa;
 } ztest_expand_io_t;
 
@@ -7825,11 +7826,12 @@ ztest_rzx_thread(void *arg)
 		}
 	}
 
-	/* Remove a few objects to leave some holes in allocation space */
-	mutex_enter(&zd->zd_dirobj_lock);
-	(void) ztest_remove(zd, od, 2);
-	mutex_exit(&zd->zd_dirobj_lock);
-
+	if (info->rzx_removes) {
+		/* Remove a few objects to leave some holes in allocation space */
+		mutex_enter(&zd->zd_dirobj_lock);
+		(void) ztest_remove(zd, od, 2);
+		mutex_exit(&zd->zd_dirobj_lock);
+	}
 	umem_free(od, od_size);
 
 	thread_exit();
@@ -8302,6 +8304,7 @@ ztest_raidz_expand_run(ztest_shared_t *zs, spa_t *spa) // TODO this but rebalanc
 		thread_args[t].rzx_buffer = buffer;
 		thread_args[t].rzx_alloc_max = alloc_goal;
 		thread_args[t].rzx_spa = spa;
+		thread_args[t].rzx_removes = B_TRUE;
 		run_threads[t] = thread_create(NULL, 0, ztest_rzx_thread,
 		    &thread_args[t], 0, NULL, TS_RUN | TS_JOINABLE,
 		    defclsyspri);
@@ -8478,6 +8481,7 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
 		thread_args[t].rzx_buffer = buffer;
 		thread_args[t].rzx_alloc_max = alloc_goal;
 		thread_args[t].rzx_spa = spa;
+		thread_args[t].rzx_removes = B_FALSE;
 		run_threads[t] = thread_create(NULL, 0, ztest_rzx_thread,
 		    &thread_args[t], 0, NULL, TS_RUN | TS_JOINABLE,
 		    defclsyspri);
