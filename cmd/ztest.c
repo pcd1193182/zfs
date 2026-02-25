@@ -8579,6 +8579,10 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	 */
 	ztest_write_some_data(zs, spa, 1); // TODO tune value second time
 
+	fprintf(stderr, "data written\n");
+
+	VERIFY0(spa_rebalance_vdevs(spa, &arvd->vdev_guid, 1));
+
 	/*
 	 * Wait for reflow to begin
 	 */
@@ -8586,6 +8590,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 	}
+	fprintf(stderr, "reloc started\n");
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
