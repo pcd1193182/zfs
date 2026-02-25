@@ -7792,6 +7792,7 @@ ztest_rzx_thread(void *arg)
 	int od_size;
 	ztest_ds_t *zd = &ztest_ds[info->rzx_id % ztest_opts.zo_datasets];
 	spa_t *spa = info->rzx_spa;
+	fprintf(stderr, "starting thread %lu", info->rzx_id);
 
 	od_size = sizeof (ztest_od_t) * OD_ARRAY_SIZE;
 	od = umem_alloc(od_size, UMEM_NOFAIL);
