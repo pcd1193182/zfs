@@ -8438,6 +8438,52 @@ ztest_raidz_expand_run(ztest_shared_t *zs, spa_t *spa) // TODO this but rebalanc
 	ztest_kill(zs);
 }
 
+/*
+ * After the rebalance was killed, check that the pool is healthy
+ */
+static void
+ztest_anyraid_rebal_check(spa_t *spa)
+{
+	ASSERT3U(ztest_opts.zo_anyraid_rebal_test, ==, ANYRAID_REBAL_KILLED);
+	/*
+	 * Set pool check done flag, main program will run a zdb check
+	 * of the pool when we exit.
+	 */
+	ztest_shared_opts->zo_anyraid_rebal_test = ANYRAID_REBAL_CHECKED;
+
+	/* Wait for reflow to finish */
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("\nwaiting for reflow to finish ...\n");
+	}
+	pool_anyraid_relocate_stat_t arr_stats;
+	pool_anyraid_relocate_stat_t *pars = &arr_stats;
+	do {
+		txg_wait_synced(spa_get_dsl(spa), 0);
+		(void) poll(NULL, 0, 500); /* wait 1/2 second */
+
+		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+		(void) spa_anyraid_relocate_get_stats(spa, pars);
+		spa_config_exit(spa, SCL_CONFIG, FTAG);
+	} while (pars->pars_state != DSS_FINISHED &&
+	    pars->pars_moved < pars->pars_to_move);
+
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("verifying an interrupted anyraid "
+		    "rebalance using a pool scrub ...\n");
+	}
+
+	/* Will fail here if there is non-recoverable corruption detected */
+	int error = ztest_scrub_impl(spa);
+	if (error == EBUSY)
+		error = 0;
+
+	VERIFY0(error);
+
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("anyraid rebalance scrub check complete\n");
+	}
+}
+
 static void
 ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 {
@@ -8639,6 +8685,12 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	 * through the scrub/check code to verify the pool is not corrupted.
 	 */
 	ztest_kill(zs);
+}
+
+static void
+ztest_anyraid_contract_check(spa_t *spa)
+{
+	(void) spa;
 }
 
 static void
@@ -8861,6 +8913,10 @@ ztest_run(ztest_shared_t *zs)
 		ztest_anyraid_contract_run(zs, spa);
 	else if (ztest_opts.zo_raidz_expand_test == RAIDZ_EXPAND_KILLED)
 		ztest_raidz_expand_check(spa);
+	else if (ztest_opts.zo_anyraid_rebal_test == ANYRAID_REBAL_KILLED)
+		ztest_anyraid_rebal_check(spa);
+	else if (ztest_opts.zo_anyraid_contract_test == ANYRAID_CONTRACT_KILLED)
+		ztest_anyraid_contract_check(spa);
 	else
 		ztest_generic_run(zs, spa);
 
@@ -9475,7 +9531,7 @@ main(int argc, char **argv)
 		if (!ztest_opts.zo_mmp_test)
 			ztest_run_zdb(zs->zs_guid);
 		if (ztest_shared_opts->zo_raidz_expand_test ==
-		    RAIDZ_EXPAND_CHECKED)
+		    RAIDZ_EXPAND_CHECKED || ztest_shared_opts->zo_anyraid_rebal_test == ANYRAID_REBAL_CHECKED || ztest_shared_opts->zo_anyraid_contract_test == ANYRAID_CONTRACT_CHECKED)
 			break; /* raidz expand test complete */
 	}
 
