@@ -2760,10 +2760,12 @@ ztest_create(ztest_ds_t *zd, ztest_od_t *od, int count)
 		lr->lr_crtime[0] = time(NULL);
 
 		if (ztest_replay_create(zd, lr, B_FALSE) != 0) {
+			fprintf(stderr, "failed to create %s\n", od->od_name);
 			ASSERT0(missing);
 			od->od_object = 0;
 			missing++;
 		} else {
+			fprintf(stderr, "created %s\n", od->od_name);
 			od->od_object = lr->lr_foid;
 			od->od_type = od->od_crtype;
 			od->od_blocksize = od->od_crblocksize;
@@ -2805,9 +2807,11 @@ ztest_remove(ztest_ds_t *zd, ztest_od_t *od, int count)
 		lr->lr_doid = od->od_dir;
 
 		if ((error = ztest_replay_remove(zd, lr, B_FALSE)) != 0) {
+			fprintf(stderr, "failed to remove %s: %d\n", od->od_name, error);
 			ASSERT3U(error, ==, ENOSPC);
 			missing++;
 		} else {
+			fprintf(stderr, "removed %s\n", od->od_name);
 			od->od_object = 0;
 		}
 		ztest_lr_free(lr, sizeof (*lr), od->od_name);
@@ -8436,6 +8440,7 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
 	int threads = ztest_opts.zo_threads;
 	kthread_t **run_threads;
 	ztest_expand_io_t *thread_args;
+	fprintf(stderr, "write some data start\n");
 
 	/* Setup a 1 MiB buffer of random data */
 	uint64_t bufsize = 1024 * 1024;
@@ -8483,7 +8488,7 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
 	 */
 	for (int t = 0; t < threads; t++)
 		VERIFY0(thread_join(run_threads[t]));
-
+	fprintf(stderr, "thread join done\n");
 	/*
 	 * Close all datasets. This must be done after all the threads
 	 * are joined so we can be sure none of the datasets are in-use
