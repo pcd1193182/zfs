@@ -1935,7 +1935,6 @@ static uint64_t
 vdev_anyraid_min_asize(vdev_t *pvd, vdev_t *cvd)
 {
 	ASSERT(vdev_is_anyraid(pvd));
-	ASSERT3U(spa_config_held(pvd->vdev_spa, SCL_ALL, RW_READER), !=, 0);
 	vdev_anyraid_t *va = pvd->vdev_tsd;
 	if (va->vd_tile_size == 0)
 		return (VDEV_ANYRAID_TOTAL_MAP_SIZE(cvd->vdev_ashift));
