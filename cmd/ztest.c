@@ -8629,6 +8629,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 
 	VERIFY0(spa_rebalance_vdevs(spa, &arvd->vdev_guid, 1));
 
+	fprintf(stderr, "rebal called\n");
 	/*
 	 * Wait for reflow to begin
 	 */
