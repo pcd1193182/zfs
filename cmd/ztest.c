@@ -8438,7 +8438,7 @@ ztest_raidz_expand_run(ztest_shared_t *zs, spa_t *spa) // TODO this but rebalanc
 }
 
 static void
-ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
+ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 {
 	int threads = ztest_opts.zo_threads;
 	kthread_t **run_threads;
@@ -8475,7 +8475,7 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa)
 			umem_free(buffer, bufsize);
 			return;
 		}
-		thread_args[t].rzx_id = t;
+		thread_args[t].rzx_id = run * threads + t;
 		thread_args[t].rzx_amount = alloc_goal / threads;
 		thread_args[t].rzx_bufsize = bufsize;
 		thread_args[t].rzx_buffer = buffer;
@@ -8527,7 +8527,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	ASSERT(vdev_is_anyraid(arvd));
 	ztest_opts.zo_anyraid_rebal_test = ANYRAID_REBAL_STARTED;
 
-	ztest_write_some_data(zs, spa);
+	ztest_write_some_data(zs, spa, 0);
 
 	/* Set our reflow target to 25%, 50% or 75% of allocated size */
 	uint_t multiple = ztest_random(3) + 1;
@@ -8575,7 +8575,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	/*
 	 * Add some more data to the pool to make rebalance more interesting.
 	 */
-	ztest_write_some_data(zs, spa); // TODO tune value second time
+	ztest_write_some_data(zs, spa, 1); // TODO tune value second time
 
 	/*
 	 * Wait for reflow to begin
