@@ -7792,7 +7792,7 @@ ztest_rzx_thread(void *arg)
 	int od_size;
 	ztest_ds_t *zd = &ztest_ds[info->rzx_id % ztest_opts.zo_datasets];
 	spa_t *spa = info->rzx_spa;
-	fprintf(stderr, "starting thread %lu", info->rzx_id);
+	fprintf(stderr, "starting thread %lu\n", info->rzx_id);
 
 	od_size = sizeof (ztest_od_t) * OD_ARRAY_SIZE;
 	od = umem_alloc(od_size, UMEM_NOFAIL);
@@ -8471,7 +8471,8 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 	 * Kick off all the I/O generators that run in parallel.
 	 */
 	for (int t = 0; t < threads; t++) {
-		if (t < ztest_opts.zo_datasets && ztest_dataset_open(t) != 0) {
+		if (t < ztest_opts.zo_datasets &&
+		    ztest_dataset_open((run * threads + t) % ztest_opts.zo_datasets) != 0) {
 			umem_free(run_threads, threads * sizeof (kthread_t *));
 			umem_free(buffer, bufsize);
 			return;
