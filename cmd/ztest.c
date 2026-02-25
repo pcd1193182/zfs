@@ -8507,6 +8507,9 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 		    ztest_opts.zo_pool, (u_longlong_t)alloc_goal);
 	}
 
+	if (alloc_goal == 0)
+		goto out;
+
 	/*
 	 * Kick off all the I/O generators that run in parallel.
 	 */
@@ -8544,6 +8547,7 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 			ztest_dataset_close(t);
 	}
 
+out:
 	txg_wait_synced(spa_get_dsl(spa), 0);
 
 	zs->zs_alloc = metaslab_class_get_alloc(spa_normal_class(spa));
