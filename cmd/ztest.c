@@ -9531,8 +9531,10 @@ main(int argc, char **argv)
 		if (!ztest_opts.zo_mmp_test)
 			ztest_run_zdb(zs->zs_guid);
 		if (ztest_shared_opts->zo_raidz_expand_test ==
-		    RAIDZ_EXPAND_CHECKED || ztest_shared_opts->zo_anyraid_rebal_test == ANYRAID_REBAL_CHECKED || ztest_shared_opts->zo_anyraid_contract_test == ANYRAID_CONTRACT_CHECKED)
+		    RAIDZ_EXPAND_CHECKED || ztest_shared_opts->zo_anyraid_rebal_test == ANYRAID_REBAL_CHECKED || ztest_shared_opts->zo_anyraid_contract_test == ANYRAID_CONTRACT_CHECKED) {
+			fprintf(stderr, "breaking\n");
 			break; /* raidz expand test complete */
+		}
 	}
 
 	if (ztest_opts.zo_verbose >= 1) {
