@@ -2399,6 +2399,7 @@ tasklist_read(vdev_t *vd)
 	rw_exit(&va->vd_lock);
 	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
 	var->var_nonalloc = vd->vdev_asize - updated_asize;
+	zfs_dbgmsg("nonallocating dspace; %llu - %llu = %llu", (u_longlong_t)vd->vdev_asize, (u_longlong_t)updated_asize, (u_longlong_t)var->var_nonalloc);
 	vdev_update_nonallocating_space(vd, var->var_nonalloc, B_TRUE);
 	if (va->vd_contracting_leaf != -1) {
 		uint64_t start = MIN(vd->vdev_ms_count,
