@@ -64,10 +64,10 @@ cap=$(zpool get -Hp -o value size $TESTPOOL)
 #
 log_must file_write -o create -f /$TESTPOOL/f1 -b 1048576 -c $((64 * 7 - 1)) -d R
 
-log_must destroy_pool $TESTPOOL2
-log_must create_pool $TESTPOOL2 anyraidz1:2 $TEST_BASE_DIR/vdev_file.{0,1,2,3}
+log_must destroy_pool $TESTPOOL
+log_must create_pool $TESTPOOL anyraidz1:2 $TEST_BASE_DIR/vdev_file.{0,1,2,3}
 
-cap=$(zpool get -Hp -o value size $TESTPOOL2)
+cap=$(zpool get -Hp -o value size $TESTPOOL)
 [[ "$cap" -eq $((12 * 64 * 1024 * 1024)) ]] || \
 	log_fail "Incorrect space for anyraid vdev: $cap"
 
@@ -76,6 +76,6 @@ cap=$(zpool get -Hp -o value size $TESTPOOL2)
 # reserved slop space. If the space isn't being selected intelligently, we
 # would hit ENOSPC 64MiB early.
 #
-log_must dd if=/dev/urandom of=/$TESTPOOL2/f1 bs=1M count=$((64 * 6 - 1))
+log_must dd if=/dev/urandom of=/$TESTPOOL/f1 bs=1M count=$((64 * 6 - 1))
 
 log_pass "Anyraid disks intelligently select which tiles to use"
