@@ -700,6 +700,7 @@ fatal(int do_perror, const char *message, ...)
 
 out:
 	if (ztest_dump_core) {
+		dump_debug_buffer();
 		abort();
 	} else {
 		// NOTE: Not safe if we've called kernel_fini already
@@ -8622,7 +8623,9 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	 */
 	ztest_write_some_data(zs, spa, 1); // TODO tune value second time
 
+	fprintf(stderr, "a\n");
 	VERIFY0(spa_rebalance_vdevs(spa, &arvd->vdev_guid, 1));
+	fprintf(stderr, "b\n");
 	/*
 	 * Wait for reflow to begin
 	 */
@@ -8630,10 +8633,12 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 	}
+	fprintf(stderr, "c\n");
 
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
+	fprintf(stderr, "d\n");
 	while (pars->pars_state != DSS_SCANNING) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
@@ -8641,6 +8646,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
+	fprintf(stderr, "e\n");
 
 	ASSERT3U(pars->pars_state, ==, DSS_SCANNING);
 	ASSERT3U(pars->pars_to_move, !=, 0);
@@ -9457,7 +9463,7 @@ main(int argc, char **argv)
 	(void) setvbuf(stdout, NULL, _IOLBF, 0);
 
 	dprintf_setup(&argc, argv);
-	zfs_deadman_synctime_ms = 300000;
+	zfs_deadman_synctime_ms = 60000;
 	zfs_deadman_checktime_ms = 30000;
 	/*
 	 * As two-word space map entries may not come up often (especially
