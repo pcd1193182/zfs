@@ -8659,11 +8659,11 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	/*
 	 * Wait for rebal maximum to be reached and then kill the test
 	 */
-	while (pars->pars_moved < rebal_max) {
+	while (ret == 0 && pars->pars_moved < rebal_max) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-		(void) spa_anyraid_relocate_get_stats(spa, pars);
+		ret = spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
 
@@ -8699,14 +8699,15 @@ ztest_anyraid_contract_check(spa_t *spa)
 	}
 	pool_anyraid_relocate_stat_t arr_stats;
 	pool_anyraid_relocate_stat_t *pars = &arr_stats;
+	int ret;
 	do {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 500); /* wait 1/2 second */
 
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-		(void) spa_anyraid_relocate_get_stats(spa, pars);
+		ret = spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
-	} while (pars->pars_state != DSS_FINISHED &&
+	} while (ret == 0 && pars->pars_state != DSS_FINISHED &&
 	    pars->pars_moved < pars->pars_to_move);
 
 	if (ztest_opts.zo_verbose >= 1) {
