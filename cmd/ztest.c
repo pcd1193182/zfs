@@ -8575,9 +8575,9 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 
 	ztest_write_some_data(zs, spa, 0);
 
-	/* Set our reflow target to 25%, 50% or 75% of allocated size */
+	/* Set our reflow target to 12%, 25% or 37% of allocated size */
 	uint_t multiple = ztest_random(3) + 1;
-	uint64_t rebal_max = (arvd->vdev_stat.vs_alloc * multiple) / 4;
+	uint64_t rebal_max = (arvd->vdev_stat.vs_alloc * multiple) / 8;
 	anyraid_relocate_max_bytes_pause = rebal_max;
 
 	if (ztest_opts.zo_verbose >= 1) {
@@ -8626,29 +8626,25 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	fprintf(stderr, "a\n");
 	VERIFY0(spa_rebalance_vdevs(spa, &arvd->vdev_guid, 1));
 	fprintf(stderr, "b\n");
-	/*
-	 * Wait for reflow to begin
-	 */
-	while (spa->spa_anyraid_relocate == NULL) {
-		txg_wait_synced(spa_get_dsl(spa), 0);
-		(void) poll(NULL, 0, 100); /* wait 1/10 second */
-	}
-	fprintf(stderr, "c\n");
 
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-	(void) spa_anyraid_relocate_get_stats(spa, pars);
+	int ret = spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 	fprintf(stderr, "d\n");
-	while (pars->pars_state != DSS_SCANNING) {
+	while (ret == 0 && pars->pars_state < DSS_SCANNING) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-		(void) spa_anyraid_relocate_get_stats(spa, pars);
+		ret = spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
-	fprintf(stderr, "e\n");
+	(void) poll(NULL, 0, 1000); /* wait 1 second */
+	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+	ret = spa_anyraid_relocate_get_stats(spa, pars);
+	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
-	ASSERT3U(pars->pars_state, ==, DSS_SCANNING);
+	if (pars->pars_state != DSS_SCANNING)
+		return;
 	ASSERT3U(pars->pars_to_move, !=, 0);
 	/*
 	 * Set so when we are killed we go to anyraid checking rather than

@@ -2534,7 +2534,7 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 	rw_enter(&va->vd_lock, RW_WRITER);
 	/*
 	 * Dirty the config so that the updated ZPOOL_CONFIG_RAIDZ_EXPAND_TXGS
-	 * will get written (based on vd_expand_txgs).
+	 * will get written (based on vd_expand_txgs). TODO
 	 */
 	vdev_config_dirty(vd);
 
