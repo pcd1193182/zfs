@@ -98,8 +98,7 @@ typedef struct vdev_anyraid {
 	avl_tree_t	vd_children_tree;
 	uint32_t	vd_checkpoint_tile;
 	vdev_anyraid_node_t **vd_children;
-	/* non-null iff there's a rebalance in progress */
-	vdev_anyraid_relocate_t *vd_relocate;
+	vdev_anyraid_relocate_t vd_relocate;
 	int32_t		vd_contracting_leaf;
 	zfs_rangelock_t	vd_rangelock;
 } vdev_anyraid_t;

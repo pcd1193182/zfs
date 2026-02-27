@@ -5863,6 +5863,7 @@ strstarts(const char *str, const char *prefix)
 	return (strncmp(str, prefix, strlen(prefix)) == 0);
 }
 
+// TODO can't do multiple at once
 int
 zpool_rebalance(zpool_handle_t *zhp, char **vdev_names, int count)
 {
@@ -5905,6 +5906,11 @@ zpool_rebalance(zpool_handle_t *zhp, char **vdev_names, int count)
 			zfs_error_fmt(hdl, EZFS_BADDEV,
 			    dgettext(TEXT_DOMAIN,
 			    "non-anyaid device specified"));
+			break;
+		case EALREADY:
+			zfs_error_fmt(hdl, EZFS_BUSY,
+			    dgettext(TEXT_DOMAIN, "specified device already "
+			    "rebalancing"));
 			break;
 		case 0:
 			break;

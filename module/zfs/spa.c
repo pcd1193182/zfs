@@ -11822,8 +11822,10 @@ spa_check_start_rebalance(void *arg, dmu_tx_t *tx) {
 	vdev_t *vd = (vdev_t *)arg;
 	if (!vdev_is_anyraid(vd))
 		return (SET_ERROR(EINVAL));
-	if (vdev_anyraid_relocate_status(vd) != NULL)
+	if (vdev_anyraid_relocate_status(vd)->var_state == DSS_SCANNING)
 		return (SET_ERROR(EALREADY));
+	if (vd->vdev_spa->spa_anyraid_relocate != NULL)
+		return (SET_ERROR(EEXIST));
 	(void) tx;
 	return (0);
 }
@@ -11889,6 +11891,8 @@ spa_check_start_contract(void *arg, dmu_tx_t *tx) {
 		return (SET_ERROR(EINVAL));
 	if (vdev_anyraid_relocate_status(tvd) != NULL)
 		return (SET_ERROR(EALREADY));
+	if (tvd->vdev_spa->spa_anyraid_relocate != NULL)
+		return (SET_ERROR(EEXIST));
 	
 	// TODO check for checkpoint, can't do it
 

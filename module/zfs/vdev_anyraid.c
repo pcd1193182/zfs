@@ -354,6 +354,16 @@ vdev_anyraid_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	    sizeof (vdev_anyraid_node_t),
 	    offsetof(vdev_anyraid_node_t, van_node));
 	zfs_rangelock_init(&va->vd_rangelock, NULL, NULL);
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
+	var->var_offset = var->var_failed_offset = UINT64_MAX;
+	list_create(&var->var_list,
+	    sizeof (vdev_anyraid_relocate_task_t),
+	    offsetof(vdev_anyraid_relocate_task_t, vart_node));
+	list_create(&var->var_done_list,
+	    sizeof (vdev_anyraid_relocate_task_t),
+	    offsetof(vdev_anyraid_relocate_task_t, vart_node));
+	mutex_init(&var->var_lock, NULL, MUTEX_DEFAULT, NULL);
+	cv_init(&var->var_cv, NULL, CV_DEFAULT, NULL);
 
 	va->vd_children = kmem_zalloc(sizeof (*va->vd_children) * children,
 	    KM_SLEEP);
@@ -373,6 +383,9 @@ static void
 vdev_anyraid_fini(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
+
+	if (vd->vdev_spa->spa_anyraid_relocate == &va->vd_relocate)
+		vd->vdev_spa->spa_anyraid_relocate = NULL;
 	avl_destroy(&va->vd_tile_map);
 
 	vdev_anyraid_node_t *node;
@@ -383,6 +396,11 @@ vdev_anyraid_fini(vdev_t *vd)
 	}
 	avl_destroy(&va->vd_children_tree);
 	zfs_rangelock_fini(&va->vd_rangelock);
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
+	mutex_destroy(&var->var_lock);
+	cv_destroy(&var->var_cv);
+	list_destroy(&var->var_list);
+	list_destroy(&var->var_done_list);
 
 	rw_destroy(&va->vd_lock);
 	kmem_free(va->vd_children,
@@ -725,21 +743,12 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		return (error);
 	}
 	if (error == 0) {
-		vdev_anyraid_relocate_t *var = kmem_zalloc(sizeof (*var),
-		    KM_SLEEP);
+		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 
 		var->var_state = DSS_SCANNING;
 		var->var_vd = vd->vdev_id;
 		var->var_failed_offset = UINT64_MAX;
 		var->var_failed_task = UINT64_MAX;
-		list_create(&var->var_list,
-		    sizeof (vdev_anyraid_relocate_task_t),
-		    offsetof(vdev_anyraid_relocate_task_t, vart_node));
-		list_create(&var->var_done_list,
-		    sizeof (vdev_anyraid_relocate_task_t),
-		    offsetof(vdev_anyraid_relocate_task_t, vart_node));
-		mutex_init(&var->var_lock, NULL, MUTEX_DEFAULT, NULL);
-		cv_init(&var->var_cv, NULL, CV_DEFAULT, NULL);
 
 		var->var_offset = var->var_synced_offset =
 		    fnvlist_lookup_uint64(cur_task, VART_OFFSET);
@@ -765,7 +774,6 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		    (uint32_t *)&va->vd_contracting_leaf) != 0)
 			va->vd_contracting_leaf = -1;
 		(*child_capacities)[va->vd_contracting_leaf] = 0;
-		va->vd_relocate = var;
 		spa->spa_anyraid_relocate = var;
 	} else {
 		error = nvlist_lookup_uint32(header.ah_nvl,
@@ -1178,7 +1186,7 @@ vdev_anyraid_load(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
-	if (va->vd_relocate == NULL)
+	if (va->vd_relocate.var_state != DSS_SCANNING)
 		return (0);
 
 	return (tasklist_read(vd));
@@ -1219,22 +1227,15 @@ vdev_anyraid_close(vdev_t *vd)
 		}
 		kmem_free(tile, sizeof (*tile));
 	}
-	if (va->vd_relocate) {
-		vdev_anyraid_relocate_t *var = va->vd_relocate;
-		vdev_anyraid_relocate_task_t *vart;
-		while ((vart = list_remove_head(&var->var_list)))
-			kmem_free(vart, sizeof (*vart));
-		while ((vart = list_remove_head(&var->var_done_list)))
-			kmem_free(vart, sizeof (*vart));
-		mutex_destroy(&var->var_lock);
-		cv_destroy(&var->var_cv);
-		list_destroy(&var->var_list);
-		list_destroy(&var->var_done_list);
-		va->vd_relocate = NULL;
+
+	if (vd->vdev_spa->spa_anyraid_relocate == &va->vd_relocate)
 		vd->vdev_spa->spa_anyraid_relocate = NULL;
-		kmem_free(var, sizeof (*var));
-	}
-	// free relocate info
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
+	vdev_anyraid_relocate_task_t *vart;
+	while ((vart = list_remove_head(&var->var_list)))
+		kmem_free(vart, sizeof (*vart));
+	while ((vart = list_remove_head(&var->var_done_list)))
+		kmem_free(vart, sizeof (*vart));
 }
 
 /*
@@ -1433,8 +1434,8 @@ vdev_anyraid_io_start(zio_t *zio)
 	    zio->io_offset, zio->io_size, RL_READER);
 
 	vdev_anyraid_relocate_task_t *task = NULL;
-	if (va->vd_relocate) {
-		vdev_anyraid_relocate_t *var = va->vd_relocate;
+	if (va->vd_relocate.var_state == DSS_SCANNING) {
+		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 		mutex_enter(&var->var_lock);
 		vdev_anyraid_relocate_task_t *vart = list_head(&var->var_list);
 		if (vart && vart->vart_tile == tile->at_tile_id) {
@@ -1546,6 +1547,7 @@ vdev_anyraid_need_resilver(vdev_t *vd, const dva_t *dva, size_t psize,
 {
 	(void) psize;
 	vdev_anyraid_t *va = vd->vdev_tsd;
+	// TODO should we always resilver if we're rebalancing/contracting?
 	if (!vdev_dtl_contains(vd, DTL_PARTIAL, phys_birth, 1))
 		return (B_FALSE);
 
@@ -1587,6 +1589,7 @@ vdev_anyraid_xlate(vdev_t *cvd, const zfs_range_seg64_t *logical_rs,
 	vdev_anyraid_t *va = anyraidvd->vdev_tsd;
 	uint64_t ptsize = va->vd_tile_size;
 	uint64_t ltsize = ptsize * va->vd_width;
+	// TODO should we always fail if we're rebalancing/contracting?
 
 	uint64_t start_tile_id = logical_rs->rs_start / ltsize;
 	ASSERT3U(start_tile_id, ==, (logical_rs->rs_end - 1) / ltsize);
@@ -1860,16 +1863,16 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		fnvlist_add_uint32(header, VDEV_ANYRAID_HEADER_CHECKPOINT,
 		    va->vd_checkpoint_tile);
 	}
-	if (va->vd_relocate) {
-		mutex_enter(&va->vd_relocate->var_lock);
-		uint64_t task = va->vd_relocate->var_synced_task;
+	if (va->vd_relocate.var_state == DSS_SCANNING) {
+		mutex_enter(&va->vd_relocate.var_lock);
+		uint64_t task = va->vd_relocate.var_synced_task;
 		vdev_anyraid_relocate_task_t *vart;
-		list_t *l = &va->vd_relocate->var_done_list;
+		list_t *l = &va->vd_relocate.var_done_list;
 		for (vart = list_head(l);;
 		    vart = list_next(l, vart)) {
 			zfs_dbgmsg("task %d vart: %px %d", (int)task, vart, vart ? (int)vart->vart_task : -1);
 			if (vart == NULL) {
-				l = &va->vd_relocate->var_list;
+				l = &va->vd_relocate.var_list;
 				vart = list_head(l);
 			}
 			ASSERTF(vart, "%llu", (u_longlong_t)task);
@@ -1889,12 +1892,12 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		fnvlist_add_uint16(rebal_task, VART_DEST_OFF,
 		    vart->vart_dest_off);
 		fnvlist_add_uint64(rebal_task, VART_OFFSET,
-		    va->vd_relocate->var_synced_offset);
+		    va->vd_relocate.var_synced_offset);
 		fnvlist_add_uint32(rebal_task, VART_TASK, task);
 		fnvlist_add_nvlist(header,
 		    VDEV_ANYRAID_HEADER_CUR_TASK, rebal_task);
 		fnvlist_free(rebal_task);
-		mutex_exit(&va->vd_relocate->var_lock);
+		mutex_exit(&va->vd_relocate.var_lock);
 	}
 	if (va->vd_contracting_leaf != -1) {
 		zfs_dbgmsg("Adding contracting %llu", (u_longlong_t)txg);
@@ -2182,7 +2185,7 @@ vdev_anyraid_relocate_status(vdev_t *vd)
 {
 	ASSERT(vdev_is_anyraid(vd));
 	vdev_anyraid_t *va = vd->vdev_tsd;
-	return (va->vd_relocate);
+	return (&va->vd_relocate);
 }
 
 static void
@@ -2259,7 +2262,7 @@ tasklist_read(vdev_t *vd)
 {
 	spa_t *spa = vd->vdev_spa;
 	vdev_anyraid_t *va = vd->vdev_tsd;
-	vdev_anyraid_relocate_t *var = va->vd_relocate;
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	uint64_t object;
 	ASSERT3P(spa->spa_anyraid_relocate, ==, var);
 
@@ -2472,7 +2475,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 {
 	struct anyraid_done_arg *ada = arg;
 	vdev_anyraid_t *va = ada->vd->vdev_tsd;
-	vdev_anyraid_relocate_t *var = va->vd_relocate;
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	rw_enter(&va->vd_lock, RW_WRITER);
 	boolean_t noop = (list_head(&var->var_done_list) == NULL);
 	for (vdev_anyraid_relocate_task_t *task =
@@ -2500,13 +2503,8 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 		spa_async_request(spa, SPA_ASYNC_CONTRACTION_DONE);
 	}
 
-	list_destroy(&var->var_list);
-	list_destroy(&var->var_done_list);
-	mutex_destroy(&var->var_lock);
-	cv_destroy(&var->var_cv);
 	spa->spa_anyraid_relocate = NULL;
-	va->vd_relocate = NULL;
-	kmem_free(var, sizeof (*var));
+	va->vd_relocate.var_state = DSS_FINISHED;
 	rw_exit(&va->vd_lock);
 
 	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
@@ -2638,7 +2636,7 @@ create_reloc_task(vdev_anyraid_t *va, struct rebal_node *donor, uint16_t offset,
 	    &rvan->van_freelist);
 	task->vart_tile = donor->arr[offset];
 	task->vart_task = (*tid)++;
-	list_insert_tail(&va->vd_relocate->var_list, task);
+	list_insert_tail(&va->vd_relocate.var_list, task);
 	receiver->arr[task->vart_dest_off] = donor->arr[offset];
 	donor->arr[offset] = -1LL;
 }
@@ -2695,22 +2693,13 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 
 	vdev_config_dirty(vd);
 
-	vdev_anyraid_relocate_t *var = kmem_zalloc(sizeof (*var), KM_SLEEP);
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	var->var_start_time = gethrestime_sec();
 	var->var_state = DSS_SCANNING;
 	var->var_vd = vd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
-	list_create(&var->var_list,
-	    sizeof (vdev_anyraid_relocate_task_t),
-	    offsetof(vdev_anyraid_relocate_task_t, vart_node));
-	list_create(&var->var_done_list,
-	    sizeof (vdev_anyraid_relocate_task_t),
-	    offsetof(vdev_anyraid_relocate_task_t, vart_node));
-	mutex_init(&var->var_lock, NULL, MUTEX_DEFAULT, NULL);
-	cv_init(&var->var_cv, NULL, CV_DEFAULT, NULL);
 
 	mutex_enter(&var->var_lock);
-	va->vd_relocate = var;
 	vd->vdev_spa->spa_anyraid_relocate = var;
 
 	rw_enter(&va->vd_lock, RW_WRITER);
@@ -3345,6 +3334,23 @@ spa_anyraid_relocate_get_stats(spa_t *spa, pool_anyraid_relocate_stat_t *pars)
 {
 	vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
 
+	if (var == NULL) {
+		/* no removal in progress; find most recent completed */
+		for (int c = 0; c < spa->spa_root_vdev->vdev_children; c++) {
+			vdev_t *vd = spa->spa_root_vdev->vdev_child[c];
+			if (vdev_is_anyraid(vd)) {
+				vdev_anyraid_t *va = vd->vdev_tsd;
+
+				if (va->vd_relocate.var_end_time != 0 &&
+				    (var == NULL ||
+				    va->vd_relocate.var_end_time >
+				    var->var_end_time)) {
+					var = &va->vd_relocate;
+				}
+			}
+		}
+	}
+
 	if (var == NULL)
 		return (SET_ERROR(ENOENT));
 
@@ -3412,23 +3418,14 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	if (!dmu_tx_is_syncing(tx))
 		return (vdev_anyraid_check_contract_fast(tvd, lvd));
 
-	vdev_anyraid_relocate_t *var = kmem_zalloc(sizeof (*var), KM_SLEEP);
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	var->var_start_time = gethrestime_sec();
 	var->var_state = DSS_SCANNING;
 	var->var_vd = tvd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
 	va->vd_contracting_leaf = lvd->vdev_id;
-	list_create(&var->var_list,
-	    sizeof (vdev_anyraid_relocate_task_t),
-	    offsetof(vdev_anyraid_relocate_task_t, vart_node));
-	list_create(&var->var_done_list,
-	    sizeof (vdev_anyraid_relocate_task_t),
-	    offsetof(vdev_anyraid_relocate_task_t, vart_node));
-	mutex_init(&var->var_lock, NULL, MUTEX_DEFAULT, NULL);
-	cv_init(&var->var_cv, NULL, CV_DEFAULT, NULL);
 
 	mutex_enter(&var->var_lock);
-	va->vd_relocate = var;
 	tvd->vdev_spa->spa_anyraid_relocate = var;
 
 	rw_enter(&va->vd_lock, RW_WRITER);
@@ -3549,11 +3546,7 @@ out:
 			    vart->vart_dest_off);
 			kmem_free(vart, sizeof (*vart));
 		}
-		mutex_destroy(&var->var_lock);
-		cv_destroy(&var->var_cv);
-		list_destroy(&var->var_list);
-		list_destroy(&var->var_done_list);
-		va->vd_relocate = NULL;
+		var->var_state = DSS_FINISHED;
 		tvd->vdev_spa->spa_anyraid_relocate = NULL;
 		kmem_free(var, sizeof (*var));
 	}
@@ -3576,7 +3569,7 @@ void
 vdev_anyraid_setup_contract(vdev_t *tvd, dmu_tx_t *tx)
 {
 	vdev_anyraid_t *va = tvd->vdev_tsd;
-	vdev_anyraid_relocate_t *var = va->vd_relocate;
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	ASSERT(MUTEX_HELD(&var->var_lock));
 	spa_t *spa = tvd->vdev_spa;
 	if (list_head(&var->var_list) == NULL) {
