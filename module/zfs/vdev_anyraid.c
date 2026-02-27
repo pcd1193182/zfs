@@ -2805,6 +2805,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		var->var_state = DSS_FINISHED;
 		mutex_exit(&var->var_lock);
 		anyraid_relocate_complete_sync(vd->vdev_spa, tx);
+		zfs_dbgmsg("shortcircuiting rebalance due to empty plan");
 		return;
 	}
 
@@ -2813,6 +2814,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	kmem_free(num_tiles, vd->vdev_children * sizeof (*num_tiles));
 	ASSERT3U(vd->vdev_asize, >=, updated_asize);
 	var->var_nonalloc = vd->vdev_asize - updated_asize;
+	zfs_dbgmsg("rebalance plan created: %llu nonalloc, %d tasks", (u_longlong_t)var->var_nonalloc, tid);
 	vdev_update_nonallocating_space(vd, var->var_nonalloc, B_TRUE);
 
 	objset_t *mos = vd->vdev_spa->spa_meta_objset;
