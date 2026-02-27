@@ -2698,6 +2698,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	var->var_state = DSS_SCANNING;
 	var->var_vd = vd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
+	var->var_offset = 0;
 
 	mutex_enter(&var->var_lock);
 	vd->vdev_spa->spa_anyraid_relocate = var;
@@ -3424,6 +3425,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	var->var_vd = tvd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
 	va->vd_contracting_leaf = lvd->vdev_id;
+	var->var_offset = 0;
 
 	mutex_enter(&var->var_lock);
 	tvd->vdev_spa->spa_anyraid_relocate = var;
