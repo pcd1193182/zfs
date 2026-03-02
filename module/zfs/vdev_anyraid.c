@@ -2491,6 +2491,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 
 	objset_t *mos = spa->spa_meta_objset;
 	if (!noop) {
+		zfs_dbgmsg("freeing obj %llu in %llu", (u_longlong_t) var->var_object, (u_longlong_t)dmu_tx_get_txg(tx));
 		VERIFY0(dmu_object_free(mos, var->var_object, tx));
 		VERIFY0(zap_remove(mos, DMU_POOL_DIRECTORY_OBJECT,
 		    DMU_POOL_RELOCATE_OBJ, tx));
@@ -2811,6 +2812,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 	var->var_object = dmu_object_alloc(mos, DMU_OTN_UINT32_METADATA,
 	    SPA_OLD_MAXBLOCKSIZE, DMU_OTN_UINT64_METADATA,
 	    sizeof (relocate_phys_t), tx);
+	zfs_dbgmsg("allocating obj %llu in %llu", (u_longlong_t) var->var_object, (u_longlong_t)dmu_tx_get_txg(tx));
 	VERIFY0(zap_add(mos, DMU_POOL_DIRECTORY_OBJECT, DMU_POOL_RELOCATE_OBJ,
 	    sizeof (uint64_t), 1, &var->var_object, tx));
 
