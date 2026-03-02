@@ -8628,19 +8628,19 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	fprintf(stderr, "b\n");
 
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-	int ret = spa_anyraid_relocate_get_stats(spa, pars);
+	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 	fprintf(stderr, "d\n");
-	while (ret == 0 && pars->pars_state < DSS_SCANNING) {
+	while (pars->pars_state < DSS_SCANNING) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-		ret = spa_anyraid_relocate_get_stats(spa, pars);
+		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
 	(void) poll(NULL, 0, 1000); /* wait 1 second */
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-	ret = spa_anyraid_relocate_get_stats(spa, pars);
+	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
 	if (pars->pars_state != DSS_SCANNING)
@@ -8659,11 +8659,11 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	/*
 	 * Wait for rebal maximum to be reached and then kill the test
 	 */
-	while (ret == 0 && pars->pars_moved < rebal_max) {
+	while (pars->pars_moved < rebal_max) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-		ret = spa_anyraid_relocate_get_stats(spa, pars);
+		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
 
