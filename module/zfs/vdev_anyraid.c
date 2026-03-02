@@ -2525,9 +2525,11 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 {
 	spa_t *spa = arg;
 	vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
+	ASSERT(var);
 	vdev_t *vd = vdev_lookup_top(spa, var->var_vd);
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
+	ASSERT(va);
 	for (int i = 0; i < TXG_SIZE; i++) {
 		VERIFY0(var->var_offset_pertxg[i]);
 	}
@@ -3296,7 +3298,7 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_relocate_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
-		zfs_dbgmsg("var_state to ARS_FINISHED");
+		zfs_dbgmsg("var_state to ARS_SCRUBBING");
 		var->var_state = ARS_SCRUBBING;
 	} else {
 		/*
