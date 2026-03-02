@@ -745,6 +745,7 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 	if (error == 0) {
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 
+		zfs_dbgmsg("var_state to DSS_SCANNING");
 		var->var_state = DSS_SCANNING;
 		var->var_vd = vd->vdev_id;
 		var->var_failed_offset = UINT64_MAX;
@@ -2505,6 +2506,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	}
 
 	spa->spa_anyraid_relocate = NULL;
+	zfs_dbgmsg("var_state to DSS_FINISHED");
 	va->vd_relocate.var_state = DSS_FINISHED;
 	rw_exit(&va->vd_lock);
 
@@ -2696,6 +2698,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 
 	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	var->var_start_time = gethrestime_sec();
+	zfs_dbgmsg("var_state to DSS_SCANNING");
 	var->var_state = DSS_SCANNING;
 	var->var_vd = vd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
@@ -2787,6 +2790,7 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		avl_destroy(&at);
 
 		var->var_nonalloc = 0;
+		zfs_dbgmsg("var_state to DSS_FINISHED");
 		var->var_state = DSS_FINISHED;
 		mutex_exit(&var->var_lock);
 		anyraid_relocate_complete_sync(vd->vdev_spa, tx);
@@ -3292,6 +3296,7 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_relocate_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
+		zfs_dbgmsg("var_state to DSS_FINISHED");
 		var->var_state = DSS_FINISHED;
 	} else {
 		/*
@@ -3417,6 +3422,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 
 	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	var->var_start_time = gethrestime_sec();
+	zfs_dbgmsg("var_state to DSS_SCANNING");
 	var->var_state = DSS_SCANNING;
 	var->var_vd = tvd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
@@ -3544,6 +3550,7 @@ out:
 			    vart->vart_dest_off);
 			kmem_free(vart, sizeof (*vart));
 		}
+		zfs_dbgmsg("var_state to DSS_FINISHED");
 		var->var_state = DSS_FINISHED;
 		tvd->vdev_spa->spa_anyraid_relocate = NULL;
 		kmem_free(var, sizeof (*var));
