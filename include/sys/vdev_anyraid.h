@@ -63,7 +63,7 @@ typedef struct vdev_anyraid_relocate {
 	uint64_t	var_synced_task;
 	uint64_t	var_vd;
 
-	dsl_scan_state_t var_state;
+	anyraid_relocate_state_t var_state;
 	uint64_t	var_start_time;
 	uint64_t	var_end_time;
 	uint64_t	var_bytes_copied;

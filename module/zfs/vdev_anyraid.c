@@ -745,8 +745,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 	if (error == 0) {
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 
-		zfs_dbgmsg("var_state to DSS_SCANNING");
-		var->var_state = DSS_SCANNING;
+		zfs_dbgmsg("var_state to ARS_SCANNING");
+		var->var_state = ARS_SCANNING;
 		var->var_vd = vd->vdev_id;
 		var->var_failed_offset = UINT64_MAX;
 		var->var_failed_task = UINT64_MAX;
@@ -1187,7 +1187,7 @@ vdev_anyraid_load(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
-	if (va->vd_relocate.var_state != DSS_SCANNING)
+	if (va->vd_relocate.var_state != ARS_SCANNING)
 		return (0);
 
 	return (tasklist_read(vd));
@@ -1435,7 +1435,7 @@ vdev_anyraid_io_start(zio_t *zio)
 	    zio->io_offset, zio->io_size, RL_READER);
 
 	vdev_anyraid_relocate_task_t *task = NULL;
-	if (va->vd_relocate.var_state == DSS_SCANNING) {
+	if (va->vd_relocate.var_state == ARS_SCANNING) {
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 		mutex_enter(&var->var_lock);
 		vdev_anyraid_relocate_task_t *vart = list_head(&var->var_list);
@@ -1864,7 +1864,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		fnvlist_add_uint32(header, VDEV_ANYRAID_HEADER_CHECKPOINT,
 		    va->vd_checkpoint_tile);
 	}
-	if (va->vd_relocate.var_state == DSS_SCANNING) {
+	if (va->vd_relocate.var_state == ARS_SCANNING) {
 		mutex_enter(&va->vd_relocate.var_lock);
 		uint64_t task = va->vd_relocate.var_synced_task;
 		vdev_anyraid_relocate_task_t *vart;
@@ -2506,8 +2506,8 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	}
 
 	spa->spa_anyraid_relocate = NULL;
-	zfs_dbgmsg("var_state to DSS_FINISHED");
-	va->vd_relocate.var_state = DSS_FINISHED;
+	zfs_dbgmsg("var_state to ARS_FINISHED");
+	va->vd_relocate.var_state = ARS_FINISHED;
 	rw_exit(&va->vd_lock);
 
 	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
@@ -2698,8 +2698,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 
 	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	var->var_start_time = gethrestime_sec();
-	zfs_dbgmsg("var_state to DSS_SCANNING");
-	var->var_state = DSS_SCANNING;
+	zfs_dbgmsg("var_state to ARS_SCANNING");
+	var->var_state = ARS_SCANNING;
 	var->var_vd = vd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
 	var->var_offset = 0;
@@ -2790,8 +2790,8 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 		avl_destroy(&at);
 
 		var->var_nonalloc = 0;
-		zfs_dbgmsg("var_state to DSS_FINISHED");
-		var->var_state = DSS_FINISHED;
+		zfs_dbgmsg("var_state to ARS_FINISHED");
+		var->var_state = ARS_FINISHED;
 		mutex_exit(&var->var_lock);
 		anyraid_relocate_complete_sync(vd->vdev_spa, tx);
 		zfs_dbgmsg("shortcircuiting rebalance due to empty plan");
@@ -2839,7 +2839,7 @@ spa_anyraid_relocate_thread_check(void *arg, zthr_t *zthr)
 	spa_t *spa = arg;
 	vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
 
-	return (var != NULL && var->var_state != DSS_FINISHED);
+	return (var != NULL && var->var_state != ARS_FINISHED);
 }
 
 /*
@@ -3296,8 +3296,8 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_relocate_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
-		zfs_dbgmsg("var_state to DSS_FINISHED");
-		var->var_state = DSS_FINISHED;
+		zfs_dbgmsg("var_state to ARS_FINISHED");
+		var->var_state = ARS_SCRUBBING;
 	} else {
 		/*
 		 * Wait for all copy zio's to complete and for all the
@@ -3422,8 +3422,8 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 
 	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	var->var_start_time = gethrestime_sec();
-	zfs_dbgmsg("var_state to DSS_SCANNING");
-	var->var_state = DSS_SCANNING;
+	zfs_dbgmsg("var_state to ARS_SCANNING");
+	var->var_state = ARS_SCANNING;
 	var->var_vd = tvd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
 	va->vd_contracting_leaf = lvd->vdev_id;
@@ -3550,8 +3550,8 @@ out:
 			    vart->vart_dest_off);
 			kmem_free(vart, sizeof (*vart));
 		}
-		zfs_dbgmsg("var_state to DSS_FINISHED");
-		var->var_state = DSS_FINISHED;
+		zfs_dbgmsg("var_state to ARS_FINISHED");
+		var->var_state = ARS_FINISHED;
 		tvd->vdev_spa->spa_anyraid_relocate = NULL;
 		kmem_free(var, sizeof (*var));
 	}

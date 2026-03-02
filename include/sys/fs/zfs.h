@@ -1252,16 +1252,6 @@ typedef struct pool_raidz_expand_stat {
 	uint64_t pres_waiting_for_resilver;
 } pool_raidz_expand_stat_t;
 
-typedef struct pool_anyraid_relocate_stat {
-	uint64_t pars_state; /* dsl_scan_state_t */
-	uint64_t pars_relocating_vdev;
-	uint64_t pars_start_time;
-	uint64_t pars_end_time;
-	uint64_t pars_to_move; /* bytes that need to be moved */
-	uint64_t pars_moved; /* bytes moved so far */
-	uint64_t pars_waiting_for_resilver;
-} pool_anyraid_relocate_stat_t;
-
 typedef enum dsl_scan_state {
 	DSS_NONE,
 	DSS_SCANNING,
@@ -1270,6 +1260,24 @@ typedef enum dsl_scan_state {
 	DSS_ERRORSCRUBBING,
 	DSS_NUM_STATES
 } dsl_scan_state_t;
+
+typedef struct pool_anyraid_relocate_stat {
+	uint64_t pars_state; /* anyraid_relocate_state_t */
+	uint64_t pars_relocating_vdev;
+	uint64_t pars_start_time;
+	uint64_t pars_end_time;
+	uint64_t pars_to_move; /* bytes that need to be moved */
+	uint64_t pars_moved; /* bytes moved so far */
+	uint64_t pars_waiting_for_resilver;
+} pool_anyraid_relocate_stat_t;
+
+typedef enum anyraid_relocate_state {
+	ARS_NONE,
+	ARS_SCANNING,
+	ARS_SCRUBBING,
+	ARS_FINISHED,
+	ARS_NUM_STATES
+} anyraid_relocate_state_t;
 
 typedef struct vdev_rebuild_stat {
 	uint64_t vrs_state;		/* vdev_rebuild_state_t */

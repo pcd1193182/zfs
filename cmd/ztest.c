@@ -8461,7 +8461,7 @@ ztest_anyraid_rebal_check(spa_t *spa)
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
-	} while (pars->pars_state != DSS_FINISHED &&
+	} while (pars->pars_state < ARS_FINISHED &&
 	    pars->pars_moved < pars->pars_to_move);
 
 	if (ztest_opts.zo_verbose >= 1) {
@@ -8470,11 +8470,7 @@ ztest_anyraid_rebal_check(spa_t *spa)
 	}
 
 	/* Will fail here if there is non-recoverable corruption detected */
-	int error = ztest_scrub_impl(spa);
-	if (error == EBUSY)
-		error = 0;
-
-	VERIFY0(error);
+	VERIFY0(spa_approx_errlog_size(spa));
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("anyraid rebalance scrub check complete\n");
@@ -8633,7 +8629,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 	fprintf(stderr, "d\n");
-	while (pars->pars_state < DSS_SCANNING) {
+	while (pars->pars_state < ARS_SCANNING) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
@@ -8645,7 +8641,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
-	if (pars->pars_state != DSS_SCANNING)
+	if (pars->pars_state != ARS_SCANNING)
 		return;
 	ASSERT3U(pars->pars_to_move, !=, 0);
 	/*
@@ -8710,7 +8706,7 @@ ztest_anyraid_contract_check(spa_t *spa)
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 		ret = spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
-	} while (ret == 0 && pars->pars_state != DSS_FINISHED &&
+	} while (ret == 0 && pars->pars_state != ARS_FINISHED &&
 	    pars->pars_moved < pars->pars_to_move);
 
 	if (ztest_opts.zo_verbose >= 1) {
@@ -8801,7 +8797,7 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
-	while (pars->pars_state != DSS_SCANNING) {
+	while (pars->pars_state != ARS_SCANNING) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
@@ -8809,7 +8805,7 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
 
-	ASSERT3U(pars->pars_state, ==, DSS_SCANNING);
+	ASSERT3U(pars->pars_state, ==, ARS_SCANNING);
 	ASSERT3U(pars->pars_to_move, !=, 0);
 	/*
 	 * Set so when we are killed we go to anyraid checking rather than

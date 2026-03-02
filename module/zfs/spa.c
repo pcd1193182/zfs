@@ -11679,7 +11679,7 @@ spa_activity_in_progress(spa_t *spa, zpool_wait_activity_t activity,
 	case ZPOOL_WAIT_ANYRAID_RELOCATE:
 	{
 		vdev_anyraid_relocate_t *var = spa->spa_anyraid_relocate;
-		*in_progress = (var != NULL && var->var_state == DSS_SCANNING);
+		*in_progress = (var != NULL && var->var_state == ARS_SCANNING);
 		break;
 	}
 	default:
@@ -11822,7 +11822,7 @@ spa_check_start_rebalance(void *arg, dmu_tx_t *tx) {
 	vdev_t *vd = (vdev_t *)arg;
 	if (!vdev_is_anyraid(vd))
 		return (SET_ERROR(EINVAL));
-	if (vdev_anyraid_relocate_status(vd)->var_state == DSS_SCANNING)
+	if (vdev_anyraid_relocate_status(vd)->var_state == ARS_SCANNING)
 		return (SET_ERROR(EALREADY));
 	if (vd->vdev_spa->spa_anyraid_relocate != NULL)
 		return (SET_ERROR(EEXIST));

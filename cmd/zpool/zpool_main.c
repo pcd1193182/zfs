@@ -10362,7 +10362,7 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 {
 	char copied_buf[7];
 
-	if (pars == NULL || pars->pars_state == DSS_NONE)
+	if (pars == NULL || pars->pars_state == ARS_NONE)
 		return;
 
 	/*
@@ -10388,7 +10388,7 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 	/*
 	 * Expansion is finished or canceled.
 	 */
-	if (pars->pars_state == DSS_FINISHED) {
+	if (pars->pars_state == ARS_FINISHED) {
 		char time_buf[32];
 		secs_to_dhms(end - start, time_buf);
 
@@ -10400,7 +10400,7 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 		uint64_t copied, total, elapsed, rate, secs_left;
 		double fraction_done;
 
-		assert(pars->pars_state == DSS_SCANNING);
+		assert(pars->pars_state == ARS_SCANNING);
 
 		/*
 		 * Expansion is in progress.
@@ -13498,7 +13498,7 @@ print_wait_status_row(wait_data_t *wd, zpool_handle_t *zhp, int row)
 
 	(void) nvlist_lookup_uint64_array(nvroot,
 	    ZPOOL_CONFIG_ANYRAID_RELOCATE_STATS, (uint64_t **)&pars, &c);
-	if (pars != NULL && pars->pars_state == DSS_SCANNING) {
+	if (pars != NULL && pars->pars_state == ARS_SCANNING) {
 		int64_t rem = pars->pars_to_move - pars->pars_moved;
 		bytes_rem[ZPOOL_WAIT_ANYRAID_RELOCATE] = rem;
 	}
