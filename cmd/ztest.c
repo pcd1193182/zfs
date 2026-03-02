@@ -8237,6 +8237,7 @@ ztest_raidz_expand_check(spa_t *spa)
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("raidz expansion scrub check complete\n");
+		dump_debug_buffer();
 	}
 }
 
@@ -8477,6 +8478,7 @@ ztest_anyraid_rebal_check(spa_t *spa)
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("anyraid rebalance scrub check complete\n");
+		dump_debug_buffer();
 	}
 }
 
