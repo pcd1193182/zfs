@@ -2755,12 +2755,6 @@ vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx)
 				avl_add(&ft, receiver);
 				avl_add(&at, receiver);
 				num_tiles[receiver->cvd]--;
-				avl_remove(&ft, donor);
-				avl_remove(&at, donor);
-				donor->free++;
-				donor->alloc--;
-				avl_add(&ft, donor);
-				avl_add(&at, donor);
 				break;
 			}
 			if (moved)
