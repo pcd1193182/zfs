@@ -8575,14 +8575,14 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 
 	ztest_write_some_data(zs, spa, 0);
 
-	/* Set our reflow target to 12%, 25% or 37% of allocated size */
+	/* Set our reflow target to 10%, 20% or 30% of allocated size */
 	uint_t multiple = ztest_random(3) + 1;
-	uint64_t rebal_max = (arvd->vdev_stat.vs_alloc * multiple) / 8;
+	uint64_t rebal_max = (arvd->vdev_stat.vs_alloc * multiple) / 10;
 	anyraid_relocate_max_bytes_pause = rebal_max;
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("running anyraid_rebalance test, killing when "
-		    "rebalance reaches %llu bytes (%u/4 of allocated space)\n",
+		    "rebalance reaches %llu bytes (%u/10 of allocated space)\n",
 		    (u_longlong_t)rebal_max, multiple);
 	}
 
