@@ -8673,6 +8673,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("killing anyraid rebalance test after move "
 		    "reached %llu bytes\n", (u_longlong_t)pars->pars_moved);
+		dump_debug_buffer();
 	}
 
 	/*
