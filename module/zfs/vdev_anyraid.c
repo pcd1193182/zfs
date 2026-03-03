@@ -3295,6 +3295,7 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		 * complete. In that case also mark it as completed on disk.
 		 */
 		ASSERT3U(var->var_failed_offset, ==, UINT64_MAX);
+		ASSERT(spa->spa_anyraid_relocate);
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_relocate_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
