@@ -157,7 +157,7 @@ static
 #endif	/* _KERNEL */
 unsigned long anyraid_relocate_max_bytes_pause = 0;
 
-static int tasklist_read(vdev_t *vd);
+static int tasklist_read(vdev_t *vd, uint64_t object);
 
 static int
 af_compar(const void *p1, const void *p2)
@@ -1187,10 +1187,22 @@ vdev_anyraid_load(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
-	if (va->vd_relocate.var_state != ARS_SCANNING)
-		return (0);
+	uint64_t object;
+	objset_t *mos = vd->vdev_spa->spa_meta_objset;
+	int error = zap_lookup(mos, DMU_POOL_DIRECTORY_OBJECT,
+	    DMU_POOL_RELOCATE_OBJ, sizeof (uint64_t), 1, &object);
+	if (error !=0 && error != ENOENT)
+		return (error);
 
-	return (tasklist_read(vd));
+	if (va->vd_relocate.var_state != ARS_SCANNING && error == 0)
+
+	if (va->vd_relocate.var_state != ARS_SCANNING) {
+		if (error != 0)
+			return (0);
+		va->vd_relocate.var_state = ARS_SCRUBBING;
+	}
+
+	return (tasklist_read(vd, object));
 }
 
 /*
@@ -2259,25 +2271,17 @@ tasklist_write(spa_t *spa, vdev_anyraid_relocate_t *var, dmu_tx_t *tx)
 }
 
 static int
-tasklist_read(vdev_t *vd)
+tasklist_read(vdev_t *vd, uint64_t object)
 {
 	spa_t *spa = vd->vdev_spa;
+	objset_t *mos = spa->spa_meta_objset;
 	vdev_anyraid_t *va = vd->vdev_tsd;
 	vdev_anyraid_relocate_t *var = &va->vd_relocate;
-	uint64_t object;
 	ASSERT3P(spa->spa_anyraid_relocate, ==, var);
 
-	objset_t *mos = spa->spa_meta_objset;
-	int error = zap_lookup(mos, DMU_POOL_DIRECTORY_OBJECT,
-	    DMU_POOL_RELOCATE_OBJ, sizeof (uint64_t), 1, &object);
-	if (error) {
-		mutex_exit(&var->var_lock);
-		return (error);
-	}
-
+	int error = 0;
 	dmu_buf_t *dbp;
 	if ((error = dmu_bonus_hold(mos, object, FTAG, &dbp)) != 0) {
-		mutex_exit(&var->var_lock);
 		return (error);
 	}
 	relocate_phys_t *rpp = dbp->db_data;
