@@ -157,7 +157,7 @@ static
 #endif	/* _KERNEL */
 unsigned long anyraid_relocate_max_bytes_pause = 0;
 
-static int tasklist_read(vdev_t *vd, uint64_t object);
+static int tasklist_read(vdev_t *vd);
 
 static int
 af_compar(const void *p1, const void *p2)
@@ -733,6 +733,22 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		return (0);
 	}
 
+	uint32_t state = ARS_NONE;
+	(void) nvlist_lookup_uint32(header.ah_nvl,
+	    VDEV_ANYRAID_HEADER_RELOC_STATE, &state);
+	if (state != ARS_NONE) {
+		vdev_anyraid_relocate_t *var = &va->vd_relocate;
+		var->var_state = state;
+		var->var_vd = vd->vdev_id;
+		if (spa->spa_anyraid_relocate != NULL) {
+			zfs_dbgmsg("Error opening anyraid vdev %llu: Relocate "
+			    "active when another relocate is in progress", (u_longlong_t)vd->vdev_id);
+			free_header(&header, header_size);
+			return (EINVAL);
+		}
+		spa->spa_anyraid_relocate = var;
+	}
+
 	nvlist_t *cur_task;
 	error = nvlist_lookup_nvlist(header.ah_nvl,
 	    VDEV_ANYRAID_HEADER_CUR_TASK, &cur_task);
@@ -745,9 +761,7 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 	if (error == 0) {
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 
-		zfs_dbgmsg("var_state to ARS_SCANNING");
-		var->var_state = ARS_SCANNING;
-		var->var_vd = vd->vdev_id;
+		ASSERT3U(var->var_state, ==, ARS_SCANNING);
 		var->var_failed_offset = UINT64_MAX;
 		var->var_failed_task = UINT64_MAX;
 
@@ -1187,22 +1201,10 @@ vdev_anyraid_load(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
-	uint64_t object;
-	objset_t *mos = vd->vdev_spa->spa_meta_objset;
-	int error = zap_lookup(mos, DMU_POOL_DIRECTORY_OBJECT,
-	    DMU_POOL_RELOCATE_OBJ, sizeof (uint64_t), 1, &object);
-	if (error !=0 && error != ENOENT)
-		return (error);
+	if (va->vd_relocate.var_state != ARS_SCANNING && va->vd_relocate.var_state != ARS_SCRUBBING)
+		return (0);
 
-	if (va->vd_relocate.var_state != ARS_SCANNING && error == 0)
-
-	if (va->vd_relocate.var_state != ARS_SCANNING) {
-		if (error != 0)
-			return (0);
-		va->vd_relocate.var_state = ARS_SCRUBBING;
-	}
-
-	return (tasklist_read(vd, object));
+	return (tasklist_read(vd));
 }
 
 /*
@@ -1876,7 +1878,11 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 		fnvlist_add_uint32(header, VDEV_ANYRAID_HEADER_CHECKPOINT,
 		    va->vd_checkpoint_tile);
 	}
-	if (va->vd_relocate.var_state == ARS_SCANNING) {
+	vdev_anyraid_relocate_t *var = &va->vd_relocate;
+	if (var->var_state != ARS_NONE && var->var_state != ARS_FINISHED)
+		fnvlist_add_uint32(header, VDEV_ANYRAID_HEADER_RELOC_STATE,
+		    (uint32_t)var->var_state);
+	if (var->var_state == ARS_SCANNING) {
 		mutex_enter(&va->vd_relocate.var_lock);
 		uint64_t task = va->vd_relocate.var_synced_task;
 		vdev_anyraid_relocate_task_t *vart;
@@ -2271,7 +2277,7 @@ tasklist_write(spa_t *spa, vdev_anyraid_relocate_t *var, dmu_tx_t *tx)
 }
 
 static int
-tasklist_read(vdev_t *vd, uint64_t object)
+tasklist_read(vdev_t *vd)
 {
 	spa_t *spa = vd->vdev_spa;
 	objset_t *mos = spa->spa_meta_objset;
@@ -2279,11 +2285,16 @@ tasklist_read(vdev_t *vd, uint64_t object)
 	vdev_anyraid_relocate_t *var = &va->vd_relocate;
 	ASSERT3P(spa->spa_anyraid_relocate, ==, var);
 
-	int error = 0;
-	dmu_buf_t *dbp;
-	if ((error = dmu_bonus_hold(mos, object, FTAG, &dbp)) != 0) {
+	uint64_t object;
+	int error = zap_lookup(mos, DMU_POOL_DIRECTORY_OBJECT,
+	    DMU_POOL_RELOCATE_OBJ, sizeof (uint64_t), 1, &object);
+	if (error != 0)
 		return (error);
-	}
+
+	dmu_buf_t *dbp;
+	if ((error = dmu_bonus_hold(mos, object, FTAG, &dbp)) != 0)
+		return (error);
+
 	relocate_phys_t *rpp = dbp->db_data;
 	size_t done = rpp->rp_done;
 	size_t total = rpp->rp_total;
