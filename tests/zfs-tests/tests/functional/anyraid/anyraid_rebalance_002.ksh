@@ -48,7 +48,7 @@ verify_runnable "global"
 cleanup() {
 	zpool destroy $TESTPOOL
 	set_tunable64 ANYRAID_MIN_TILE_SIZE 1073741824
-	restore_tunable ANYRAID_REBALANCE_MAX_BYTES_PAUSE
+	restore_tunable ANYRAID_RELOCATE_MAX_BYTES_PAUSE
 	rm $TEST_BASE_DIR/vdev_file.{0,1,2,3,4,5}
 }
 
@@ -57,8 +57,8 @@ log_onexit cleanup
 log_must truncate -s 775M $TEST_BASE_DIR/vdev_file.{0,1,2,3,4}
 log_must truncate -s 1088M $TEST_BASE_DIR/vdev_file.5
 set_tunable64 ANYRAID_MIN_TILE_SIZE 67108864
-save_tunable ANYRAID_REBALANCE_MAX_BYTES_PAUSE
-set_tunable64 ANYRAID_REBALANCE_MAX_BYTES_PAUSE $((16 * 1024 * 1024))
+save_tunable ANYRAID_RELOCATE_MAX_BYTES_PAUSE
+set_tunable64 ANYRAID_RELOCATE_MAX_BYTES_PAUSE $((16 * 1024 * 1024))
 
 log_assert "Anyraid rebalance works correctly when paused and resumed"
 
@@ -83,7 +83,7 @@ log_must sleep 1
 log_must zpool export $TESTPOOL
 log_must zpool import $TESTPOOL -d $TEST_BASE_DIR
 
-set_tunable64 ANYRAID_REBALANCE_MAX_BYTES_PAUSE 0
+set_tunable64 ANYRAID_RELOCATE_MAX_BYTES_PAUSE 0
 
 log_must zpool wait -t anyraid_relocate,scrub $TESTPOOL
 log_must zpool sync $TESTPOOL
