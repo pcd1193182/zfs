@@ -2328,7 +2328,7 @@ tasklist_read(vdev_t *vd)
 				return (error);
 			}
 		}
-		if (i == done) {
+		if (i == done && list_head(&var->var_list)) {
 			l = &var->var_list;
 			vdev_anyraid_relocate_task_t *vart =
 			    list_remove_head(l);
