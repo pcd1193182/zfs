@@ -461,6 +461,7 @@ create_tile_entry(spa_t *spa, vdev_anyraid_t *va, anyraid_map_loc_entry_t *amle,
 	avl_remove(&va->vd_children_tree, van);
 
 	anyraid_freelist_remove(&van->van_freelist, offset);
+	zfs_dbgmsg("Allocing %d in %d", offset, disk);
 	avl_add(&va->vd_children_tree, van);
 	*out_at = at;
 }
@@ -2380,14 +2381,18 @@ tasklist_read(vdev_t *vd)
 		    &va->vd_children[vart->vart_source_disk]->van_freelist;
 		boolean_t sourcefree = anyraid_freelist_isfree(af,
 		    vart->vart_source_off);
-		if (sourcefree)
+		if (sourcefree) {
 			anyraid_freelist_remove(af, vart->vart_source_off);
+			zfs_dbgmsg("Allocing %d in %d", vart->vart_source_off, vart->vart_source_disk);
+		}
 
 		af = &va->vd_children[vart->vart_dest_disk]->van_freelist;
 		boolean_t destfree = anyraid_freelist_isfree(af,
 		    vart->vart_dest_off);
-		if (destfree)
+		if (destfree) {
 			anyraid_freelist_remove(af, vart->vart_dest_off);
+			zfs_dbgmsg("Allocing %d in %d", vart->vart_dest_off, vart->vart_dest_disk);
+		}
 
 		// Either one or the other should be in the mapping already.
 		ASSERT3U(sourcefree, !=, destfree);
@@ -2497,6 +2502,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	for (vdev_anyraid_relocate_task_t *task =
 	    list_head(&var->var_done_list); task;
 	    task = list_head(&var->var_done_list)) {
+		zfs_dbgmsg("Freeing %d in %d", task->vart_dest_off, task->vart_dest_disk);
 		anyraid_freelist_add(
 		    &va->vd_children[task->vart_source_disk]->van_freelist,
 		    task->vart_source_off);
@@ -2654,6 +2660,7 @@ create_reloc_task(vdev_anyraid_t *va, struct rebal_node *donor, uint16_t offset,
 	    anyraid_freelist_alloc(&rvan->van_freelist));
 	task->vart_dest_off = anyraid_freelist_pop(
 	    &rvan->van_freelist);
+	zfs_dbgmsg("Allocing %d in %d", task->vart_dest_off, task->vart_dest_disk);
 	task->vart_tile = donor->arr[offset];
 	task->vart_task = (*tid)++;
 	list_insert_tail(&va->vd_relocate.var_list, task);
@@ -3564,6 +3571,7 @@ out:
 		while ((vart = list_remove_head(&var->var_list))) {
 			vdev_anyraid_node_t *van =
 			    va->vd_children[vart->vart_dest_disk];
+			zfs_dbgmsg("Freeing %d in %d", vart->vart_dest_off, vart->vart_dest_disk);
 			anyraid_freelist_add(&van->van_freelist,
 			    vart->vart_dest_off);
 			kmem_free(vart, sizeof (*vart));
