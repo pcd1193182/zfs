@@ -3454,7 +3454,11 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	va->vd_contracting_leaf = lvd->vdev_id;
 	var->var_offset = 0;
 
-	mutex_enter(&var->var_lock);
+	/*
+	 * This is unlocked in the setup function, since we need the state to
+	 * remain consistent between the two.
+	 */
+	mutex_enter(&var->var_lock); 
 	tvd->vdev_spa->spa_anyraid_relocate = var;
 
 	rw_enter(&va->vd_lock, RW_WRITER);
@@ -3579,7 +3583,7 @@ out:
 		zfs_dbgmsg("var_state to ARS_FINISHED");
 		var->var_state = ARS_FINISHED;
 		tvd->vdev_spa->spa_anyraid_relocate = NULL;
-		kmem_free(var, sizeof (*var));
+		mutex_exit(&var->var_lock);
 	}
 	rw_exit(&va->vd_lock);
 
