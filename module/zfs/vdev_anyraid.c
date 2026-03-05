@@ -3451,6 +3451,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	var->var_state = ARS_SCANNING;
 	var->var_vd = tvd->vdev_id;
 	var->var_failed_offset = var->var_failed_task = UINT64_MAX;
+	ASSERT3S(va->vd_contracting_leaf, ==, -1);
 	va->vd_contracting_leaf = lvd->vdev_id;
 	var->var_offset = 0;
 
@@ -3583,6 +3584,7 @@ out:
 		zfs_dbgmsg("var_state to ARS_FINISHED");
 		var->var_state = ARS_FINISHED;
 		tvd->vdev_spa->spa_anyraid_relocate = NULL;
+		va->vd_contracting_leaf = -1;
 		mutex_exit(&var->var_lock);
 	}
 	rw_exit(&va->vd_lock);
