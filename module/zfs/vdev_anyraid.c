@@ -3517,6 +3517,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 			break;
 		}
 		if (!moved) {
+			zfs_dbgmsg("Nowhere to move tile %d", o);
 			/*
 			 * We couldn't find anywhere to put this tile, we can't
 			 * do contraction right now. It's possible that by
