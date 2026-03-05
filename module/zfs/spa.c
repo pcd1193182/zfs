@@ -11889,7 +11889,8 @@ spa_check_start_contract(void *arg, dmu_tx_t *tx) {
 	vdev_t *tvd = lvd->vdev_top;
 	if (!vdev_is_anyraid(tvd))
 		return (SET_ERROR(EINVAL));
-	if (vdev_anyraid_relocate_status(tvd) != NULL)
+	if (vdev_anyraid_relocate_status(tvd)->var_state == ARS_SCANNING ||
+	    vdev_anyraid_relocate_status(tvd)->var_state == ARS_SCRUBBING)
 		return (SET_ERROR(EALREADY));
 	if (tvd->vdev_spa->spa_anyraid_relocate != NULL)
 		return (SET_ERROR(EEXIST));
