@@ -10377,7 +10377,9 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 	    &child, &children) == 0);
 	assert(pars->pars_relocating_vdev < children);
 
-	printf_color(ANSI_BOLD, gettext("rebalance: "));
+	printf("  ");
+	printf_color(ANSI_BOLD, gettext("rebalance:"));
+	printf(" ");
 
 	time_t start = pars->pars_start_time;
 	time_t end = pars->pars_end_time;
