@@ -8502,8 +8502,9 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 	uint_t target = ztest_random(8);
 	uint64_t alloc_goal = (free_space * target) / 10;
 	if (ztest_opts.zo_verbose >= 1) {
-		(void) printf("adding data to pool '%s', goal %llu bytes\n",
-		    ztest_opts.zo_pool, (u_longlong_t)alloc_goal);
+		(void) printf("adding data to pool '%s', goal %llu/%llu "
+		    "bytes\n", ztest_opts.zo_pool, (u_longlong_t)alloc_goal,
+		    (u_longlong_t)free_space);
 	}
 
 	if (alloc_goal == 0)
@@ -8767,7 +8768,7 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	 * Expand the anyraid vdev by attaching the new disk
 	 */
 	if (ztest_opts.zo_verbose >= 1) {
-		(void) printf("contracting anyraid: %d wide to %d wide with "
+		(void) printf("expanding anyraid: %d wide to %d wide with "
 		    "'%s'\n", (int)arvd->vdev_children, (int)arvd->vdev_children + 1,
 		    newpath);
 	}
@@ -8779,6 +8780,10 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	}
 
 	uint_t child = ztest_random(arvd->vdev_children);
+	if (ztest_opts.zo_verbose >= 1) {
+		(void) printf("contracting anyraid: %d wide to %d wide with "
+		    "%u\n", (int)arvd->vdev_children, (int)arvd->vdev_children - 1, child);
+	}
 	VERIFY0(spa_contract_vdev(spa, arvd->vdev_guid,
 	    arvd->vdev_child[child]->vdev_guid));
 
