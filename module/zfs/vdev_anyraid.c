@@ -2008,6 +2008,8 @@ vdev_anyraid_mapped(vdev_t *vd, uint64_t offset, uint64_t txg)
 	anyraid_tile_t *tile = avl_find(&va->vd_tile_map, &search, NULL);
 	boolean_t result = tile != NULL && tile->at_synced +
 	    VDEV_ANYRAID_MAP_COPIES <= txg;
+	if (result)
+		zfs_dbgmsg("should alloc returned false for tile %d", search.at_tile_id);
 	rw_exit(&va->vd_lock);
 
 	return (result);
