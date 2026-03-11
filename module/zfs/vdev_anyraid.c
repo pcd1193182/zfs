@@ -2502,7 +2502,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 	for (vdev_anyraid_relocate_task_t *task =
 	    list_head(&var->var_done_list); task;
 	    task = list_head(&var->var_done_list)) {
-		zfs_dbgmsg("Freeing %d in %d", task->vart_dest_off, task->vart_dest_disk);
+		zfs_dbgmsg("Freeing %d in %d", task->vart_source_off, task->vart_source_disk);
 		anyraid_freelist_add(
 		    &va->vd_children[task->vart_source_disk]->van_freelist,
 		    task->vart_source_off);
