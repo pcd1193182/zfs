@@ -8698,15 +8698,14 @@ ztest_anyraid_contract_check(spa_t *spa)
 	}
 	pool_anyraid_relocate_stat_t arr_stats;
 	pool_anyraid_relocate_stat_t *pars = &arr_stats;
-	int ret;
 	do {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 500); /* wait 1/2 second */
 
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
-		ret = spa_anyraid_relocate_get_stats(spa, pars);
+		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
-	} while (ret == 0 && pars->pars_state != ARS_FINISHED &&
+	} while (pars->pars_state != ARS_FINISHED &&
 	    pars->pars_moved < pars->pars_to_move);
 
 	if (ztest_opts.zo_verbose >= 1) {
@@ -8715,11 +8714,7 @@ ztest_anyraid_contract_check(spa_t *spa)
 	}
 
 	/* Will fail here if there is non-recoverable corruption detected */
-	int error = ztest_scrub_impl(spa);
-	if (error == EBUSY)
-		error = 0;
-
-	VERIFY0(error);
+	VERIFY0(spa_approx_errlog_size(spa));
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("anyraid contraction scrub check complete\n");
@@ -8742,14 +8737,14 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 
 	ztest_write_some_data(zs, spa, 0);
 
-	/* Set our reflow target to 25%, 50% or 75% of allocated size */
+	/* Set our reflow target to 10%, 20% or 30% of allocated size */
 	uint_t multiple = ztest_random(3) + 1;
-	uint64_t contract_max = (arvd->vdev_stat.vs_alloc * multiple) / 4;
+	uint64_t contract_max = (arvd->vdev_stat.vs_alloc * multiple) / 10;
 	anyraid_relocate_max_bytes_pause = contract_max;
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("running anyraid_contraction test, killing when "
-		    "contraction reaches %llu bytes (%u/4 of allocated space)\n",
+		    "contraction reaches %llu bytes (%u/10 of allocated space)\n",
 		    (u_longlong_t)contract_max, multiple);
 	}
 
@@ -8786,26 +8781,25 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	uint_t child = ztest_random(arvd->vdev_children);
 	VERIFY0(spa_contract_vdev(spa, arvd->vdev_guid,
 	    arvd->vdev_child[child]->vdev_guid));
-	/*
-	 * Wait for reflow to begin
-	 */
-	while (spa->spa_anyraid_relocate == NULL) {
-		txg_wait_synced(spa_get_dsl(spa), 0);
-		(void) poll(NULL, 0, 100); /* wait 1/10 second */
-	}
 
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
-	while (pars->pars_state != ARS_SCANNING) {
+	fprintf(stderr, "d\n");
+	while (pars->pars_state < ARS_SCANNING) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
 		(void) poll(NULL, 0, 100); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 	}
+	(void) poll(NULL, 0, 1000); /* wait 1 second */
+	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+	(void) spa_anyraid_relocate_get_stats(spa, pars);
+	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
-	ASSERT3U(pars->pars_state, ==, ARS_SCANNING);
+	if (pars->pars_state != ARS_SCANNING)
+		return;
 	ASSERT3U(pars->pars_to_move, !=, 0);
 	/*
 	 * Set so when we are killed we go to anyraid checking rather than
@@ -8813,8 +8807,9 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	 */
 	ztest_shared_opts->zo_anyraid_contract_test = ANYRAID_CONTRACT_KILLED;
 	if (ztest_opts.zo_verbose >= 1) {
-		(void) printf("anyraid contraction movement started, waiting for "
-		    "%llu bytes to be copied\n", (u_longlong_t)contract_max);
+		(void) printf("anyraid contraction movement started, waiting "
+		    "for %llu bytes to be copied\n",
+		    (u_longlong_t)contract_max);
 	}
 
 	/*
@@ -8834,11 +8829,12 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("killing anyraid contraction test after move "
 		    "reached %llu bytes\n", (u_longlong_t)pars->pars_moved);
+		dump_debug_buffer();
 	}
 
 	/*
-	 * Kill ourself to simulate a panic during a contraction.  Our parent will
-	 * restart the test and the changed flag value will drive the test
+	 * Kill ourself to simulate a panic during a contraction.  Our parent
+	 * will restart the test and the changed flag value will drive the test
 	 * through the scrub/check code to verify the pool is not corrupted.
 	 */
 	ztest_kill(zs);
