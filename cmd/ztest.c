@@ -9543,7 +9543,7 @@ main(int argc, char **argv)
 		    zs->zs_metaslab_df_alloc_threshold;
 
 		zfs_anyraid_min_tile_size = MIN(zfs_anyraid_min_tile_size,
-		    ztest_opts.zo_vdev_size / 8);
+		    ztest_opts.zo_vdev_size / 12);
 
 		if (zs->zs_do_init)
 			ztest_run_init();
