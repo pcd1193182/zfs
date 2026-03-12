@@ -190,6 +190,7 @@ void
 anyraid_freelist_add(anyraid_freelist_t *af, uint16_t off)
 {
 	avl_tree_t *t = &af->af_list;
+	zfs_dbgmsg("%u %u", off, af->af_next_off);
 	ASSERT3U(off, <, af->af_next_off);
 	if (off != af->af_next_off - 1) {
 		anyraid_free_node_t *new = kmem_alloc(sizeof (*new), KM_SLEEP);
