@@ -256,6 +256,7 @@ anyraid_freelist_alloc(const anyraid_freelist_t *af)
 boolean_t
 anyraid_freelist_isfree(const anyraid_freelist_t *af, uint16_t off)
 {
+	zfs_dbgmsg("%d %p", off, af);
 	if (off >= af->af_next_off)
 		return (B_TRUE);
 	anyraid_free_node_t search;
