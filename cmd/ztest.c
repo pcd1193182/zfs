@@ -8719,6 +8719,7 @@ ztest_anyraid_contract_check(spa_t *spa)
 
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("anyraid contraction scrub check complete\n");
+		dump_debug_buffer();
 	}
 }
 
