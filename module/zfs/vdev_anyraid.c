@@ -200,7 +200,8 @@ anyraid_freelist_add(anyraid_freelist_t *af, uint16_t off)
 	}
 	af->af_next_off--;
 	for (anyraid_free_node_t *tail = avl_last(t);
-	    tail->afn_tile == af->af_next_off - 1; tail = avl_last(t)) {
+	    tail != NULL && tail->afn_tile == af->af_next_off - 1;
+	    tail = avl_last(t)) {
 		af->af_next_off--;
 		avl_remove(t, tail);
 		kmem_free(tail, sizeof (*tail));
