@@ -2337,6 +2337,9 @@ vdev_open(vdev_t *vd)
 			    VDEV_AUX_TOO_SMALL);
 			return (SET_ERROR(EOVERFLOW));
 		}
+		if (vd->vdev_reopening && vd->vdev_shrinking) {
+			zfs_dbgmsg("resetting asize to %llu", (u_longlong_t)osize);
+		}
 		psize = 0;
 		asize = osize;
 		max_asize = max_osize;
@@ -2372,6 +2375,7 @@ vdev_open(vdev_t *vd)
 	    vd->vdev_logical_ashift);
 	
 	if (vd->vdev_shrinking) {
+		zfs_dbgmsg("resetting asize to %llu", (u_longlong_t)asize);
 		vd->vdev_asize = asize;
 		vd->vdev_max_asize = max_asize;
 	} else if (vd->vdev_asize == 0) {
