@@ -9511,6 +9511,7 @@ spa_vdev_contraction_done(spa_t *spa)
 		(void) txg_list_remove_this(&avd->vdev_dtl_list, lvd, t);
 	lvd->vdev_detached = B_TRUE;
 	vdev_dirty(avd, VDD_DTL, lvd, txg);
+	vdev_config_dirty(avd);
 
 	spa_event_notify(spa, lvd, NULL, ESC_ZFS_VDEV_REMOVE);
 	spa_notify_waiters(spa);
