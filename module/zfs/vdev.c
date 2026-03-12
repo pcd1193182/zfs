@@ -2266,7 +2266,7 @@ vdev_open(vdev_t *vd)
 	if (zio_injection_enabled && error == 0)
 		error = zio_handle_device_injection(vd, NULL, SET_ERROR(ENXIO));
 
-	zfs_dbgmsg("b");
+	zfs_dbgmsg("b %d", error);
 	if (error) {
 		if (vd->vdev_removed &&
 		    vd->vdev_stat.vs_aux != VDEV_AUX_OPEN_FAILED)
@@ -2292,6 +2292,7 @@ vdev_open(vdev_t *vd)
 		ASSERT0(vd->vdev_children);
 		ASSERT(vd->vdev_label_aux == VDEV_AUX_ERR_EXCEEDED ||
 		    vd->vdev_label_aux == VDEV_AUX_EXTERNAL);
+		zfs_dbgmsg("faulted %d", vd->vdev_label_aux);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_FAULTED,
 		    vd->vdev_label_aux);
 		return (SET_ERROR(ENXIO));
