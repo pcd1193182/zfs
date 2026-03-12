@@ -720,7 +720,7 @@ usage(void)
 	    "\t%s -S [-AP] [-e [-V] [-p <path> ...]] [-U <cache>] "
 	    "<poolname>\n\n",
 	    cmdname, cmdname, cmdname, cmdname, cmdname, cmdname, cmdname,
-	    cmdname, cmdname, cmdname, cmdname, cmdname, cmdname);
+	    cmdname, cmdname, cmdname, cmdname, cmdname, cmdname, cmdname);
 
 	(void) fprintf(stderr, "    Dataset name must include at least one "
 	    "separator character '/' or '@'\n");
@@ -2783,7 +2783,9 @@ print_file_layout(spa_t *spa, blkptr_t *bp, const zbookmark_phys_t *zb,
 		ASSERT3U(BP_GET_LEVEL(bp), ==, zb->zb_level);
 	}
 	ASSERT(zb->zb_level >= 0);
-	ASSERT0(BP_IS_HOLE(bp));
+
+	if (BP_IS_HOLE(bp))
+		return;
 
 	if (BP_IS_EMBEDDED(bp))
 		return;
@@ -9804,7 +9806,7 @@ main(int argc, char **argv)
 		verbose = MAX(verbose, 1);
 
 	for (c = 0; c < 256; c++) {
-		if (dump_all && strchr("ABeEFkKlLNOPrRSXy", c) == NULL)
+		if (dump_all && strchr("ABeEfFkKlLNOPrRSXy", c) == NULL)
 			dump_opt[c] = 1;
 		if (dump_opt[c])
 			dump_opt[c] += verbose;

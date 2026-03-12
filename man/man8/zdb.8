@@ -260,7 +260,9 @@ arguments.
 Display the file layout of an object for the disks of a raidz vdev.
 With
 .Fl H ,
-the output is in scripted mode for easy parsing.
+the output is in scripted mode for easy parsing, with all values
+being presented as 512 byte blocks.
+Only a single top-level raidz vdev is supported.
 .It Fl h , -history
 Display pool history similar to
 .Nm zpool Cm history ,
