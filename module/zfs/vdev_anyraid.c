@@ -1110,7 +1110,7 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 
 	uint32_t *child_capacities = NULL;
 	if (vd->vdev_reopening) {
-		zfs_dbgmsg("reopening %d", va->vd_contracting_leaf);
+		zfs_dbgmsg("reopening %d %d", va->vd_contracting_leaf, (int)vd->vdev_children);
 		child_capacities = kmem_alloc(sizeof (*child_capacities) *
 		    vd->vdev_children, KM_SLEEP);
 		for (uint64_t c = 0; c < vd->vdev_children; c++) {
@@ -1165,7 +1165,8 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		avl_add(&va->vd_children_tree, va->vd_children[c]);
 	}
 	*asize = calculate_asize(vd, num_tiles);
-
+	if (vd->vdev_reopening)
+		zfs_dbgmsg("asize when reopening: %llu", (u_longlong_t)*asize);
 	for (int c = 0; c < vd->vdev_children; c++) {
 		vdev_t *cvd = vd->vdev_child[c];
 
