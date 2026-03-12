@@ -2246,6 +2246,7 @@ vdev_open(vdev_t *vd)
 		return (error);
 	}
 
+	zfs_dbgmsg("a");
 	/*
 	 * Physical volume size should never be larger than its max size, unless
 	 * the disk has shrunk while we were reading it or the device is buggy
@@ -2265,6 +2266,7 @@ vdev_open(vdev_t *vd)
 	if (zio_injection_enabled && error == 0)
 		error = zio_handle_device_injection(vd, NULL, SET_ERROR(ENXIO));
 
+	zfs_dbgmsg("b");
 	if (error) {
 		if (vd->vdev_removed &&
 		    vd->vdev_stat.vs_aux != VDEV_AUX_OPEN_FAILED)
@@ -2295,6 +2297,7 @@ vdev_open(vdev_t *vd)
 		return (SET_ERROR(ENXIO));
 	}
 
+	zfs_dbgmsg("c");
 	if (vd->vdev_degraded) {
 		ASSERT0(vd->vdev_children);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_DEGRADED,
@@ -2303,6 +2306,7 @@ vdev_open(vdev_t *vd)
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_HEALTHY, 0);
 	}
 
+	zfs_dbgmsg("d");
 	/*
 	 * For hole or missing vdevs we just return success.
 	 */
@@ -2317,6 +2321,7 @@ vdev_open(vdev_t *vd)
 		}
 	}
 
+	zfs_dbgmsg("e");
 	osize = P2ALIGN_TYPED(osize, sizeof (vdev_label_t), uint64_t);
 	max_osize = P2ALIGN_TYPED(max_osize, sizeof (vdev_label_t), uint64_t);
 
@@ -2345,6 +2350,7 @@ vdev_open(vdev_t *vd)
 		max_asize = max_osize;
 	}
 
+	zfs_dbgmsg("f");
 	/*
 	 * If the vdev was expanded, record this so that we can re-create the
 	 * uberblock rings in labels {2,3}, during the next sync.
