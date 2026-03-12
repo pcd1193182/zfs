@@ -3567,6 +3567,7 @@ vdev_anyraid_check_contract(vdev_t *tvd, vdev_t *lvd, dmu_tx_t *tx)
 	 */
 	for (uint64_t m = ((highest_tile + 1) * va->vd_tile_size) >>
 	    tvd->vdev_ms_shift; m < tvd->vdev_ms_count; m++) {
+		zfs_dbgmsg("disabling %d", (int)m);
 		metaslab_disable_nowait(tvd->vdev_ms[m]);
 	}
 
