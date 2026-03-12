@@ -8749,9 +8749,11 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 		    (u_longlong_t)contract_max, multiple);
 	}
 
+	uint_t child = ztest_random(arvd->vdev_children);
+
 	/* XXX - do we want some I/O load during the contraction? */
 
-	cvd = arvd->vdev_child[0];
+	cvd = arvd->vdev_child[child];
 	csize = vdev_get_min_asize(cvd);
 	/*
 	 * Path to vdev to be attached
@@ -8778,8 +8780,6 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 		fatal(0, "anyraid contraction: attach (%s %llu) returned %d",
 		    newpath, (long long)csize, error);
 	}
-
-	uint_t child = ztest_random(arvd->vdev_children);
 	if (ztest_opts.zo_verbose >= 1) {
 		(void) printf("contracting anyraid: %d wide to %d wide with "
 		    "%u\n", (int)arvd->vdev_children, (int)arvd->vdev_children - 1, child);
