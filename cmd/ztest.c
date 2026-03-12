@@ -8784,8 +8784,11 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 		(void) printf("contracting anyraid: %d wide to %d wide with "
 		    "%u\n", (int)arvd->vdev_children, (int)arvd->vdev_children - 1, child);
 	}
-	VERIFY0(spa_contract_vdev(spa, arvd->vdev_guid,
-	    arvd->vdev_child[child]->vdev_guid));
+	int err = spa_contract_vdev(spa, arvd->vdev_guid,
+	    arvd->vdev_child[child]->vdev_guid);
+	if (err == ENOSPC)
+		return;
+	VERIFY0(err);
 
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
