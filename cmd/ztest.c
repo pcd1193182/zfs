@@ -8807,8 +8807,10 @@ ztest_anyraid_contract_run(ztest_shared_t *zs, spa_t *spa)
 	(void) spa_anyraid_relocate_get_stats(spa, pars);
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
-	if (pars->pars_state != ARS_SCANNING)
+	if (pars->pars_state != ARS_SCANNING) {
+		dump_debug_buffer();
 		return;
+	}
 	ASSERT3U(pars->pars_to_move, !=, 0);
 	/*
 	 * Set so when we are killed we go to anyraid checking rather than
