@@ -8502,9 +8502,9 @@ ztest_write_some_data(ztest_shared_t *zs, spa_t *spa, int run)
 	uint_t target = ztest_random(8);
 	uint64_t alloc_goal = (free_space * target) / 10;
 	if (ztest_opts.zo_verbose >= 1) {
-		(void) printf("adding data to pool '%s', goal %llu/%llu "
+		(void) printf("adding data to pool '%s', goal %llu/%llu/%llu "
 		    "bytes\n", ztest_opts.zo_pool, (u_longlong_t)alloc_goal,
-		    (u_longlong_t)free_space);
+		    (u_longlong_t)free_space, (u_longlong_t)metaslab_class_get_space(spa_normal_class(spa)));
 	}
 
 	if (alloc_goal == 0)
