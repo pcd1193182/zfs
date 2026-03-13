@@ -2351,7 +2351,7 @@ vdev_open(vdev_t *vd)
 		max_asize = max_osize;
 	}
 
-	zfs_dbgmsg("f");
+	zfs_dbgmsg("f %llu %llu", (u_longlong_t)asize, (u_longlong_t)vd->vdev_min_asize);
 	/*
 	 * If the vdev was expanded, record this so that we can re-create the
 	 * uberblock rings in labels {2,3}, during the next sync.
@@ -2368,6 +2368,7 @@ vdev_open(vdev_t *vd)
 		    VDEV_AUX_BAD_LABEL);
 		return (SET_ERROR(EINVAL));
 	}
+	zfs_dbgmsg("g");
 
 	/*
 	 * We can always set the logical/physical ashift members since
