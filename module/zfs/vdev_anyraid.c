@@ -1127,8 +1127,10 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 			if (cvd->vdev_open_error != 0)
 				continue;
 			if ((lasterror = anyraid_open_existing(vd, c,
-			    &child_capacities)) == 0)
+			    &child_capacities)) == 0) {
+				zfs_dbgmsg("lasterror %d %d", lasterror, (int)c);
 				break;
+			}
 		}
 		if (lasterror)
 			return (lasterror);
@@ -2392,6 +2394,7 @@ tasklist_read(vdev_t *vd)
 			zfs_dbgmsg("Allocing %d in %d", vart->vart_source_off, vart->vart_source_disk);
 		}
 
+		ASSERTF(va->vd_children[vart->vart_dest_disk], "%d", vart->vart_dest_disk);
 		af = &va->vd_children[vart->vart_dest_disk]->van_freelist;
 		boolean_t destfree = anyraid_freelist_isfree(af,
 		    vart->vart_dest_off);
