@@ -5363,7 +5363,7 @@ metaslab_group_allocatable(spa_t *spa, metaslab_group_t *mg, uint64_t psize,
 	if (!allocatable) {
 		metaslab_trace_add(zal, mg, NULL, psize, d,
 		    TRACE_NOT_ALLOCATABLE, allocator);
-		zfs_dbgmsg("alloc a");
+		zfs_dbgmsg("alloc a %d %d %d %d", (int)vd->vdev_state, vd->vdev_cant_write, vdev_is_concrete(vd), mg->mg_initialized);
 		return (B_FALSE);
 	}
 
