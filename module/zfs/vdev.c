@@ -2218,6 +2218,7 @@ vdev_open(vdev_t *vd)
 	vd->vdev_fault_wanted = B_FALSE;
 	vd->vdev_remove_wanted = B_FALSE;
 	vd->vdev_min_asize = vdev_get_min_asize(vd);
+	zfs_dbgmsg("open %d", (int)vd->vdev_id);
 
 	/*
 	 * If this vdev is not removed, check its fault status.  If it's
