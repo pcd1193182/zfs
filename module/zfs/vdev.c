@@ -2246,7 +2246,7 @@ vdev_open(vdev_t *vd)
 		return (error);
 	}
 
-	zfs_dbgmsg("a");
+	zfs_dbgmsg("a %d", (int)vd->vdev_id);
 	/*
 	 * Physical volume size should never be larger than its max size, unless
 	 * the disk has shrunk while we were reading it or the device is buggy
@@ -2298,7 +2298,7 @@ vdev_open(vdev_t *vd)
 		return (SET_ERROR(ENXIO));
 	}
 
-	zfs_dbgmsg("c");
+	zfs_dbgmsg("c %d", vd->vdev_shrinking);
 	if (vd->vdev_degraded) {
 		ASSERT0(vd->vdev_children);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_DEGRADED,
