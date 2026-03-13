@@ -434,9 +434,11 @@ vdev_get_min_asize(vdev_t *vd)
 				metaslab_t *ms = vd->vdev_ms[m];
 				if (ms->ms_size !=
 				    zfs_range_tree_space(ms->ms_allocatable)) {
+					zfs_dbgmsg("m: %d %llu %llu", (int)m, (u_longlong_t)ms->ms_size, (u_longlong_t)zfs_range_tree_space(ms->ms_allocatable));
 					return ((m + 1) << vd->vdev_ms_shift);
 				}
 			}
+			zfs_dbgmsg("default");
 			/*
 			 * If the vdev is totally empty, we still probably
 			 * don't want to shrink it to size 0.

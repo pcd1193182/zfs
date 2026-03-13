@@ -2387,6 +2387,7 @@ tasklist_read(vdev_t *vd)
 		rw_enter(&va->vd_lock, RW_WRITER);
 		anyraid_freelist_t *af =
 		    &va->vd_children[vart->vart_source_disk]->van_freelist;
+		zfs_dbgmsg("isfree a %d", vart->vart_source_disk);
 		boolean_t sourcefree = anyraid_freelist_isfree(af,
 		    vart->vart_source_off);
 		if (sourcefree) {
@@ -2396,6 +2397,7 @@ tasklist_read(vdev_t *vd)
 
 		ASSERTF(va->vd_children[vart->vart_dest_disk], "%d", vart->vart_dest_disk);
 		af = &va->vd_children[vart->vart_dest_disk]->van_freelist;
+		zfs_dbgmsg("isfree b %d", vart->vart_dest_disk);
 		boolean_t destfree = anyraid_freelist_isfree(af,
 		    vart->vart_dest_off);
 		if (destfree) {
