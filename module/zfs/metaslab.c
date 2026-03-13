@@ -5229,6 +5229,7 @@ metaslab_group_alloc(metaslab_group_t *mg, zio_alloc_list_t *zal,
 			/* Passivate this metaslab and select a new one. */
 			metaslab_trace_add(zal, mg, msp, asize, d,
 			    TRACE_TOO_SMALL, allocator);
+			zfs_dbgmsg("alloc d");
 			goto next;
 		}
 
@@ -5362,6 +5363,7 @@ metaslab_group_allocatable(spa_t *spa, metaslab_group_t *mg, uint64_t psize,
 	if (!allocatable) {
 		metaslab_trace_add(zal, mg, NULL, psize, d,
 		    TRACE_NOT_ALLOCATABLE, allocator);
+		zfs_dbgmsg("alloc a");
 		return (B_FALSE);
 	}
 
@@ -5373,6 +5375,7 @@ metaslab_group_allocatable(spa_t *spa, metaslab_group_t *mg, uint64_t psize,
 		    (!mg->mg_allocatable && mc->mc_alloc_groups > 0))) {
 			metaslab_trace_add(zal, mg, NULL, psize, d,
 			    TRACE_NOT_ALLOCATABLE, allocator);
+			zfs_dbgmsg("alloc b");
 			return (B_FALSE);
 		}
 
@@ -5384,6 +5387,7 @@ metaslab_group_allocatable(spa_t *spa, metaslab_group_t *mg, uint64_t psize,
 		    vd->vdev_children == 0) {
 			metaslab_trace_add(zal, mg, NULL, psize, d,
 			    TRACE_VDEV_ERROR, allocator);
+			zfs_dbgmsg("alloc c");
 			return (B_FALSE);
 		}
 	}
