@@ -650,6 +650,14 @@ dsl_scan_init(dsl_pool_t *dp, uint64_t txg)
 	spa_scan_stat_init(spa);
 	vdev_scan_stat_init(spa->spa_root_vdev);
 
+	if (spa->spa_anyraid_relocate != NULL &&
+	    spa->spa_anyraid_relocate->var_state == ARS_SCRUBBING) {
+		void *arg;
+		scn->scn_done = anyraid_setup_scan_done(spa,
+		    spa->spa_anyraid_relocate->var_vd, &arg);
+		scn->scn_done_arg = arg;
+	}
+
 	return (0);
 }
 

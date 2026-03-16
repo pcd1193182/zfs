@@ -756,14 +756,6 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 			return (EINVAL);
 		}
 		spa->spa_anyraid_relocate = var;
-
-		if (var->var_state == ARS_SCRUBBING) {
-			dsl_pool_t *dp = vd->vdev_spa->spa_dsl_pool;
-			struct anyraid_done_arg *ada =
-			    kmem_alloc(sizeof (*ada), KM_SLEEP);
-			ada->vd = vd;
-			dsl_scan_set_done_func(dp, anyraid_scrub_done, ada);
-		}
 	}
 
 	nvlist_t *cur_task;
@@ -2618,6 +2610,19 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 		anyraid_scrub_done(spa, tx, ada);
 	}
 }
+
+dsl_scan_done_func_t *
+anyraid_setup_scan_done(spa_t *spa, uint64_t vd_id, void **arg)
+{
+	struct anyraid_done_arg *ada = kmem_alloc(sizeof (*ada), KM_SLEEP);
+
+	spa_config_enter(spa, SCL_STATE, FTAG, RW_READER);
+	ada->vd = vdev_lookup_top(spa, vd_id);
+	spa_config_exit(spa, SCL_STATE, FTAG);
+	*arg = ada;
+	return (anyraid_scrub_done);
+}
+
 
 struct rebal_node {
 	avl_node_t node1;

@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/vdev.h>
 #include <sys/zfs_rlock.h>
+#include <sys/dsl_scan.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -127,6 +128,8 @@ int vdev_anyraid_load(vdev_t *vd);
 vdev_anyraid_relocate_t *vdev_anyraid_relocate_status(vdev_t *vd);
 void vdev_anyraid_setup_rebalance(vdev_t *vd, dmu_tx_t *tx);
 void spa_start_anyraid_relocate_thread(spa_t *spa);
+dsl_scan_done_func_t *anyraid_setup_scan_done(spa_t *spa, uint64_t vd_id,
+    void **arg);
 
 #ifdef	__cplusplus
 }
