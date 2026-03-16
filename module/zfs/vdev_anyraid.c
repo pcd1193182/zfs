@@ -158,6 +158,11 @@ static
 unsigned long anyraid_relocate_max_bytes_pause = 0;
 
 static int tasklist_read(vdev_t *vd);
+static void anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg);
+
+struct anyraid_done_arg {
+	vdev_t *vd;
+};
 
 static int
 af_compar(const void *p1, const void *p2)
@@ -751,6 +756,14 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 			return (EINVAL);
 		}
 		spa->spa_anyraid_relocate = var;
+
+		if (var->var_state == ARS_SCRUBBING) {
+			dsl_pool_t *dp = vd->vdev_spa->spa_dsl_pool;
+			struct anyraid_done_arg *ada =
+			    kmem_alloc(sizeof (*ada), KM_SLEEP);
+			ada->vd = vd;
+			dsl_scan_set_done_func(dp, anyraid_scrub_done, ada);
+		}
 	}
 
 	nvlist_t *cur_task;
@@ -2498,12 +2511,8 @@ anyraid_relocate_sync(void *arg, dmu_tx_t *tx)
 	mutex_exit(&var->var_lock);
 }
 
-struct anyraid_done_arg {
-	vdev_t *vd;
-};
-
 static void
-anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
+anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to schedule this at import time if there's a reloc in SCRUBBING
 {
 	struct anyraid_done_arg *ada = arg;
 	vdev_anyraid_t *va = ada->vd->vdev_tsd;

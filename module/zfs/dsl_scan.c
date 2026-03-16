@@ -865,6 +865,15 @@ dsl_scan_setup_check(void *arg, dmu_tx_t *tx)
 }
 
 void
+dsl_scan_set_done_func(dsl_pool_t *dp, dsl_scan_done_func_t *done,
+    void *done_arg)
+{
+	dsl_scan_t *scn = dp->dp_scan;
+	scn->scn_done = done;
+	scn->scn_done_arg = done_arg;
+}
+
+void
 dsl_scan_setup_sync(void *arg, dmu_tx_t *tx)
 {
 	setup_sync_arg_t *setup_sync_arg = (setup_sync_arg_t *)arg;
