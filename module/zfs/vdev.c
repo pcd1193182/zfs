@@ -432,9 +432,8 @@ vdev_get_min_asize(vdev_t *vd)
 			 */
 			for (uint64_t m = vd->vdev_ms_count - 1; m > 0; m--) {
 				metaslab_t *ms = vd->vdev_ms[m];
-				if (ms->ms_size !=
-				    zfs_range_tree_space(ms->ms_allocatable)) {
-					zfs_dbgmsg("m: %d %llu %llu", (int)m, (u_longlong_t)ms->ms_size, (u_longlong_t)zfs_range_tree_space(ms->ms_allocatable));
+				if (metaslab_allocated_space(ms) != 0) {
+					zfs_dbgmsg("m: %d %llu", (int)m, (u_longlong_t)metaslab_allocated_space(ms));
 					return ((m + 1) << vd->vdev_ms_shift);
 				}
 			}
