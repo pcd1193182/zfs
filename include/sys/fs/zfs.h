@@ -1275,6 +1275,7 @@ typedef enum anyraid_relocate_state {
 	ARS_NONE,
 	ARS_SCANNING,
 	ARS_SCRUBBING,
+	ARS_CONTRACTING,
 	ARS_FINISHED,
 	ARS_NUM_STATES
 } anyraid_relocate_state_t;

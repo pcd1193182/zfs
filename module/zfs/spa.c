@@ -9484,6 +9484,8 @@ spa_vdev_contraction_done(spa_t *spa)
 	ASSERT3S(va->vd_contracting_leaf, ==, lvd->vdev_id);
 	vdev_anyraid_compact_children(avd);
 	va->vd_contracting_leaf = -1;
+	zfs_dbgmsg("var_state to ARS_FINISHED");
+	va->vd_relocate.var_state = ARS_FINISHED;
 	rw_exit(&va->vd_lock);
 
 	/*

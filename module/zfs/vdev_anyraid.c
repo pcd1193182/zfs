@@ -756,6 +756,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		}
 		spa->spa_anyraid_relocate = var;
 	}
+	if (state == ARS_CONTRACTING)
+		spa_async_request(spa, SPA_ASYNC_CONTRACTION_DONE);
 
 	nvlist_t *cur_task;
 	error = nvlist_lookup_nvlist(header.ah_nvl,
@@ -2529,8 +2531,8 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to sched
 	}
 
 	spa->spa_anyraid_relocate = NULL;
-	zfs_dbgmsg("var_state to ARS_FINISHED");
-	va->vd_relocate.var_state = ARS_FINISHED;
+	zfs_dbgmsg("var_state to ARS_CONTRACTING");
+	va->vd_relocate.var_state = ARS_CONTRACTING;
 	rw_exit(&va->vd_lock);
 
 	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
