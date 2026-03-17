@@ -915,6 +915,17 @@ vdev_disk_io_start(zio_t *zio)
 static void
 vdev_disk_io_done(zio_t *zio)
 {
+	if (zio->io_type == ZIO_TYPE_WRITE) {
+		zfs_dbgmsg("disk write result: vdev %d loc 0x%llx/0x%llx "
+		    "err %d zb %llu/%llu/%llu/%llu", (int)zio->io_vd->vdev_id,
+		    (u_longlong_t)zio->io_offset,
+		    (u_longlong_t)zio->io_size, zio->io_error,
+		    (u_longlong_t)zio->io_bookmark.zb_objset,
+		    (u_longlong_t)zio->io_bookmark.zb_object,
+		    (u_longlong_t)zio->io_bookmark.zb_level,
+		    (u_longlong_t)zio->io_bookmark.zb_blkid);
+	}
+
 	/*
 	 * If the device returned EIO, we revalidate the media.  If it is
 	 * determined the media has changed this triggers the asynchronous
