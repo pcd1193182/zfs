@@ -696,6 +696,7 @@ fatal(int do_perror, const char *message, ...)
 		    ": %s", strerror(save_errno));
 	}
 	(void) fprintf(stderr, "%s\n", buf);
+	zfs_dbgmsg("%s", buf);
 	fatal_msg = buf;			/* to ease debugging */
 
 out:
