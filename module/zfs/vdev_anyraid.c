@@ -1466,8 +1466,8 @@ vdev_anyraid_io_start(zio_t *zio)
 		mutex_enter(&var->var_lock);
 		vdev_anyraid_relocate_task_t *vart = list_head(&var->var_list);
 		if (vart && vart->vart_tile == tile->at_tile_id) {
-			ASSERT(var->var_offset <= zio->io_offset ||
-			    var->var_offset >= zio->io_offset + zio->io_size);
+			ASSERTF(var->var_offset <= zio->io_offset ||
+			    var->var_offset >= zio->io_offset + zio->io_size, "var_offset %llx is in the middle of IO %llx/%llx %d %llx", (u_longlong_t)var->var_offset, (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size, zio->io_type, (u_longlong_t)zio->io_flags);
 			if (var->var_offset >= zio->io_offset + zio->io_size) {
 				task = kmem_zalloc(sizeof (*vart), KM_SLEEP);
 				*task = *vart;
