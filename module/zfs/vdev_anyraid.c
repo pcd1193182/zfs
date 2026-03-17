@@ -745,6 +745,7 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 	(void) nvlist_lookup_uint32(header.ah_nvl,
 	    VDEV_ANYRAID_HEADER_RELOC_STATE, &state);
 	if (state != ARS_NONE) {
+		zfs_dbgmsg("opened with state %d", state);
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 		var->var_state = state;
 		var->var_vd = vd->vdev_id;
