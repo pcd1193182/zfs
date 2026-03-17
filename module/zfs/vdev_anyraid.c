@@ -261,7 +261,6 @@ anyraid_freelist_alloc(const anyraid_freelist_t *af)
 boolean_t
 anyraid_freelist_isfree(const anyraid_freelist_t *af, uint16_t off)
 {
-	zfs_dbgmsg("%d %p", off, af);
 	if (off >= af->af_next_off)
 		return (B_TRUE);
 	anyraid_free_node_t search;
@@ -1910,6 +1909,7 @@ vdev_anyraid_write_map_sync(vdev_t *vd, zio_t *pio, uint64_t txg,
 			if (vart->vart_task == task)
 				break;
 		}
+		zfs_dbgmsg("cur task %llu", (u_longlong_t)task);
 		ASSERTF(vart, "%llu", (u_longlong_t)task);
 		nvlist_t *rebal_task = fnvlist_alloc();
 		fnvlist_add_uint32(rebal_task, VART_TILE,
@@ -2357,7 +2357,7 @@ tasklist_read(vdev_t *vd)
 		vart->vart_dest_off = rtp->rtp_dest_off;
 		vart->vart_tile = rtp->rtp_tile;
 		vart->vart_task = rtp->rtp_task;
-
+		zfs_dbgmsg("Adding task %d (%d %d -> %d %d) to %s", vart->vart_task, vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, l == &var->var_list ? "list" : "done list");
 		/*
 		 * We need to disable metaslabs here; any metaslabs that are
 		 * after the first done task but before or containing the
@@ -2392,7 +2392,6 @@ tasklist_read(vdev_t *vd)
 		rw_enter(&va->vd_lock, RW_WRITER);
 		anyraid_freelist_t *af =
 		    &va->vd_children[vart->vart_source_disk]->van_freelist;
-		zfs_dbgmsg("isfree a %d", vart->vart_source_disk);
 		boolean_t sourcefree = anyraid_freelist_isfree(af,
 		    vart->vart_source_off);
 		if (sourcefree) {
@@ -2402,7 +2401,6 @@ tasklist_read(vdev_t *vd)
 
 		ASSERTF(va->vd_children[vart->vart_dest_disk], "%d", vart->vart_dest_disk);
 		af = &va->vd_children[vart->vart_dest_disk]->van_freelist;
-		zfs_dbgmsg("isfree b %d", vart->vart_dest_disk);
 		boolean_t destfree = anyraid_freelist_isfree(af,
 		    vart->vart_dest_off);
 		if (destfree) {
