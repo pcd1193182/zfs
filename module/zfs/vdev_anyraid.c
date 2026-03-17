@@ -2524,7 +2524,8 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to sched
 		    DMU_POOL_RELOCATE_OBJ, tx));
 	}
 
-	if (va->vd_contracting_leaf == -1) {
+	boolean_t contracting = va->vd_contracting_leaf != -1;
+	if (!contracting) {
 		vdev_update_nonallocating_space(ada->vd, var->var_nonalloc,
 		    B_FALSE);
 	} else {
@@ -2537,8 +2538,10 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to sched
 	rw_exit(&va->vd_lock);
 
 	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_WRITER);
-	ada->vd->vdev_expanding = B_TRUE;
-	vdev_reopen(ada->vd);
+	if (!contracting) {
+		ada->vd->vdev_expanding = B_TRUE;
+		vdev_reopen(ada->vd);
+	}
 	spa->spa_ccw_fail_time = 0;
 	spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
 	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
