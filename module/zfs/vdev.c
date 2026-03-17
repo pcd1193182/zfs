@@ -2219,7 +2219,6 @@ vdev_open(vdev_t *vd)
 	vd->vdev_fault_wanted = B_FALSE;
 	vd->vdev_remove_wanted = B_FALSE;
 	vd->vdev_min_asize = vdev_get_min_asize(vd);
-	zfs_dbgmsg("open %d", (int)vd->vdev_id);
 
 	/*
 	 * If this vdev is not removed, check its fault status.  If it's
@@ -2248,7 +2247,6 @@ vdev_open(vdev_t *vd)
 		return (error);
 	}
 
-	zfs_dbgmsg("a %d", (int)vd->vdev_id);
 	/*
 	 * Physical volume size should never be larger than its max size, unless
 	 * the disk has shrunk while we were reading it or the device is buggy
@@ -2268,7 +2266,6 @@ vdev_open(vdev_t *vd)
 	if (zio_injection_enabled && error == 0)
 		error = zio_handle_device_injection(vd, NULL, SET_ERROR(ENXIO));
 
-	zfs_dbgmsg("b %d", error);
 	if (error) {
 		if (vd->vdev_removed &&
 		    vd->vdev_stat.vs_aux != VDEV_AUX_OPEN_FAILED)
@@ -2294,13 +2291,11 @@ vdev_open(vdev_t *vd)
 		ASSERT0(vd->vdev_children);
 		ASSERT(vd->vdev_label_aux == VDEV_AUX_ERR_EXCEEDED ||
 		    vd->vdev_label_aux == VDEV_AUX_EXTERNAL);
-		zfs_dbgmsg("faulted %d", vd->vdev_label_aux);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_FAULTED,
 		    vd->vdev_label_aux);
 		return (SET_ERROR(ENXIO));
 	}
 
-	zfs_dbgmsg("c %d", vd->vdev_shrinking);
 	if (vd->vdev_degraded) {
 		ASSERT0(vd->vdev_children);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_DEGRADED,
@@ -2309,7 +2304,6 @@ vdev_open(vdev_t *vd)
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_HEALTHY, 0);
 	}
 
-	zfs_dbgmsg("d");
 	/*
 	 * For hole or missing vdevs we just return success.
 	 */
@@ -2324,7 +2318,6 @@ vdev_open(vdev_t *vd)
 		}
 	}
 
-	zfs_dbgmsg("e");
 	osize = P2ALIGN_TYPED(osize, sizeof (vdev_label_t), uint64_t);
 	max_osize = P2ALIGN_TYPED(max_osize, sizeof (vdev_label_t), uint64_t);
 
@@ -2345,15 +2338,11 @@ vdev_open(vdev_t *vd)
 			    VDEV_AUX_TOO_SMALL);
 			return (SET_ERROR(EOVERFLOW));
 		}
-		if (vd->vdev_reopening && vd->vdev_shrinking) {
-			zfs_dbgmsg("resetting asize to %llu", (u_longlong_t)osize);
-		}
 		psize = 0;
 		asize = osize;
 		max_asize = max_osize;
 	}
 
-	zfs_dbgmsg("f %llu %llu", (u_longlong_t)asize, (u_longlong_t)vd->vdev_min_asize);
 	/*
 	 * If the vdev was expanded, record this so that we can re-create the
 	 * uberblock rings in labels {2,3}, during the next sync.
@@ -2370,7 +2359,6 @@ vdev_open(vdev_t *vd)
 		    VDEV_AUX_BAD_LABEL);
 		return (SET_ERROR(EINVAL));
 	}
-	zfs_dbgmsg("g");
 
 	/*
 	 * We can always set the logical/physical ashift members since
@@ -2385,7 +2373,6 @@ vdev_open(vdev_t *vd)
 	    vd->vdev_logical_ashift);
 	
 	if (vd->vdev_shrinking) {
-		zfs_dbgmsg("resetting asize to %llu", (u_longlong_t)asize);
 		vd->vdev_asize = asize;
 		vd->vdev_max_asize = max_asize;
 	} else if (vd->vdev_asize == 0) {
