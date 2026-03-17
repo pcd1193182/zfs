@@ -2254,6 +2254,7 @@ vdev_open(vdev_t *vd)
 	 * or damaged: either way it's not safe for use, bail out of the open.
 	 */
 	if (osize > max_osize) {
+		zfs_dbgmsg("can't open A %llu %llu", (u_longlong_t)osize, (u_longlong_t)max_osize);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_CANT_OPEN,
 		    VDEV_AUX_OPEN_FAILED);
 		return (SET_ERROR(ENXIO));
@@ -2276,6 +2277,7 @@ vdev_open(vdev_t *vd)
 			vdev_set_state(vd, B_TRUE, VDEV_STATE_OFFLINE,
 			    vd->vdev_stat.vs_aux);
 		} else {
+			zfs_dbgmsg("can't open B");
 			vdev_set_state(vd, B_TRUE, VDEV_STATE_CANT_OPEN,
 			    vd->vdev_stat.vs_aux);
 		}
@@ -2324,6 +2326,7 @@ vdev_open(vdev_t *vd)
 
 	if (vd->vdev_children == 0) {
 		if (osize < SPA_MINDEVSIZE) {
+		zfs_dbgmsg("can't open C %llu", (u_longlong_t)osize);
 			vdev_set_state(vd, B_TRUE, VDEV_STATE_CANT_OPEN,
 			    VDEV_AUX_TOO_SMALL);
 			return (SET_ERROR(EOVERFLOW));
@@ -2335,6 +2338,7 @@ vdev_open(vdev_t *vd)
 	} else {
 		if (vd->vdev_parent != NULL && osize < SPA_MINDEVSIZE -
 		    (VDEV_LABEL_START_SIZE + VDEV_LABEL_END_SIZE)) {
+			zfs_dbgmsg("can't open D %llu", (u_longlong_t)osize);
 			vdev_set_state(vd, B_TRUE, VDEV_STATE_CANT_OPEN,
 			    VDEV_AUX_TOO_SMALL);
 			return (SET_ERROR(EOVERFLOW));
@@ -2356,6 +2360,7 @@ vdev_open(vdev_t *vd)
 	 * Make sure the allocatable size hasn't shrunk too much.
 	 */
 	if (asize < vd->vdev_min_asize) {
+		zfs_dbgmsg("can't open E %llu %llu", (u_longlong_t)asize, (u_longlong_t)vd->vdev_min_asize);
 		vdev_set_state(vd, B_TRUE, VDEV_STATE_CANT_OPEN,
 		    VDEV_AUX_BAD_LABEL);
 		return (SET_ERROR(EINVAL));
