@@ -1158,6 +1158,8 @@ vdev_anyraid_open(vdev_t *vd, uint64_t *asize, uint64_t *max_asize,
 		}
 
 		num_tiles[c] = casize / va->vd_tile_size;
+		if (vd->vdev_reopening)
+			zfs_dbgmsg("num_tiles[%d]: %llu %u", c, (u_longlong_t)num_tiles[c], anyraid_freelist_alloc(&va->vd_children[c]->van_freelist));
 		avl_remove(&va->vd_children_tree, va->vd_children[c]);
 		if (va->vd_contracting_leaf == c)
 			va->vd_children[c]->van_capacity = 0;
