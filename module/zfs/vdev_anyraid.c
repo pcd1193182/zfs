@@ -766,6 +766,12 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		free_header(&header, header_size);
 		return (error);
 	}
+
+	if (nvlist_lookup_uint32(header.ah_nvl,
+	    VDEV_ANYRAID_HEADER_CONTRACTING_LEAF,
+	    (uint32_t *)&va->vd_contracting_leaf) != 0)
+		va->vd_contracting_leaf = -1;
+
 	if (error == 0) {
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 
@@ -791,23 +797,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 		    VART_TILE);
 		vart->vart_task = var->var_task;
 		list_insert_head(&var->var_list, vart);
-
-		if (nvlist_lookup_uint32(header.ah_nvl,
-		    VDEV_ANYRAID_HEADER_CONTRACTING_LEAF,
-		    (uint32_t *)&va->vd_contracting_leaf) != 0)
-			va->vd_contracting_leaf = -1;
 		(*child_capacities)[va->vd_contracting_leaf] = 0;
 		spa->spa_anyraid_relocate = var;
-	} else {
-		error = nvlist_lookup_uint32(header.ah_nvl,
-		    VDEV_ANYRAID_HEADER_CONTRACTING_LEAF,
-		    (uint32_t *)&va->vd_contracting_leaf);
-		if (error != 0)
-			va->vd_contracting_leaf = -1;
-		else {
-			zfs_dbgmsg("startup detected contraction but no tasks %llu", (u_longlong_t)txg);
-			spa_async_request(spa, SPA_ASYNC_CONTRACTION_DONE);
-		}
 	}
 
 	va->vd_checkpoint_tile = UINT32_MAX;
@@ -1212,7 +1203,8 @@ vdev_anyraid_load(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
-	if (va->vd_relocate.var_state != ARS_SCANNING && va->vd_relocate.var_state != ARS_SCRUBBING)
+	if (va->vd_relocate.var_state != ARS_SCANNING &&
+	    va->vd_relocate.var_state != ARS_SCRUBBING)
 		return (0);
 
 	return (tasklist_read(vd));
