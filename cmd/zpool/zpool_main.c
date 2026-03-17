@@ -10402,8 +10402,6 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 		uint64_t copied, total, elapsed, rate, secs_left;
 		double fraction_done;
 
-		assert(pars->pars_state == ARS_SCANNING);
-
 		/*
 		 * Expansion is in progress.
 		 */
@@ -10432,7 +10430,12 @@ print_anyraid_rebalance_status(zpool_handle_t *zhp,
 		 */
 		(void) printf(gettext("\t%s / %s copied at %s/s, %.2f%% done"),
 		    examined_buf, total_buf, rate_buf, 100 * fraction_done);
-		if (pars->pars_waiting_for_resilver) {
+		if (pars->pars_state == ARS_SCRUBBING) {
+			(void) printf(gettext(", waiting for scrub to "
+			    "complete\n"));
+		} else if (pars->pars_state == ARS_CONTRACTING) {
+			(void) printf(gettext(", removing vdev\n"));
+		} else if (pars->pars_waiting_for_resilver) {
 			(void) printf(gettext(", paused for resilver or "
 			    "clear\n"));
 		} else if (secs_left < (30 * 24 * 3600)) {
