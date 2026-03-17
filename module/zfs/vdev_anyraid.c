@@ -2514,7 +2514,7 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to sched
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
-	ASSERT(list_is_empty(&var->var_list));
+	ASSERTF(list_is_empty(&var->var_list), "%u", ((vdev_anyraid_relocate_task_t *)list_head(&var->var_list))->vart_task);
 
 	objset_t *mos = spa->spa_meta_objset;
 	if (!noop) {
@@ -3311,6 +3311,7 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		IMPLY(!found, starting_offset >= end);
 		mutex_enter(&var->var_lock);
 		list_remove(&var->var_list, vart);
+		zfs_dbgmsg("moving task %u", vart->vart_task);
 		list_insert_tail(&var->var_done_list, vart);
 		rw_exit(&va->vd_lock);
 	}
