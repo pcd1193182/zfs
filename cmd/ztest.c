@@ -8696,7 +8696,7 @@ ztest_anyraid_contract_check(spa_t *spa)
 
 	/* Wait for reflow to finish */
 	if (ztest_opts.zo_verbose >= 1) {
-		(void) printf("\nwaiting for contraction to finish ...\n");
+		(void) printf("\nwaiting for contraction to finish %lu ...\n", anyraid_relocate_max_bytes_pause);
 	}
 	pool_anyraid_relocate_stat_t arr_stats;
 	pool_anyraid_relocate_stat_t *pars = &arr_stats;
