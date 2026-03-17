@@ -1694,6 +1694,7 @@ vdev_metaslab_init(vdev_t *vd, uint64_t txg)
 	}
 
 	if (expanding) {
+		zfs_dbgmsg("expanding %d to %d", (int)oldc, (int)newc);
 		memcpy(mspp, vd->vdev_ms, MIN(oldc, newc) * sizeof (*mspp));
 		vmem_free(vd->vdev_ms, oldc * sizeof (*mspp));
 	}
