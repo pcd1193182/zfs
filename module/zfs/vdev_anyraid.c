@@ -2909,8 +2909,6 @@ anyraid_relocate_write_done(zio_t *zio)
 		var->var_failed_offset =
 		    MIN(var->var_failed_offset, ama->ama_lr->lr_offset);
 		var->var_failed_task = MIN(var->var_failed_task, ama->ama_tid);
-		ASSERT0F(zio->io_error, "io failed: %llu %llu",
-		    (u_longlong_t)zio->io_offset, (u_longlong_t)zio->io_size);
 	}
 	ASSERT3U(var->var_outstanding_bytes, >=, zio->io_size);
 	var->var_outstanding_bytes -= zio->io_size;
