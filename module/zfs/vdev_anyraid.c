@@ -2588,6 +2588,8 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 
 	spa_notify_waiters(spa);
 
+	zfs_dbgmsg("var_state to ARS_SCRUBBING");
+	var->var_state = ARS_SCRUBBING;
 	/*
 	 * While we're in syncing context take the opportunity to
 	 * setup a scrub. All the data has been sucessfully copied
@@ -3344,8 +3346,6 @@ spa_anyraid_relocate_thread(void *arg, zthr_t *zthr)
 		VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 		    anyraid_relocate_complete_sync, spa,
 		    0, ZFS_SPACE_CHECK_NONE));
-		zfs_dbgmsg("var_state to ARS_SCRUBBING");
-		var->var_state = ARS_SCRUBBING;
 	} else {
 		/*
 		 * Wait for all copy zio's to complete and for all the
