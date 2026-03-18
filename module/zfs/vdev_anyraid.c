@@ -2285,6 +2285,7 @@ tasklist_write(spa_t *spa, vdev_anyraid_relocate_t *var, dmu_tx_t *tx)
 	rp->rp_total = total_count;
 	rp->rp_done = done_count;
 	dmu_buf_rele(dbp, FTAG);
+	zfs_dbgmsg("Wrote %d / %d tasks", (int)done_count, (int)total_count);
 }
 
 static int
@@ -2354,7 +2355,7 @@ tasklist_read(vdev_t *vd)
 		vart->vart_dest_off = rtp->rtp_dest_off;
 		vart->vart_tile = rtp->rtp_tile;
 		vart->vart_task = rtp->rtp_task;
-		zfs_dbgmsg("Adding task %d (%d %d -> %d %d) to %s", vart->vart_task, vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, l == &var->var_list ? "list" : "done list");
+		zfs_dbgmsg("%d of %d/%d: Adding task %d (%d %d -> %d %d) to %s", (int)i, (int)done, (int)total, vart->vart_task, vart->vart_source_disk, vart->vart_source_off, vart->vart_dest_disk, vart->vart_dest_off, l == &var->var_list ? "list" : "done list");
 		/*
 		 * We need to disable metaslabs here; any metaslabs that are
 		 * after the first done task but before or containing the
@@ -2975,6 +2976,8 @@ anyraid_relocate_record_progress(vdev_anyraid_relocate_t *var,
 	mutex_exit(&var->var_lock);
 
 	if (var->var_offset_pertxg[txgoff] == 0) {
+		zfs_dbgmsg("Scheduling sync in txg %llu",
+		    (u_longlong_t)dmu_tx_get_txg(tx));
 		dsl_sync_task_nowait(dmu_tx_pool(tx), anyraid_relocate_sync,
 		    spa, tx);
 	}
