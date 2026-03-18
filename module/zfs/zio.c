@@ -4192,6 +4192,20 @@ zio_vdev_io_assess(zio_t *zio)
 		return (NULL);
 	}
 
+	if (zio->io_flags & ZIO_FLAG_IO_BYPASS &&
+	    zio->io_type == ZIO_TYPE_WRITE &&
+	    zio->io_child_type == ZIO_CHILD_VDEV &&
+	    zio->io_vd->vdev_ops == &vdev_disk_ops) {
+		zfs_dbgmsg("disk write result: vdev %d loc 0x%llx/0x%llx "
+		    "err %d zb %llu/%llu/%llu/%llu", (int)zio->io_vd->vdev_id,
+		    (u_longlong_t)zio->io_offset,
+		    (u_longlong_t)zio->io_size, zio->io_error,
+		    (u_longlong_t)zio->io_bookmark.zb_objset,
+		    (u_longlong_t)zio->io_bookmark.zb_object,
+		    (u_longlong_t)zio->io_bookmark.zb_level,
+		    (u_longlong_t)zio->io_bookmark.zb_blkid);
+	}
+
 	if (vd == NULL && !(zio->io_flags & ZIO_FLAG_CONFIG_WRITER))
 		spa_config_exit(zio->io_spa, SCL_ZIO, zio);
 
