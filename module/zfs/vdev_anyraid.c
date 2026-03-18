@@ -2517,7 +2517,22 @@ anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to sched
 		list_remove(&var->var_done_list, task);
 		kmem_free(task, sizeof (*task));
 	}
-	ASSERTF(list_is_empty(&var->var_list), "%u", ((vdev_anyraid_relocate_task_t *)list_head(&var->var_list))->vart_task);
+
+	/*
+	 * Usually there aren't any tasks left in the list, but this can happen
+	 * if we finish our relocate in just the right way, and then export the
+	 * pool and reimport during the scrub.
+	 */
+	for (vdev_anyraid_relocate_task_t *task =
+	    list_head(&var->var_list); task;
+	    task = list_head(&var->var_list)) {
+		zfs_dbgmsg("Freeing %d in %d", task->vart_source_off, task->vart_source_disk);
+		anyraid_freelist_add(
+		    &va->vd_children[task->vart_source_disk]->van_freelist,
+		    task->vart_source_off);
+		list_remove(&var->var_list, task);
+		kmem_free(task, sizeof (*task));
+	}
 
 	objset_t *mos = spa->spa_meta_objset;
 	if (!noop) {
