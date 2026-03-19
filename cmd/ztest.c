@@ -8666,7 +8666,7 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 		if (ztest_opts.zo_verbose >= 2)
-			(void) printf("rebal: %lu", pars->pars_moved);
+			(void) printf("rebal: %lu\n", pars->pars_moved);
 	}
 
 	/* Reset the rebalance pause before killing */
@@ -8709,6 +8709,8 @@ ztest_anyraid_contract_check(spa_t *spa)
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
+		if (ztest_opts.zo_verbose >= 2)
+			(void) printf("contract: %lu %lu\n", pars->pars_moved, pars->pars_to_move);
 	} while (pars->pars_state != ARS_FINISHED &&
 	    pars->pars_moved < pars->pars_to_move);
 
