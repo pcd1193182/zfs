@@ -656,6 +656,7 @@ vdev_anyraid_pick_best_mapping(vdev_t *cvd, uint64_t *out_txg,
 	}
 
 	if (best_txg != 0) {
+		zfs_dbgmsg("Found txg %llu", (u_longlong_t)best_txg);
 		*out_txg = best_txg;
 		*out_mapping = best_mapping;
 		*out_header = best_header;
