@@ -1209,6 +1209,7 @@ vdev_anyraid_load(vdev_t *vd)
 {
 	vdev_anyraid_t *va = vd->vdev_tsd;
 
+	zfs_dbgmsg("anyraid_load state %d", va->vd_relocate.var_state);
 	if (va->vd_relocate.var_state != ARS_SCANNING &&
 	    va->vd_relocate.var_state != ARS_SCRUBBING)
 		return (0);
