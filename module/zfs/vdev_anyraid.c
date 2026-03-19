@@ -744,8 +744,8 @@ anyraid_open_existing(vdev_t *vd, uint64_t child, uint32_t **child_capacities)
 	uint32_t state = ARS_NONE;
 	(void) nvlist_lookup_uint32(header.ah_nvl,
 	    VDEV_ANYRAID_HEADER_RELOC_STATE, &state);
+	zfs_dbgmsg("opened with state %d", state);
 	if (state != ARS_NONE) {
-		zfs_dbgmsg("opened with state %d", state);
 		vdev_anyraid_relocate_t *var = &va->vd_relocate;
 		var->var_state = state;
 		var->var_vd = vd->vdev_id;
@@ -2500,7 +2500,7 @@ anyraid_relocate_sync(void *arg, dmu_tx_t *tx)
 }
 
 static void
-anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg) // TODO we need to schedule this at import time if there's a reloc in SCRUBBING
+anyraid_scrub_done(spa_t *spa, dmu_tx_t *tx, void *arg)
 {
 	struct anyraid_done_arg *ada = arg;
 	vdev_anyraid_t *va = ada->vd->vdev_tsd;
@@ -2583,8 +2583,7 @@ anyraid_relocate_complete_sync(void *arg, dmu_tx_t *tx)
 
 	rw_enter(&va->vd_lock, RW_WRITER);
 	/*
-	 * Dirty the config so that the updated ZPOOL_CONFIG_RAIDZ_EXPAND_TXGS
-	 * will get written (based on vd_expand_txgs). TODO
+	 * Dirty the config so that the updated current task will get written.
 	 */
 	vdev_config_dirty(vd);
 
