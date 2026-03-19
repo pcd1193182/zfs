@@ -8661,10 +8661,12 @@ ztest_anyraid_rebal_run(ztest_shared_t *zs, spa_t *spa)
 	 */
 	while (pars->pars_moved < rebal_max) {
 		txg_wait_synced(spa_get_dsl(spa), 0);
-		(void) poll(NULL, 0, 100); /* wait 1/10 second */
+		(void) poll(NULL, 0, 1000); /* wait 1/10 second */
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 		(void) spa_anyraid_relocate_get_stats(spa, pars);
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
+		if (ztest_opts.zo_verbose >= 2)
+			(void) printf("rebal: %lu", pars->pars_moved);
 	}
 
 	/* Reset the rebalance pause before killing */
