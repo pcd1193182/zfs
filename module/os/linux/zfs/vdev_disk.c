@@ -1443,6 +1443,20 @@ vdev_disk_io_start(zio_t *zio)
 static void
 vdev_disk_io_done(zio_t *zio)
 {
+
+	if (zio->io_type == ZIO_TYPE_WRITE) {
+		vbio_t *vbio = zio->io_bio;
+		zfs_dbgmsg("disk write result: vdev %d loc 0x%llx/0x%llx "
+		    "err %d zb %llu/%llu/%llu/%llu flags %x", (int)zio->io_vd->vdev_id,
+		    (u_longlong_t)zio->io_offset,
+		    (u_longlong_t)zio->io_size, zio->io_error,
+		    (u_longlong_t)zio->io_bookmark.zb_objset,
+		    (u_longlong_t)zio->io_bookmark.zb_object,
+		    (u_longlong_t)zio->io_bookmark.zb_level,
+		    (u_longlong_t)zio->io_bookmark.zb_blkid,
+		    vbio != NULL ? vbio->vbio_flags : -1);
+	}
+
 	/* If this was a read or write, we need to clean up the vbio */
 	if (zio->io_bio != NULL) {
 		vbio_t *vbio = zio->io_bio;
@@ -1463,17 +1477,6 @@ vdev_disk_io_done(zio_t *zio)
 
 		/* Final cleanup */
 		kmem_free(vbio, sizeof (vbio_t));
-	}
-
-	if (zio->io_type == ZIO_TYPE_WRITE) {
-		zfs_dbgmsg("disk write result: vdev %d loc 0x%llx/0x%llx "
-		    "err %d zb %llu/%llu/%llu/%llu", (int)zio->io_vd->vdev_id,
-		    (u_longlong_t)zio->io_offset,
-		    (u_longlong_t)zio->io_size, zio->io_error,
-		    (u_longlong_t)zio->io_bookmark.zb_objset,
-		    (u_longlong_t)zio->io_bookmark.zb_object,
-		    (u_longlong_t)zio->io_bookmark.zb_level,
-		    (u_longlong_t)zio->io_bookmark.zb_blkid);
 	}
 
 	/*
