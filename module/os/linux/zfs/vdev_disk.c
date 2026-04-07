@@ -919,6 +919,7 @@ vdev_disk_io_rw(zio_t *zio)
 		    (u_longlong_t)bdev_capacity(bdev));
 		return (SET_ERROR(EIO));
 	}
+	zfs_dbgmsg("failfast: %llu %llx", (u_longlong_t)v->vdev_failfast, (u_longlong_t)zio->io_flags);
 
 	if (!(zio->io_flags & (ZIO_FLAG_IO_RETRY | ZIO_FLAG_TRYHARD)) &&
 	    v->vdev_failfast == B_TRUE) {
