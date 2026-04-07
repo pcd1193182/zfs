@@ -922,7 +922,7 @@ vdev_disk_io_rw(zio_t *zio)
 	zfs_dbgmsg("failfast: %llu %llx", (u_longlong_t)v->vdev_failfast, (u_longlong_t)zio->io_flags);
 
 	if (!(zio->io_flags & (ZIO_FLAG_IO_RETRY | ZIO_FLAG_TRYHARD)) &&
-	    v->vdev_failfast == B_TRUE) {
+	    v->vdev_top->vdev_failfast == B_TRUE) {
 		bio_set_flags_failfast(bdev, &flags, zfs_vdev_failfast_mask & 1,
 		    zfs_vdev_failfast_mask & 2, zfs_vdev_failfast_mask & 4);
 	}
