@@ -4381,6 +4381,29 @@ dump_uberblock(uberblock_t *ub, const char *header, const char *footer)
 	    (u_longlong_t)RRSS_GET_OFFSET(ub));
 
 	(void) printf("%s", footer ? footer : "");
+
+	if (dump_opt['u'] >= 6) {
+		spa_t spa = {0};
+		size_t size = 4096;
+		abd_t *abd = abd_alloc_linear(size, B_TRUE);
+		abd_zero(abd, size);
+		abd_copy_from_buf_off(abd, ub, 0, sizeof (uberblock_t));
+
+		zio_t *ub_zio = zio_null(NULL, &spa, NULL,
+		    NULL, NULL, 0);
+		ub_zio->io_offset = offsetof(vdev_label_t, vl_uberblock);
+		zio_checksum_compute(ub_zio, ZIO_CHECKSUM_LABEL, abd, size);
+
+		uint64_t *ub_arr = (uint64_t *)abd_borrow_buf_copy(abd, size);
+		for (int i = 0; i < size / sizeof (*ub_arr); i++) {
+			printf("\t%016lx", BSWAP_64(ub_arr[i]));
+			if (i % 4 == 3)
+				printf("\n");
+		}
+		printf("\n");
+		abd_return_buf(abd, ub_arr, size);
+		abd_free(abd);
+	}
 }
 
 static void
