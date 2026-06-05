@@ -4983,6 +4983,14 @@ zio_checksum_verify(zio_t *zio)
 	    !(zio->io_flags & ZIO_FLAG_SPECULATIVE));
 
 	if ((error = zio_checksum_error(zio, &info)) != 0) {
+#ifndef _KERNEL
+		fprintf(stderr, "checksum error found for block at "
+		    "%llu:%llu:%lld:%llu\n",
+		    (u_longlong_t)zio->io_bookmark.zb_objset,
+		    (u_longlong_t)zio->io_bookmark.zb_object,
+		    (longlong_t)zio->io_bookmark.zb_level,
+		    (u_longlong_t)zio->io_bookmark.zb_blkid);
+#else
 		zio->io_error = error;
 		if (error == ECKSUM &&
 		    !(zio->io_flags & ZIO_FLAG_SPECULATIVE)) {
@@ -5013,6 +5021,7 @@ zio_checksum_verify(zio_t *zio)
 				    zio->io_offset, zio->io_size, &info);
 			}
 		}
+#endif
 	}
 
 	return (zio);
