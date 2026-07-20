@@ -7235,6 +7235,10 @@ ztest_deadman_thread(void *arg)
 	uint64_t id = (uintptr_t)arg;
 	ztest_shared_t *zs = ztest_shared;
 	spa_t *spa = ztest_instance_spa(id);
+	if (!spa) {
+		fatal(0, "No spa for deadman %llu", (u_longlong_t)id);
+	}
+	ASSERT(spa);
 	hrtime_t delay, overdue, last_run = gethrtime();
 
 	delay = (zs->zs_thread_stop - zs->zs_thread_start) +
