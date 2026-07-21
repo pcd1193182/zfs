@@ -7232,7 +7232,7 @@ ztest_resume_thread(void *arg)
 static void
 ztest_deadman_thread(void *arg)
 {
-	uint64_t id = (uintptr_t)arg;
+	int id = (uintptr_t)arg;
 	ztest_shared_t *zs = ztest_shared;
 	spa_t *spa = ztest_instance_spa(id);
 	if (!spa) {
@@ -7774,8 +7774,8 @@ ztest_run(ztest_shared_t *zs)
 		 * Create a deadman thread and set to panic if we hang.
 		 */
 		zp->zp_deadman_thread = thread_create(NULL, 0,
-		    ztest_deadman_thread, zs, 0, NULL, TS_RUN | TS_JOINABLE, 
-		    defclsyspri);
+		    ztest_deadman_thread, (void *)(uintptr_t)i, 0, NULL,
+		    TS_RUN | TS_JOINABLE, defclsyspri);
 
 		spa->spa_deadman_failmode = ZIO_FAILURE_MODE_PANIC;
 
