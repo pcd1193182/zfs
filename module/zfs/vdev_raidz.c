@@ -5212,8 +5212,8 @@ vdev_raidz_load(vdev_t *vd)
 	vdev_raidz_t *vdrz = vd->vdev_tsd;
 	int err;
 
-	uint64_t state = DSS_NONE;
-	uint64_t start_time = 0;
+	uint64_t state = DSS_SCANNING;
+	uint64_t start_time = gethrestime_sec();
 	uint64_t end_time = 0;
 	uint64_t bytes_copied = 0;
 
@@ -5242,6 +5242,9 @@ vdev_raidz_load(vdev_t *vd)
 		if (err != 0 && err != ENOENT)
 			return (err);
 	}
+
+	state = DSS_SCANNING;
+	start_time = gethrestime_sec();
 
 	/*
 	 * If we are in the middle of expansion, vre_state should have
@@ -5360,7 +5363,7 @@ vdev_raidz_init(spa_t *spa, nvlist_t *nv, void **tsd)
 	    &vdrz->vn_vre.vre_vdev_id);
 
 	boolean_t reflow_in_progress =
-	    nvlist_exists(nv, ZPOOL_CONFIG_RAIDZ_EXPANDING);
+	    B_TRUE;
 	if (reflow_in_progress) {
 		spa->spa_raidz_expand = &vdrz->vn_vre;
 		vdrz->vn_vre.vre_state = DSS_SCANNING;

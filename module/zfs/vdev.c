@@ -1023,8 +1023,7 @@ vdev_alloc(spa_t *spa, vdev_t **vdp, nvlist_t *nv, vdev_t *parent, uint_t id,
 		    &vd->vdev_removing);
 		(void) nvlist_lookup_uint64(nv, ZPOOL_CONFIG_VDEV_TOP_ZAP,
 		    &vd->vdev_top_zap);
-		vd->vdev_rz_expanding = nvlist_exists(nv,
-		    ZPOOL_CONFIG_RAIDZ_EXPANDING);
+		vd->vdev_rz_expanding = B_TRUE;
 	} else {
 		ASSERT0(vd->vdev_top_zap);
 	}
