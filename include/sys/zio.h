@@ -373,6 +373,7 @@ typedef struct zio_prop {
 	boolean_t		zp_byteorder:1;
 	boolean_t		zp_direct_write:1;
 	boolean_t		zp_rewrite:1;
+	zio_lifetime_hint_t	zp_lifetime:8;
 	uint32_t		zp_zpl_smallblk;
 	uint8_t			zp_salt[ZIO_DATA_SALT_LEN];
 	uint8_t			zp_iv[ZIO_DATA_IV_LEN];
@@ -506,6 +507,7 @@ struct zio {
 	list_t		io_child_list;
 	zio_t		*io_logical;
 	zio_transform_t *io_transform_stack;
+	zio_lifetime_hint_t io_lifetime_hint;
 
 	/* Callback info */
 	zio_done_func_t	*io_ready;

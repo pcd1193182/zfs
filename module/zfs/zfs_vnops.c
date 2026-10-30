@@ -878,6 +878,7 @@ zfs_write(znode_t *zp, zfs_uio_t *uio, int ioflag, cred_t *cr)
 		 * Start a transaction.
 		 */
 		dmu_tx_t *tx = dmu_tx_create(zfsvfs->z_os);
+		dmu_tx_set_lifetime(tx, zn_lifetime(zp));
 		dmu_tx_hold_sa(tx, zp->z_sa_hdl, ZFS_SEQ_MAY_GROW(zp));
 		dmu_buf_impl_t *db = (dmu_buf_impl_t *)sa_get_db(zp->z_sa_hdl);
 		DB_DNODE_ENTER(db);

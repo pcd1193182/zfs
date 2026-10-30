@@ -59,6 +59,7 @@ extern "C" {
 
 #define	zn_has_cached_data(zp, start, end) \
 	filemap_range_has_page(ZTOI(zp)->i_mapping, start, end)
+#define	zn_lifetime(zp)	(ZTOI(zp)->i_write_hint) // TODO IFDEF
 
 #define	zn_flush_cached_data(zp, sync)	write_inode_now(ZTOI(zp), sync)
 #define	zn_zero_eof_page(zp, lr, end)	zfs_zero_eof_page(zp, lr, end)

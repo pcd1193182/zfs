@@ -143,7 +143,7 @@ dmu_write_direct(zio_t *pio, dmu_buf_impl_t *db, abd_t *data, dmu_tx_t *tx,
 	DB_DNODE_ENTER(db);
 	zio_prop_t zp;
 	dmu_write_policy(os, DB_DNODE(db), db->db_level,
-	    WP_DMU_SYNC | WP_DIRECT_WR, &zp);
+	    WP_DMU_SYNC | WP_DIRECT_WR, ZLH_NONE, &zp);
 	DB_DNODE_EXIT(db);
 
 	/*
@@ -162,6 +162,7 @@ dmu_write_direct(zio_t *pio, dmu_buf_impl_t *db, abd_t *data, dmu_tx_t *tx,
 	ASSERT3U(dr_head->dr_txg, ==, txg);
 	dr_head->dt.dl.dr_diowrite = B_TRUE;
 	dr_head->dr_accounted = db->db.db_size;
+	zp.zp_lifetime = dr_head->dr_lifetime;
 
 	blkptr_t *bp = kmem_alloc(sizeof (blkptr_t), KM_SLEEP);
 	if (db->db_blkptr != NULL) {

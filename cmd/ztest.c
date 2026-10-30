@@ -8166,7 +8166,7 @@ ztest_dmu_sync_blocksize_change(spa_t *spa, uint64_t old_size,
 	db = (dmu_buf_impl_t *)dbuf;
 	VERIFY0(dnode_hold(os, od.od_object, FTAG, &dn));
 	VERIFY(os->os_encrypted);
-	dmu_write_policy(os, dn, 0, 0, &zp);
+	dmu_write_policy(os, dn, 0, 0, ZLH_SHORT, &zp);
 	VERIFY(zp.zp_dedup);
 	VERIFY(zp.zp_encrypt);
 	VERIFY3U(zp.zp_compress, ==, ZIO_COMPRESS_ZSTD);

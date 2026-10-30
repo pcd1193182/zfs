@@ -2176,6 +2176,14 @@ enum zio_encrypt {
 	    ZFS_XA_NS_PREFIX_MATCH(LINUX_TRUSTED, name) || \
 	    ZFS_XA_NS_PREFIX_MATCH(LINUX_USER, name))
 
+typedef enum zio_lifetime_hint {
+    ZLH_NONE = 0,
+    ZLH_SHORT,
+    ZLH_MEDIUM,
+    ZLH_LONG,
+    ZLH_EXTREME,
+} zio_lifetime_hint_t;
+
 #ifdef	__cplusplus
 }
 #endif

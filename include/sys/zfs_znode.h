@@ -180,6 +180,14 @@ extern int zfs_get_zplprop(objset_t *os, zfs_prop_t prop, uint64_t *value);
 #ifdef _KERNEL
 #include <sys/zfs_znode_impl.h>
 
+typedef enum zfs_write_lifetime {
+	ZW_DEFAULT,
+	ZW_SHORT,
+	ZW_MEDIUM,
+	ZW_LONG,
+	ZW_EXTREME
+} zfs_write_lifetime_t;
+
 /*
  * Directory entry locks control access to directory entries.
  * They are used to protect creates, deletes, and renames.

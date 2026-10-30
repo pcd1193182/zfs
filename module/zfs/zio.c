@@ -3551,6 +3551,7 @@ zio_write_gang_block(zio_t *pio, metaslab_class_t *mc)
 		flags |= METASLAB_ASYNC_ALLOC;
 	}
 
+	METASLAB_SET_HINT(flags, pio->io_prop.zp_lifetime);
 	uint64_t gangblocksize = SPA_OLD_GANGBLOCKSIZE;
 	uint64_t candidate = gangblocksize;
 	error = metaslab_alloc_range(spa, mc, gangblocksize, gangblocksize,
@@ -3613,6 +3614,7 @@ zio_write_gang_block(zio_t *pio, metaslab_class_t *mc)
 		zp.zp_encrypt = gio->io_prop.zp_encrypt;
 		zp.zp_byteorder = gio->io_prop.zp_byteorder;
 		zp.zp_direct_write = B_FALSE;
+		zp.zp_lifetime = pio->io_prop.zp_lifetime;
 		memset(zp.zp_salt, 0, ZIO_DATA_SALT_LEN);
 		memset(zp.zp_iv, 0, ZIO_DATA_IV_LEN);
 		memset(zp.zp_mac, 0, ZIO_DATA_MAC_LEN);
@@ -4771,6 +4773,7 @@ zio_dva_allocate(zio_t *zio)
 	if (zio->io_priority == ZIO_PRIORITY_ASYNC_WRITE)
 		flags |= METASLAB_ASYNC_ALLOC;
 
+	METASLAB_SET_HINT(flags, zio->io_prop.zp_lifetime);
 	/*
 	 * If not already chosen, choose an appropriate allocation class.
 	 */
@@ -4976,6 +4979,7 @@ zio_alloc_zil(spa_t *spa, objset_t *os, uint64_t txg, blkptr_t *new_bp,
 	 * some parallelism.
 	 */
 	int flags = METASLAB_ZIL;
+	METASLAB_SET_HINT(flags, ZLH_SHORT);
 	int allocator = (uint_t)cityhash1(os->os_dsl_dataset->ds_object)
 	    % spa->spa_alloc_count;
 	ZIOSTAT_BUMP(ziostat_total_allocations);

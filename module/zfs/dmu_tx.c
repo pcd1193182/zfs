@@ -169,6 +169,12 @@ dmu_tx_add_new_object(dmu_tx_t *tx, dnode_t *dn)
 		(void) dmu_tx_hold_dnode_impl(tx, dn, THT_NEWOBJECT, 0, 0);
 }
 
+void
+dmu_tx_set_lifetime(dmu_tx_t *tx, zio_lifetime_hint_t hint)
+{
+	tx->tx_lifetime = hint;
+}
+
 /*
  * This function reads specified data from disk.  The specified data will
  * be needed to perform the transaction -- i.e, it will be read after

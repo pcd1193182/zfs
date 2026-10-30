@@ -132,6 +132,8 @@ typedef struct dbuf_dirty_record {
 	/* A copy of the bp that points to us */
 	blkptr_t dr_bp_copy;
 
+	zio_lifetime_hint_t dr_lifetime;
+
 	union dirty_types {
 		struct dirty_indirect {
 

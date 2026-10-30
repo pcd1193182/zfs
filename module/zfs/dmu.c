@@ -2301,7 +2301,8 @@ dmu_sync(zio_t *pio, uint64_t txg, dmu_sync_cb_t *done, zgd_t *zgd)
 	    db->db.db_object, db->db_level, db->db_blkid);
 
 	DB_DNODE_ENTER(db);
-	dmu_write_policy(os, DB_DNODE(db), db->db_level, WP_DMU_SYNC, &zp);
+	dmu_write_policy(os, DB_DNODE(db), db->db_level, WP_DMU_SYNC,
+	    ZLH_NONE, &zp); // TODO
 	DB_DNODE_EXIT(db);
 
 	/*
@@ -2559,7 +2560,8 @@ dmu_object_set_compress(objset_t *os, uint64_t object, uint8_t compress,
 static const int zfs_redundant_metadata_most_ditto_level = 2;
 
 void
-dmu_write_policy(objset_t *os, dnode_t *dn, int level, int wp, zio_prop_t *zp)
+dmu_write_policy(objset_t *os, dnode_t *dn, int level, int wp,
+    zio_lifetime_hint_t hint, zio_prop_t *zp)
 {
 	dmu_object_type_t type = dn ? dn->dn_type : DMU_OT_OBJSET;
 	boolean_t ismd = (level > 0 || DMU_OT_IS_METADATA(type) ||
@@ -2574,6 +2576,10 @@ dmu_write_policy(objset_t *os, dnode_t *dn, int level, int wp, zio_prop_t *zp)
 	boolean_t encrypt = B_FALSE;
 	int copies = os->os_copies;
 	int gang_copies = os->os_copies;
+	if (hint != ZLH_NONE)
+		zp->zp_lifetime = hint;
+	else if (DMU_OT_IS_METADATA(type) && level > 0)
+		zp->zp_lifetime = ZLH_SHORT;
 
 	/*
 	 * We maintain different write policies for each of the following

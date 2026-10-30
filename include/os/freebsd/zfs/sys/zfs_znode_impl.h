@@ -109,6 +109,7 @@ typedef struct zfs_soft_state {
 
 #define	zn_has_cached_data(zp, start, end) \
     vn_has_cached_data(ZTOV(zp))
+#define	zn_lifetime(zp)	(ZLH_NONE) // TODO
 #define	zn_flush_cached_data(zp, sync)	vn_flush_cached_data(ZTOV(zp), sync)
 #define	zn_zero_eof_page(zp, lr, end)	zfs_zero_eof_page(zp, lr, end)
 #define	zn_rlimit_fsize(size)		zfs_rlimit_fsize(size)

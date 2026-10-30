@@ -69,14 +69,17 @@ uint64_t metaslab_largest_allocatable(metaslab_t *);
 #define	METASLAB_GANG_HEADER		0x2
 #define	METASLAB_GANG_CHILD		0x4
 #define	METASLAB_ASYNC_ALLOC		0x8
+#define METASLAB_GET_HINT(flags)    BF64_GET((flags), 4, 3)
+#define METASLAB_SET_HINT(flags, val)    BF64_SET((flags), 4, 3, (val))
 
 int metaslab_alloc(spa_t *, metaslab_class_t *, uint64_t, blkptr_t *, int,
-    uint64_t, const blkptr_t *, int, zio_alloc_list_t *, int, const void *);
+    uint64_t, const blkptr_t *, uint64_t, zio_alloc_list_t *, int,
+    const void *);
 int metaslab_alloc_range(spa_t *, metaslab_class_t *, uint64_t, uint64_t,
-    blkptr_t *, int, uint64_t, const blkptr_t *, int, zio_alloc_list_t *,
+    blkptr_t *, int, uint64_t, const blkptr_t *, uint64_t, zio_alloc_list_t *,
     int, const void *, uint64_t *);
 int metaslab_alloc_dva(spa_t *, metaslab_class_t *, uint64_t,
-    dva_t *, int, const dva_t *, uint64_t, int, zio_alloc_list_t *, int);
+    dva_t *, int, const dva_t *, uint64_t, uint64_t, zio_alloc_list_t *, int);
 void metaslab_free(spa_t *, const blkptr_t *, uint64_t, boolean_t);
 void metaslab_free_concrete(vdev_t *, uint64_t, uint64_t, boolean_t);
 void metaslab_free_dva(spa_t *, const dva_t *, boolean_t);

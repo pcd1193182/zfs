@@ -5076,9 +5076,10 @@ metaslab_active_mask_verify(metaslab_t *msp)
 static uint64_t
 metaslab_group_alloc(metaslab_group_t *mg, zio_alloc_list_t *zal,
     uint64_t asize, uint64_t max_asize, uint64_t txg,
-    dva_t *dva, int d, int allocator, boolean_t try_hard,
-    uint64_t *actual_asize)
+    dva_t *dva, int d, int allocator, zio_lifetime_hint_t hint,
+    boolean_t try_hard, uint64_t *actual_asize)
 {
+	(void)hint;
 	metaslab_t *msp = NULL;
 	uint64_t offset = -1ULL;
 
@@ -5428,7 +5429,8 @@ metaslab_group_allocatable(spa_t *spa, metaslab_group_t *mg, uint64_t psize,
 static int
 metaslab_alloc_dva_range(spa_t *spa, metaslab_class_t *mc, uint64_t psize,
     uint64_t max_psize, dva_t *dva, int d, const dva_t *hintdva, uint64_t txg,
-    int flags, zio_alloc_list_t *zal, int allocator, uint64_t *actual_psize)
+    uint64_t flags, zio_alloc_list_t *zal, int allocator,
+    uint64_t *actual_psize)
 {
 	metaslab_class_allocator_t *mca = &mc->mc_allocator[allocator];
 	metaslab_group_t *mg = NULL, *rotor;
@@ -5495,6 +5497,7 @@ metaslab_alloc_dva_range(spa_t *spa, metaslab_class_t *mc, uint64_t psize,
 	}
 
 	rotor = mg;
+	zio_lifetime_hint_t zlh = METASLAB_GET_HINT(flags);
 top:
 	do {
 		ASSERT(mg->mg_activation_count == 1);
@@ -5511,7 +5514,7 @@ top:
 		    txg);
 		ASSERT0(P2PHASE(max_asize, 1ULL << vd->vdev_ashift));
 		uint64_t offset = metaslab_group_alloc(mg, zal, asize,
-		    max_asize, txg, dva, d, allocator, try_hard, &asize);
+		    max_asize, txg, dva, d, allocator, zlh, try_hard, &asize);
 
 		if (offset != -1ULL) {
 			if (actual_psize)
@@ -5558,7 +5561,7 @@ next:
  */
 int
 metaslab_alloc_dva(spa_t *spa, metaslab_class_t *mc, uint64_t psize,
-    dva_t *dva, int d, const dva_t *hintdva, uint64_t txg, int flags,
+    dva_t *dva, int d, const dva_t *hintdva, uint64_t txg, uint64_t flags,
     zio_alloc_list_t *zal, int allocator)
 {
 	return (metaslab_alloc_dva_range(spa, mc, psize, psize, dva, d, hintdva,
@@ -6089,7 +6092,7 @@ metaslab_class_unwritable(metaslab_class_t *mc)
 
 int
 metaslab_alloc(spa_t *spa, metaslab_class_t *mc, uint64_t psize, blkptr_t *bp,
-    int ndvas, uint64_t txg, const blkptr_t *hintbp, int flags,
+    int ndvas, uint64_t txg, const blkptr_t *hintbp, uint64_t flags,
     zio_alloc_list_t *zal, int allocator, const void *tag)
 {
 	return (metaslab_alloc_range(spa, mc, psize, psize, bp, ndvas, txg,
@@ -6099,8 +6102,8 @@ metaslab_alloc(spa_t *spa, metaslab_class_t *mc, uint64_t psize, blkptr_t *bp,
 int
 metaslab_alloc_range(spa_t *spa, metaslab_class_t *mc, uint64_t psize,
     uint64_t max_psize, blkptr_t *bp, int ndvas, uint64_t txg,
-    const blkptr_t *hintbp, int flags, zio_alloc_list_t *zal, int allocator,
-    const void *tag, uint64_t *actual_psize)
+    const blkptr_t *hintbp, uint64_t flags, zio_alloc_list_t *zal,
+    int allocator, const void *tag, uint64_t *actual_psize)
 {
 	dva_t *dva = bp->blk_dva;
 	const dva_t *hintdva = (hintbp != NULL) ? hintbp->blk_dva : NULL;

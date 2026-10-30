@@ -2425,6 +2425,7 @@ dbuf_dirty(dmu_buf_impl_t *db, dmu_tx_t *tx)
 	list_link_init(&dr->dr_dirty_node);
 	list_link_init(&dr->dr_dbuf_node);
 	dr->dr_dnode = dn;
+	dr->dr_lifetime = tx->tx_lifetime;
 	if (db->db_level == 0) {
 		void *data_old = db->db_buf;
 
@@ -5446,7 +5447,7 @@ dbuf_write(dbuf_dirty_record_t *dr, arc_buf_t *data, dmu_tx_t *tx)
 		wp_flag = WP_SPILL;
 	wp_flag |= (data == NULL) ? WP_NOFILL : 0;
 
-	dmu_write_policy(os, dn, db->db_level, wp_flag, &zp);
+	dmu_write_policy(os, dn, db->db_level, wp_flag, dr->dr_lifetime, &zp);
 
 	/*
 	 * Set rewrite properties for zfs_rewrite() operations.
