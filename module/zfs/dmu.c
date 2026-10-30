@@ -2580,6 +2580,8 @@ dmu_write_policy(objset_t *os, dnode_t *dn, int level, int wp,
 		zp->zp_lifetime = hint;
 	else if (DMU_OT_IS_METADATA(type) && level > 0)
 		zp->zp_lifetime = ZLH_SHORT;
+	else if (DMU_OT_IS_METADATA(type) && level == 0)
+		zp->zp_lifetime = ZLH_MEDIUM;
 
 	/*
 	 * We maintain different write policies for each of the following
