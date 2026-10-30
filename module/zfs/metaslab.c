@@ -5079,7 +5079,9 @@ metaslab_group_alloc(metaslab_group_t *mg, zio_alloc_list_t *zal,
     dva_t *dva, int d, int allocator, zio_lifetime_hint_t hint,
     boolean_t try_hard, uint64_t *actual_asize)
 {
-	(void)hint;
+	if (hint != ZLH_NONE)
+		zfs_dbgmsg("Allocating %llu bytes hint %d",
+		    (u_longlong_t)asize, hint);
 	metaslab_t *msp = NULL;
 	uint64_t offset = -1ULL;
 

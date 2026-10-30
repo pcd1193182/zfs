@@ -4774,6 +4774,8 @@ zio_dva_allocate(zio_t *zio)
 		flags |= METASLAB_ASYNC_ALLOC;
 
 	METASLAB_SET_HINT(flags, zio->io_prop.zp_lifetime);
+	if (zio->io_prop.zp_lifetime != 0)
+		zfs_dbgmsg("Starting allocation for %llx/%llx/%llx/%llx lifetime %d", (u_longlong_t)zio->io_bookmark.zb_objset, (u_longlong_t)zio->io_bookmark.zb_object, (u_longlong_t)zio->io_bookmark.zb_level, (u_longlong_t)zio->io_bookmark.zb_blkid, zio->io_prop.zp_lifetime);
 	/*
 	 * If not already chosen, choose an appropriate allocation class.
 	 */
